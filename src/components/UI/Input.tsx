@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { DivideIcon as LucideIcon, Eye, EyeOff } from 'lucide-react';
+import { LucideIcon, Eye, EyeOff } from 'lucide-react';
 
 interface InputProps {
   label?: string;
@@ -12,6 +12,7 @@ interface InputProps {
   icon?: LucideIcon;
   required?: boolean;
   disabled?: boolean;
+  step?: string; // Added step prop for number inputs
 }
 
 const Input: React.FC<InputProps> = ({
@@ -24,6 +25,7 @@ const Input: React.FC<InputProps> = ({
   icon: Icon,
   required = false,
   disabled = false,
+  step,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -38,12 +40,12 @@ const Input: React.FC<InputProps> = ({
           {required && <span className="text-red-500 ml-1">*</span>}
         </label>
       )}
-      
+
       <div className="relative">
         {Icon && (
           <Icon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
         )}
-        
+
         <input
           type={inputType}
           value={value}
@@ -52,6 +54,7 @@ const Input: React.FC<InputProps> = ({
           onBlur={() => setIsFocused(false)}
           placeholder={placeholder}
           disabled={disabled}
+          step={step} // Pass step prop to input element
           className={`
             w-full px-4 py-3 rounded-lg border transition-all duration-200
             ${Icon ? 'pl-12' : ''}
@@ -65,7 +68,7 @@ const Input: React.FC<InputProps> = ({
             disabled:opacity-50 disabled:cursor-not-allowed
           `}
         />
-        
+
         {type === 'password' && (
           <button
             type="button"
@@ -76,7 +79,7 @@ const Input: React.FC<InputProps> = ({
           </button>
         )}
       </div>
-      
+
       {error && (
         <motion.p
           initial={{ opacity: 0, y: -10 }}
