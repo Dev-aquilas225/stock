@@ -63,13 +63,10 @@ interface Supplier {
 
 interface Product {
     id: string;
-    name: string;
-    category: string;
-    currentPrice: number;
-    previousPrice?: number;
-    deliveryTime: string;
-    minimumQuantity: number;
-    packaging: string;
+    nomProduit: string; // Changed from name
+    prixNegocie: number; // Changed from currentPrice
+    conditionnement: string; // Changed from packaging
+    delaiApprovisionnement: string; // Changed from deliveryTime
     priceHistory: PriceHistory[];
 }
 
@@ -83,10 +80,10 @@ interface PriceHistory {
 
 interface Contact {
     id: string;
-    name: string;
-    role: string;
+    nom: string; // Changed from name
+    fonction: string; // Changed from role
     email: string;
-    phone: string;
+    telephone: string; // Changed from phone
     isPrimary: boolean;
 }
 
@@ -107,6 +104,7 @@ const SuppliersPage: React.FC = () => {
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
     const [newRating, setNewRating] = useState(0);
     const [ratingComment, setRatingComment] = useState("");
+    const [productLoadError, setProductLoadError] = useState<string | null>(null);
 
     const { showToast } = useToast();
     const { logActivity } = useActivity();
@@ -130,21 +128,24 @@ const SuppliersPage: React.FC = () => {
     });
 
     const [productForm, setProductForm] = useState({
-        name: "",
-        category: "",
-        currentPrice: "",
-        deliveryTime: "",
-        minimumQuantity: "",
-        packaging: "",
+        nomProduit: "", // Changed from name
+        prixNegocie: "", // Changed from currentPrice
+        conditionnement: "", // Changed from packaging
+        delaiApprovisionnement: "", // Changed from deliveryTime
     });
 
     const [contactForm, setContactForm] = useState({
-        name: "",
-        role: "",
+        nom: "", // Changed from name
+        fonction: "", // Changed from role
         email: "",
-        phone: "",
+        telephone: "", // Changed from phone
         isPrimary: false,
     });
+
+    // Log selected supplier for debugging
+    useEffect(() => {
+        console.log("Selected supplier changed:", selectedSupplier);
+    }, [selectedSupplier]);
 
     // Sync suppliers with hook data
     useEffect(() => {
@@ -178,12 +179,17 @@ const SuppliersPage: React.FC = () => {
     useEffect(() => {
         const error = supplierError || productsError || contactsError || priceHistoryError || ratingsError;
         if (error) {
+            if (error === productsError) {
+                setProductLoadError(error);
+            }
             showToast({
                 type: "error",
                 title: "Erreur",
                 message: error,
                 duration: 5000,
             });
+        } else {
+            setProductLoadError(null);
         }
     }, [supplierError, productsError, contactsError, priceHistoryError, ratingsError, showToast]);
 
@@ -201,18 +207,16 @@ const SuppliersPage: React.FC = () => {
             notes: "",
         });
         setProductForm({
-            name: "",
-            category: "",
-            currentPrice: "",
-            deliveryTime: "",
-            minimumQuantity: "",
-            packaging: "",
+            nomProduit: "",
+            prixNegocie: "",
+            conditionnement: "",
+            delaiApprovisionnement: "",
         });
         setContactForm({
-            name: "",
-            role: "",
+            nom: "",
+            fonction: "",
             email: "",
-            phone: "",
+            telephone: "",
             isPrimary: false,
         });
     };
@@ -268,7 +272,6 @@ const SuppliersPage: React.FC = () => {
         }
 
         if (editingSupplier) {
-            // Update supplier (no API update in useFournisseurs, use local state)
             setSuppliers((prev) =>
                 prev.map((supplier) =>
                     supplier.id === editingSupplier.id
@@ -329,33 +332,30 @@ const SuppliersPage: React.FC = () => {
         setSelectedSupplier(supplier);
         setEditingProduct(product);
         setProductForm({
-            name: product.name,
-            category: product.category,
-            currentPrice: product.currentPrice.toString(),
-            deliveryTime: product.deliveryTime,
-            minimumQuantity: product.minimumQuantity.toString(),
-            packaging: product.packaging,
+            nomProduit: product.nomProduit,
+            prixNegocie: product.prixNegocie.toString(),
+            conditionnement: product.conditionnement,
+            delaiApprovisionnement: product.delaiApprovisionnement,
         });
         setShowProductModal(true);
     };
 
     const handleSaveProduct = async () => {
-        if (!selectedSupplier || !productForm.name || !productForm.currentPrice) {
+        if (!selectedSupplier || !productForm.nomProduit || !productForm.prixNegocie) {
             showToast({
                 type: "error",
                 title: "Erreur",
-                message: "Veuillez remplir tous les champs obligatoires",
+                message: "Veuillez remplir tous les champs obligatoires (Nom du produit, Prix négocié)",
             });
             return;
         }
 
         const productData = {
-            name: productForm.name,
-            category: productForm.category,
-            currentPrice: parseFloat(productForm.currentPrice) || 0,
-            deliveryTime: productForm.deliveryTime,
-            minimumQuantity: parseInt(productForm.minimumQuantity) || 0,
-            packaging: productForm.packaging,
+            supplierId: selectedSupplier.id,
+            nomProduit: productForm.nomProduit,
+            prixNegocie: parseFloat(productForm.prixNegocie) || 0,
+            conditionnement: productForm.conditionnement,
+            delaiApprovisionnement: productForm.delaiApprovisionnement,
         };
 
         try {
@@ -364,7 +364,7 @@ const SuppliersPage: React.FC = () => {
                 logActivity({
                     type: "update",
                     module: "Produits",
-                    description: `Produit modifié: ${productForm.name}`,
+                    description: `Produit modifié: ${productForm.nomProduit}`,
                     metadata: { supplierId: selectedSupplier.id, productId: editingProduct.id },
                 });
                 showToast({
@@ -377,7 +377,7 @@ const SuppliersPage: React.FC = () => {
                 logActivity({
                     type: "create",
                     module: "Produits",
-                    description: `Produit ajouté: ${productForm.name}`,
+                    description: `Produit ajouté: ${productForm.nomProduit}`,
                     metadata: { supplierId: selectedSupplier.id },
                 });
                 showToast({
@@ -404,30 +404,31 @@ const SuppliersPage: React.FC = () => {
         setSelectedSupplier(supplier);
         setEditingContact(contact);
         setContactForm({
-            name: contact.name,
-            role: contact.role,
+            nom: contact.nom,
+            fonction: contact.fonction,
             email: contact.email,
-            phone: contact.phone,
+            telephone: contact.telephone,
             isPrimary: contact.isPrimary,
         });
         setShowContactModal(true);
     };
 
     const handleSaveContact = async () => {
-        if (!selectedSupplier || !contactForm.name || !contactForm.email) {
+        if (!selectedSupplier || !contactForm.nom || !contactForm.email) {
             showToast({
                 type: "error",
                 title: "Erreur",
-                message: "Veuillez remplir tous les champs obligatoires",
+                message: "Veuillez remplir tous les champs obligatoires (Nom, Email)",
             });
             return;
         }
 
         const contactData = {
-            name: contactForm.name,
-            role: contactForm.role,
+            supplierId: selectedSupplier.id,
+            nom: contactForm.nom,
+            fonction: contactForm.fonction,
             email: contactForm.email,
-            phone: contactForm.phone,
+            telephone: contactForm.telephone,
             isPrimary: contactForm.isPrimary,
         };
 
@@ -437,7 +438,7 @@ const SuppliersPage: React.FC = () => {
                 logActivity({
                     type: "update",
                     module: "Contacts",
-                    description: `Contact modifié: ${contactForm.name}`,
+                    description: `Contact modifié: ${contactForm.nom}`,
                     metadata: { supplierId: selectedSupplier.id, contactId: editingContact.id },
                 });
                 showToast({
@@ -450,7 +451,7 @@ const SuppliersPage: React.FC = () => {
                 logActivity({
                     type: "create",
                     module: "Contacts",
-                    description: `Contact ajouté: ${contactForm.name}`,
+                    description: `Contact ajouté: ${contactForm.nom}`,
                     metadata: { supplierId: selectedSupplier.id },
                 });
                 showToast({
@@ -488,6 +489,28 @@ const SuppliersPage: React.FC = () => {
         }
     };
 
+    const handleDeleteProduct = async (productId: string) => {
+        if (!selectedSupplier) return;
+        if (window.confirm("Êtes-vous sûr de vouloir supprimer ce produit ?")) {
+            try {
+                await removeProduct(productId);
+                logActivity({
+                    type: "delete",
+                    module: "Produits",
+                    description: `Produit supprimé: ${productId}`,
+                    metadata: { supplierId: selectedSupplier.id, productId },
+                });
+                showToast({
+                    type: "success",
+                    title: "Produit supprimé",
+                    message: "Le produit a été supprimé avec succès",
+                });
+            } catch (err) {
+                // Error handled by useProducts
+            }
+        }
+    };
+
     const handleShowPriceHistory = (product: Product) => {
         setSelectedProduct(product);
         setShowPriceHistoryModal(true);
@@ -512,6 +535,7 @@ const SuppliersPage: React.FC = () => {
 
         try {
             await addOrUpdateRating({
+                supplierId: selectedSupplier.id,
                 rating: newRating,
                 comment: ratingComment,
             });
@@ -806,10 +830,10 @@ const SuppliersPage: React.FC = () => {
                                                                 <div className="flex items-center justify-between">
                                                                     <div>
                                                                         <h5 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm">
-                                                                            {contact.name}
+                                                                            {contact.nom}
                                                                         </h5>
                                                                         <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
-                                                                            {contact.role} • {contact.email}
+                                                                            {contact.fonction} • {contact.email}
                                                                             {contact.isPrimary && (
                                                                                 <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                                                                     Principal
@@ -845,7 +869,7 @@ const SuppliersPage: React.FC = () => {
                                                 </div>
                                             )}
                                             {/* Products */}
-                                            {supplier.products.length > 0 && (
+                                            {supplier.products.length > 0 ? (
                                                 <div className="mb-4">
                                                     <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                         Produits ({supplier.products.length})
@@ -859,15 +883,15 @@ const SuppliersPage: React.FC = () => {
                                                                 <div className="flex items-center justify-between">
                                                                     <div>
                                                                         <h5 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm">
-                                                                            {product.name}
+                                                                            {product.nomProduit}
                                                                         </h5>
                                                                         <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
-                                                                            {product.category} • Min: {product.minimumQuantity}
+                                                                            {product.conditionnement} • Délai: {product.delaiApprovisionnement}
                                                                         </p>
                                                                     </div>
                                                                     <div className="text-right">
                                                                         <p className="font-bold text-nexsaas-saas-green">
-                                                                            €{product.currentPrice}
+                                                                            €{product.prixNegocie}
                                                                         </p>
                                                                         <div className="flex space-x-1">
                                                                             <button
@@ -884,6 +908,13 @@ const SuppliersPage: React.FC = () => {
                                                                             >
                                                                                 <Edit className="w-3 h-3" />
                                                                             </button>
+                                                                            <button
+                                                                                onClick={() => handleDeleteProduct(product.id)}
+                                                                                className="text-xs text-red-500 hover:text-red-600"
+                                                                                disabled={productsLoading}
+                                                                            >
+                                                                                <Trash2 className="w-3 h-3" />
+                                                                            </button>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -896,7 +927,11 @@ const SuppliersPage: React.FC = () => {
                                                         </p>
                                                     )}
                                                 </div>
-                                            )}
+                                            ) : selectedSupplier?.id === supplier.id && productLoadError ? (
+                                                <p className="text-sm text-red-500 dark:text-red-400">
+                                                    Erreur lors du chargement des produits: {productLoadError}
+                                                </p>
+                                            ) : null}
                                             {/* Stats */}
                                             <div className="grid grid-cols-3 gap-4 text-center">
                                                 <div>
@@ -1128,46 +1163,31 @@ const SuppliersPage: React.FC = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <Input
                                         label="Nom du produit"
-                                        value={productForm.name}
-                                        onChange={(value) => setProductForm((prev) => ({ ...prev, name: value }))}
+                                        value={productForm.nomProduit}
+                                        onChange={(value) => setProductForm((prev) => ({ ...prev, nomProduit: value }))}
                                         required
                                     />
                                     <Input
-                                        label="Catégorie"
-                                        value={productForm.category}
-                                        onChange={(value) => setProductForm((prev) => ({ ...prev, category: value }))}
-                                        required
-                                    />
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input
-                                        label="Prix actuel (€)"
+                                        label="Prix négocié (€)"
                                         type="number"
                                         step="0.01"
-                                        value={productForm.currentPrice}
-                                        onChange={(value) => setProductForm((prev) => ({ ...prev, currentPrice: value }))}
-                                        required
-                                    />
-                                    <Input
-                                        label="Quantité minimum"
-                                        type="number"
-                                        value={productForm.minimumQuantity}
-                                        onChange={(value) => setProductForm((prev) => ({ ...prev, minimumQuantity: value }))}
+                                        value={productForm.prixNegocie}
+                                        onChange={(value) => setProductForm((prev) => ({ ...prev, prixNegocie: value }))}
                                         required
                                     />
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <Input
-                                        label="Délai de livraison"
-                                        value={productForm.deliveryTime}
-                                        onChange={(value) => setProductForm((prev) => ({ ...prev, deliveryTime: value }))}
-                                        placeholder="ex: 3-5 jours"
+                                        label="Conditionnement"
+                                        value={productForm.conditionnement}
+                                        onChange={(value) => setProductForm((prev) => ({ ...prev, conditionnement: value }))}
+                                        placeholder="ex: Carton de 12"
                                     />
                                     <Input
-                                        label="Conditionnement"
-                                        value={productForm.packaging}
-                                        onChange={(value) => setProductForm((prev) => ({ ...prev, packaging: value }))}
-                                        placeholder="ex: Carton de 10"
+                                        label="Délai d'approvisionnement"
+                                        value={productForm.delaiApprovisionnement}
+                                        onChange={(value) => setProductForm((prev) => ({ ...prev, delaiApprovisionnement: value }))}
+                                        placeholder="ex: 3 jours"
                                     />
                                 </div>
                                 <div className="flex justify-end space-x-4">
@@ -1212,14 +1232,14 @@ const SuppliersPage: React.FC = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <Input
                                         label="Nom du contact"
-                                        value={contactForm.name}
-                                        onChange={(value) => setContactForm((prev) => ({ ...prev, name: value }))}
+                                        value={contactForm.nom}
+                                        onChange={(value) => setContactForm((prev) => ({ ...prev, nom: value }))}
                                         required
                                     />
                                     <Input
-                                        label="Rôle"
-                                        value={contactForm.role}
-                                        onChange={(value) => setContactForm((prev) => ({ ...prev, role: value }))}
+                                        label="Fonction"
+                                        value={contactForm.fonction}
+                                        onChange={(value) => setContactForm((prev) => ({ ...prev, fonction: value }))}
                                         required
                                     />
                                 </div>
@@ -1233,8 +1253,8 @@ const SuppliersPage: React.FC = () => {
                                     />
                                     <Input
                                         label="Téléphone"
-                                        value={contactForm.phone}
-                                        onChange={(value) => setContactForm((prev) => ({ ...prev, phone: value }))}
+                                        value={contactForm.telephone}
+                                        onChange={(value) => setContactForm((prev) => ({ ...prev, telephone: value }))}
                                     />
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -1280,7 +1300,7 @@ const SuppliersPage: React.FC = () => {
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                    Historique des prix - {selectedProduct.name}
+                                    Historique des prix - {selectedProduct.nomProduit}
                                 </h2>
                                 <Button variant="ghost" size="sm" onClick={() => setShowPriceHistoryModal(false)}>
                                     <X className="w-6 h-6" />
