@@ -9,41 +9,38 @@ export interface PriceHistory {
 }
 
 export interface ProductDto {
-    nomProduit: string; // Changed from name
-    prixNegocie: number; // Changed from currentPrice
-    conditionnement: string; // Changed from packaging
-    delaiApprovisionnement: string; // Changed from deliveryTime
-    supplierId: string;
-    priceHistory?: PriceHistory[];
+    nomProduit: string;
+    prixNegocie: number;
+    conditionnement: string;
+    delaiApprovisionnement: string;
 }
 
 export interface Product {
     id: string;
-    nomProduit: string; // Changed from name
-    prixNegocie: number; // Changed from currentPrice
-    conditionnement: string; // Changed from packaging
-    delaiApprovisionnement: string; // Changed from deliveryTime
-    supplierId: string;
+    nomProduit: string;
+    prixNegocie: number;
+    conditionnement: string;
+    delaiApprovisionnement: string;
+    fournisseurId: string;
     createdAt: string;
     priceHistory: PriceHistory[];
 }
 
-export const fetchProducts = async (supplierId: string): Promise<Product[]> => {
+export const fetchProducts = async (fournisseurId: string): Promise<Product[]> => {
     const token = localStorage.getItem("token");
     try {
-        const response = await axiosClient.get(`suppliers/${supplierId}/products`, {
+        const response = await axiosClient.get(`fournisseurs/${fournisseurId}/produits`, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
         });
-        // Map backend fields to frontend Product interface
         return response.data.data.map((product: any) => ({
             id: product.id,
             nomProduit: product.nomProduit,
             prixNegocie: parseFloat(product.prixNegocie) || 0,
             conditionnement: product.conditionnement,
             delaiApprovisionnement: product.delaiApprovisionnement,
-            supplierId: product.supplierId,
+            fournisseurId: product.fournisseurId,
             createdAt: product.createdAt || new Date().toISOString(),
             priceHistory: product.priceHistory ? product.priceHistory.map((ph: any) => ({
                 id: ph.id,
@@ -59,10 +56,15 @@ export const fetchProducts = async (supplierId: string): Promise<Product[]> => {
     }
 };
 
-export const addProduct = async (data: ProductDto): Promise<Product> => {
+export const addProduct = async (fournisseurId: string, data: ProductDto): Promise<Product> => {
     const token = localStorage.getItem("token");
     try {
-        const response = await axiosClient.post(`suppliers/${data.supplierId}/products`, data, {
+        const response = await axiosClient.post(`fournisseurs/${fournisseurId}/produits`, {
+            nomProduit: data.nomProduit,
+            prixNegocie: data.prixNegocie,
+            conditionnement: data.conditionnement,
+            delaiApprovisionnement: data.delaiApprovisionnement,
+        }, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
@@ -74,7 +76,7 @@ export const addProduct = async (data: ProductDto): Promise<Product> => {
             prixNegocie: parseFloat(newProduct.prixNegocie) || 0,
             conditionnement: newProduct.conditionnement,
             delaiApprovisionnement: newProduct.delaiApprovisionnement,
-            supplierId: newProduct.supplierId,
+            fournisseurId: newProduct.fournisseurId,
             createdAt: newProduct.createdAt || new Date().toISOString(),
             priceHistory: newProduct.priceHistory ? newProduct.priceHistory.map((ph: any) => ({
                 id: ph.id,
@@ -90,10 +92,15 @@ export const addProduct = async (data: ProductDto): Promise<Product> => {
     }
 };
 
-export const updateProduct = async (productId: string, data: Partial<ProductDto>): Promise<Product> => {
+export const updateProduct = async (productId: string, fournisseurId: string, data: Partial<ProductDto>): Promise<Product> => {
     const token = localStorage.getItem("token");
     try {
-        const response = await axiosClient.put(`products/${productId}`, data, {
+        const response = await axiosClient.put(`fournisseurs/${fournisseurId}/produits/${productId}`, {
+            nomProduit: data.nomProduit,
+            prixNegocie: data.prixNegocie,
+            conditionnement: data.conditionnement,
+            delaiApprovisionnement: data.delaiApprovisionnement,
+        }, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
@@ -105,7 +112,7 @@ export const updateProduct = async (productId: string, data: Partial<ProductDto>
             prixNegocie: parseFloat(updatedProduct.prixNegocie) || 0,
             conditionnement: updatedProduct.conditionnement,
             delaiApprovisionnement: updatedProduct.delaiApprovisionnement,
-            supplierId: updatedProduct.supplierId,
+            fournisseurId: updatedProduct.fournisseurId,
             createdAt: updatedProduct.createdAt || new Date().toISOString(),
             priceHistory: updatedProduct.priceHistory ? updatedProduct.priceHistory.map((ph: any) => ({
                 id: ph.id,
@@ -121,10 +128,10 @@ export const updateProduct = async (productId: string, data: Partial<ProductDto>
     }
 };
 
-export const deleteProduct = async (productId: string): Promise<void> => {
+export const deleteProduct = async (productId: string, fournisseurId: string): Promise<void> => {
     const token = localStorage.getItem("token");
     try {
-        await axiosClient.delete(`products/${productId}`, {
+        await axiosClient.delete(`fournisseurs/${fournisseurId}/produits/${productId}`, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },

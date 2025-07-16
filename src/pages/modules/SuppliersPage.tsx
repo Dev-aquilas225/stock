@@ -63,10 +63,11 @@ interface Supplier {
 
 interface Product {
     id: string;
-    nomProduit: string; // Changed from name
-    prixNegocie: number; // Changed from currentPrice
-    conditionnement: string; // Changed from packaging
-    delaiApprovisionnement: string; // Changed from deliveryTime
+    nomProduit: string;
+    prixNegocie: number;
+    conditionnement: string;
+    delaiApprovisionnement: string;
+    fournisseurId: string;
     priceHistory: PriceHistory[];
 }
 
@@ -80,10 +81,10 @@ interface PriceHistory {
 
 interface Contact {
     id: string;
-    nom: string; // Changed from name
-    fonction: string; // Changed from role
+    nom: string;
+    fonction: string;
     email: string;
-    telephone: string; // Changed from phone
+    telephone: string;
     isPrimary: boolean;
 }
 
@@ -128,17 +129,17 @@ const SuppliersPage: React.FC = () => {
     });
 
     const [productForm, setProductForm] = useState({
-        nomProduit: "", // Changed from name
-        prixNegocie: "", // Changed from currentPrice
-        conditionnement: "", // Changed from packaging
-        delaiApprovisionnement: "", // Changed from deliveryTime
+        nomProduit: "",
+        prixNegocie: "",
+        conditionnement: "",
+        delaiApprovisionnement: "",
     });
 
     const [contactForm, setContactForm] = useState({
-        nom: "", // Changed from name
-        fonction: "", // Changed from role
+        nom: "",
+        fonction: "",
         email: "",
-        telephone: "", // Changed from phone
+        telephone: "",
         isPrimary: false,
     });
 
@@ -251,7 +252,7 @@ const SuppliersPage: React.FC = () => {
                 type: "delete",
                 module: "Fournisseurs",
                 description: `Fournisseur supprimé: ${supplierId}`,
-                metadata: { supplierId },
+                metadata: { fournisseurId: supplierId },
             });
             showToast({
                 type: "success",
@@ -288,7 +289,7 @@ const SuppliersPage: React.FC = () => {
                 type: "update",
                 module: "Fournisseurs",
                 description: `Fournisseur modifié: ${supplierForm.name}`,
-                metadata: { supplierId: editingSupplier.id },
+                metadata: { fournisseurId: editingSupplier.id },
             });
             showToast({
                 type: "success",
@@ -297,6 +298,7 @@ const SuppliersPage: React.FC = () => {
             });
         } else {
             try {
+                console.log("Adding supplier with data:", supplierForm);
                 const fournisseurDto = {
                     nom: supplierForm.name,
                     email: supplierForm.email,
@@ -304,10 +306,11 @@ const SuppliersPage: React.FC = () => {
                     adresse: supplierForm.address,
                     categorie: supplierForm.category === "principal" ? "1" : "2",
                     delaiLivraison: supplierForm.deliveryTime,
-                    minCommande: parseFloat(supplierForm.minimumOrder) || 0,
-                    remise: supplierForm.discount,
+                    minimumCommande: parseFloat(supplierForm.minimumOrder) || 0,
+                    remise: supplierForm.discount.toString(),
                 };
-                await add(fournisseurDto);
+                const response = await add(fournisseurDto);
+                console.log("Add supplier response:", response);
                 showToast({
                     type: "success",
                     title: "Fournisseur ajouté",
@@ -341,31 +344,47 @@ const SuppliersPage: React.FC = () => {
     };
 
     const handleSaveProduct = async () => {
-        if (!selectedSupplier || !productForm.nomProduit || !productForm.prixNegocie) {
+        if (!selectedSupplier) {
             showToast({
                 type: "error",
                 title: "Erreur",
-                message: "Veuillez remplir tous les champs obligatoires (Nom du produit, Prix négocié)",
+                message: "Aucun fournisseur sélectionné",
+            });
+            return;
+        }
+
+        if (
+            !productForm.nomProduit ||
+            !productForm.prixNegocie ||
+            isNaN(parseFloat(productForm.prixNegocie)) ||
+            !productForm.conditionnement ||
+            !productForm.delaiApprovisionnement
+        ) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Veuillez remplir tous les champs obligatoires (Nom, Prix, Conditionnement, Délai)",
             });
             return;
         }
 
         const productData = {
-            supplierId: selectedSupplier.id,
             nomProduit: productForm.nomProduit,
-            prixNegocie: parseFloat(productForm.prixNegocie) || 0,
+            prixNegocie: parseFloat(productForm.prixNegocie),
             conditionnement: productForm.conditionnement,
             delaiApprovisionnement: productForm.delaiApprovisionnement,
         };
 
         try {
+            console.log("Saving product with data:", productData);
             if (editingProduct) {
-                await updateProduct(editingProduct.id, productData);
+                const response = await updateProduct(editingProduct.id, selectedSupplier.id, productData);
+                console.log("Update product response:", response);
                 logActivity({
                     type: "update",
                     module: "Produits",
                     description: `Produit modifié: ${productForm.nomProduit}`,
-                    metadata: { supplierId: selectedSupplier.id, productId: editingProduct.id },
+                    metadata: { fournisseurId: selectedSupplier.id, productId: editingProduct.id },
                 });
                 showToast({
                     type: "success",
@@ -373,12 +392,13 @@ const SuppliersPage: React.FC = () => {
                     message: "Le produit a été mis à jour avec succès",
                 });
             } else {
-                await addProduct(productData);
+                const response = await addProduct(selectedSupplier.id, productData);
+                console.log("Add product response:", response);
                 logActivity({
                     type: "create",
                     module: "Produits",
                     description: `Produit ajouté: ${productForm.nomProduit}`,
-                    metadata: { supplierId: selectedSupplier.id },
+                    metadata: { fournisseurId: selectedSupplier.id },
                 });
                 showToast({
                     type: "success",
@@ -389,7 +409,7 @@ const SuppliersPage: React.FC = () => {
             setShowProductModal(false);
             resetForms();
         } catch (err) {
-            // Error handled by useProducts
+            console.error("Error saving product:", err);
         }
     };
 
@@ -424,7 +444,7 @@ const SuppliersPage: React.FC = () => {
         }
 
         const contactData = {
-            supplierId: selectedSupplier.id,
+            fournisseurId: selectedSupplier.id,
             nom: contactForm.nom,
             fonction: contactForm.fonction,
             email: contactForm.email,
@@ -433,13 +453,15 @@ const SuppliersPage: React.FC = () => {
         };
 
         try {
+            console.log("Saving contact with data:", contactData);
             if (editingContact) {
-                await updateContact(editingContact.id, contactData);
+                const response = await updateContact(editingContact.id, contactData);
+                console.log("Update contact response:", response);
                 logActivity({
                     type: "update",
                     module: "Contacts",
                     description: `Contact modifié: ${contactForm.nom}`,
-                    metadata: { supplierId: selectedSupplier.id, contactId: editingContact.id },
+                    metadata: { fournisseurId: selectedSupplier.id, contactId: editingContact.id },
                 });
                 showToast({
                     type: "success",
@@ -447,12 +469,13 @@ const SuppliersPage: React.FC = () => {
                     message: "Le contact a été mis à jour avec succès",
                 });
             } else {
-                await addContact(contactData);
+                const response = await addContact(contactData);
+                console.log("Add contact response:", response);
                 logActivity({
                     type: "create",
                     module: "Contacts",
                     description: `Contact ajouté: ${contactForm.nom}`,
-                    metadata: { supplierId: selectedSupplier.id },
+                    metadata: { fournisseurId: selectedSupplier.id },
                 });
                 showToast({
                     type: "success",
@@ -463,7 +486,7 @@ const SuppliersPage: React.FC = () => {
             setShowContactModal(false);
             resetForms();
         } catch (err) {
-            // Error handled by useContacts
+            console.error("Error saving contact:", err);
         }
     };
 
@@ -471,12 +494,13 @@ const SuppliersPage: React.FC = () => {
         if (!selectedSupplier) return;
         if (window.confirm("Êtes-vous sûr de vouloir supprimer ce contact ?")) {
             try {
+                console.log(`Deleting contact ${contactId} for fournisseurId ${selectedSupplier.id}`);
                 await removeContact(contactId);
                 logActivity({
                     type: "delete",
                     module: "Contacts",
                     description: `Contact supprimé: ${contactId}`,
-                    metadata: { supplierId: selectedSupplier.id, contactId },
+                    metadata: { fournisseurId: selectedSupplier.id, contactId },
                 });
                 showToast({
                     type: "success",
@@ -484,7 +508,7 @@ const SuppliersPage: React.FC = () => {
                     message: "Le contact a été supprimé avec succès",
                 });
             } catch (err) {
-                // Error handled by useContacts
+                console.error("Error deleting contact:", err);
             }
         }
     };
@@ -493,12 +517,13 @@ const SuppliersPage: React.FC = () => {
         if (!selectedSupplier) return;
         if (window.confirm("Êtes-vous sûr de vouloir supprimer ce produit ?")) {
             try {
-                await removeProduct(productId);
+                console.log(`Deleting product ${productId} for fournisseurId ${selectedSupplier.id}`);
+                await removeProduct(productId, selectedSupplier.id);
                 logActivity({
                     type: "delete",
                     module: "Produits",
                     description: `Produit supprimé: ${productId}`,
-                    metadata: { supplierId: selectedSupplier.id, productId },
+                    metadata: { fournisseurId: selectedSupplier.id, productId },
                 });
                 showToast({
                     type: "success",
@@ -506,7 +531,7 @@ const SuppliersPage: React.FC = () => {
                     message: "Le produit a été supprimé avec succès",
                 });
             } catch (err) {
-                // Error handled by useProducts
+                console.error("Error deleting product:", err);
             }
         }
     };
@@ -534,8 +559,9 @@ const SuppliersPage: React.FC = () => {
         }
 
         try {
+            console.log("Saving rating with data:", { fournisseurId: selectedSupplier.id, rating: newRating, comment: ratingComment });
             await addOrUpdateRating({
-                supplierId: selectedSupplier.id,
+                fournisseurId: selectedSupplier.id,
                 rating: newRating,
                 comment: ratingComment,
             });
@@ -544,7 +570,7 @@ const SuppliersPage: React.FC = () => {
                 module: "Fournisseurs",
                 description: `Note attribuée au fournisseur ${selectedSupplier.name}: ${newRating}/5`,
                 metadata: {
-                    supplierId: selectedSupplier.id,
+                    fournisseurId: selectedSupplier.id,
                     rating: newRating,
                     comment: ratingComment,
                 },
@@ -556,7 +582,7 @@ const SuppliersPage: React.FC = () => {
             });
             setShowRatingModal(false);
         } catch (err) {
-            // Error handled by useRatings
+            console.error("Error saving rating:", err);
         }
     };
 
@@ -1182,12 +1208,14 @@ const SuppliersPage: React.FC = () => {
                                         value={productForm.conditionnement}
                                         onChange={(value) => setProductForm((prev) => ({ ...prev, conditionnement: value }))}
                                         placeholder="ex: Carton de 12"
+                                        required
                                     />
                                     <Input
                                         label="Délai d'approvisionnement"
                                         value={productForm.delaiApprovisionnement}
                                         onChange={(value) => setProductForm((prev) => ({ ...prev, delaiApprovisionnement: value }))}
                                         placeholder="ex: 3 jours"
+                                        required
                                     />
                                 </div>
                                 <div className="flex justify-end space-x-4">
