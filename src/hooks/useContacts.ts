@@ -1,167 +1,148 @@
-import { useState, useEffect } from "react";
-import { useToast } from "../contexts/ToastContext";
-import { useActivity } from "../contexts/ActivityContext";
-import { ContactDto, Contact, fetchContacts, addContact, updateContact, deleteContact } from "../api/contactsApi";
-export type { Contact, ContactDto };
+import { useState, useEffect, useCallback } from "react";
+import { fetchContacts, addContact, updateContact, deleteContact, Contact } from "../api/contactsApi";
+export type { Contact}
 export const useContacts = (fournisseurId: string) => {
     const [contacts, setContacts] = useState<Contact[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const { showToast } = useToast();
-    const { logActivity } = useActivity();
 
-    const loadContacts = async () => {
+    // Fetch contacts when fournisseurId changes
+    useEffect(() => {
         if (!fournisseurId) {
-            console.log("No fournisseurId provided, skipping contact fetch");
             setContacts([]);
             setError(null);
             return;
         }
 
-        setLoading(true);
-        try {
-            const fetchedContacts: Contact[] = await fetchContacts(fournisseurId);
-            setContacts(fetchedContacts);
+        const loadContacts = async () => {
+            setLoading(true);
             setError(null);
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.message || "Erreur lors du chargement des contacts";
-            console.error(`Error fetching contacts for fournisseurId ${fournisseurId}:`, error);
-            setError(errorMessage);
-            showToast({
-                type: "error",
-                title: "Erreur",
-                message: errorMessage,
-                duration: 5000,
-            });
-        } finally {
-            setLoading(false);
-        }
-    };
+            try {
+                console.log(`useContacts: Fetching contacts for fournisseurId: ${fournisseurId}`);
+                const fetchedContacts = await fetchContacts(fournisseurId);
+                setContacts(fetchedContacts);
+                console.log(`useContacts: Successfully fetched ${fetchedContacts.length} contacts`);
+            } catch (err: any) {
+                const errorMessage = err.message || "Erreur lors du chargement des contacts";
+                setError(errorMessage);
+                console.error("useContacts: Error fetching contacts:", {
+                    message: err.message,
+                    status: err.response?.status,
+                    data: err.response?.data,
+                });
+            } finally {
+                setLoading(false);
+            }
+        };
 
-    useEffect(() => {
         loadContacts();
     }, [fournisseurId]);
 
-    const add = async (data: ContactDto): Promise<Contact> => {
-        setLoading(true);
-        try {
-            const newContact: Contact = await addContact(fournisseurId, data);
-            await loadContacts(); // Refetch to ensure UI reflects the latest data
-            showToast({
-                type: "success",
-                title: "Contact ajouté",
-                message: `Le contact ${data.nom} a été ajouté avec succès.`,
-                duration: 3000,
-            });
-            logActivity({
-                type: "create",
-                module: "Contacts",
-                description: `Nouveau contact ajouté: ${data.nom}`,
-                userId: localStorage.getItem("nexsaas_user")
-                    ? JSON.parse(localStorage.getItem("nexsaas_user")!).id
-                    : "unknown",
-                metadata: {
-                    fournisseurId,
-                    email: data.email,
-                },
-            });
-            setError(null);
-            return newContact;
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.message || "Erreur lors de l'ajout du contact";
-            console.error("Error adding contact:", error);
-            setError(errorMessage);
-            showToast({
-                type: "error",
-                title: "Erreur d'ajout",
-                message: errorMessage,
-                duration: 5000,
-            });
-            throw error;
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Add a new contact
+    const add = useCallback(
+        async (data: Omit<Contact, "id" | "fournisseurId" | "createdAt">) => {
+            if (!fournisseurId) {
+                const errorMessage = "Aucun fournisseur sélectionné";
+                setError(errorMessage);
+                console.error("useContacts: Add contact failed:", errorMessage);
+                throw new Error(errorMessage);
+            }
 
-    const update = async (contactId: string, data: Partial<ContactDto>): Promise<Contact> => {
-        setLoading(true);
-        try {
-            const updatedContact: Contact = await updateContact(contactId, fournisseurId, data);
-            await loadContacts(); // Refetch to ensure UI reflects the latest data
-            showToast({
-                type: "success",
-                title: "Contact mis à jour",
-                message: `Le contact ${data.nom || updatedContact.nom} a été mis à jour avec succès.`,
-                duration: 3000,
-            });
-            logActivity({
-                type: "update",
-                module: "Contacts",
-                description: `Contact mis à jour: ${data.nom || updatedContact.nom}`,
-                userId: localStorage.getItem("nexsaas_user")
-                    ? JSON.parse(localStorage.getItem("nexsaas_user")!).id
-                    : "unknown",
-                metadata: {
-                    fournisseurId,
-                    email: data.email || updatedContact.email,
-                },
-            });
-            setError(null);
-            return updatedContact;
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.message || "Erreur lors de la mise à jour du contact";
-            console.error(`Error updating contact ${contactId}:`, error);
-            setError(errorMessage);
-            showToast({
-                type: "error",
-                title: "Erreur de mise à jour",
-                message: errorMessage,
-                duration: 5000,
-            });
-            throw error;
-        } finally {
-            setLoading(false);
-        }
-    };
+            try {
+                console.log("useContacts: Adding contact with data:", { fournisseurId, data });
+                const newContact = await addContact(fournisseurId, data);
+                setContacts((prev) => [...prev, newContact]);
+                setError(null);
+                console.log("useContacts: Contact added successfully:", newContact);
+                return newContact;
+            } catch (err: any) {
+                const errorMessage =
+                    err.message || "Erreur lors de l'ajout du contact";
+                setError(errorMessage);
+                console.error("useContacts: Error adding contact:", {
+                    message: err.message,
+                    status: err.response?.status,
+                    data: err.response?.data,
+                });
+                throw new Error(errorMessage);
+            }
+        },
+        [fournisseurId],
+    );
 
-    const remove = async (contactId: string): Promise<void> => {
-        setLoading(true);
-        try {
-            await deleteContact(contactId, fournisseurId);
-            await loadContacts(); // Refetch to ensure UI reflects the latest data
-            showToast({
-                type: "success",
-                title: "Contact supprimé",
-                message: "Le contact a été supprimé avec succès.",
-                duration: 3000,
-            });
-            logActivity({
-                type: "delete",
-                module: "Contacts",
-                description: `Contact supprimé: ${contactId}`,
-                userId: localStorage.getItem("nexsaas_user")
-                    ? JSON.parse(localStorage.getItem("nexsaas_user")!).id
-                    : "unknown",
-                metadata: {
-                    fournisseurId,
-                },
-            });
-            setError(null);
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.message || "Erreur lors de la suppression du contact";
-            console.error(`Error deleting contact ${contactId}:`, error);
-            setError(errorMessage);
-            showToast({
-                type: "error",
-                title: "Erreur de suppression",
-                message: errorMessage,
-                duration: 5000,
-            });
-            throw error;
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Update an existing contact
+    const update = useCallback(
+        async (contactId: string, data: Omit<Contact, "id" | "fournisseurId" | "createdAt">) => {
+            if (!fournisseurId) {
+                const errorMessage = "Aucun fournisseur sélectionné";
+                setError(errorMessage);
+                console.error("useContacts: Update contact failed:", errorMessage);
+                throw new Error(errorMessage);
+            }
 
-    return { contacts, add, update, remove, loading, error };
+            try {
+                console.log("useContacts: Updating contact with data:", { contactId, fournisseurId, data });
+                const updatedContact = await updateContact(contactId, fournisseurId, data);
+                setContacts((prev) =>
+                    prev.map((contact) =>
+                        contact.id === contactId ? updatedContact : contact,
+                    ),
+                );
+                setError(null);
+                console.log("useContacts: Contact updated successfully:", updatedContact);
+                return updatedContact;
+            } catch (err: any) {
+                const errorMessage =
+                    err.message || "Erreur lors de la mise à jour du contact";
+                setError(errorMessage);
+                console.error("useContacts: Error updating contact:", {
+                    message: err.message,
+                    status: err.response?.status,
+                    data: err.response?.data,
+                });
+                throw new Error(errorMessage);
+            }
+        },
+        [fournisseurId],
+    );
+
+    // Remove a contact
+    const remove = useCallback(
+        async (contactId: string) => {
+            if (!fournisseurId) {
+                const errorMessage = "Aucun fournisseur sélectionné";
+                setError(errorMessage);
+                console.error("useContacts: Delete contact failed:", errorMessage);
+                throw new Error(errorMessage);
+            }
+
+            try {
+                console.log("useContacts: Deleting contact:", { contactId, fournisseurId });
+                await deleteContact(contactId, fournisseurId);
+                setContacts((prev) => prev.filter((contact) => contact.id !== contactId));
+                setError(null);
+                console.log(`useContacts: Contact ${contactId} deleted successfully`);
+            } catch (err: any) {
+                const errorMessage =
+                    err.message || "Erreur lors de la suppression du contact";
+                setError(errorMessage);
+                console.error("useContacts: Error deleting contact:", {
+                    message: err.message,
+                    status: err.response?.status,
+                    data: err.response?.data,
+                });
+                throw new Error(errorMessage);
+            }
+        },
+        [fournisseurId],
+    );
+
+    return {
+        contacts,
+        add,
+        update,
+        remove,
+        loading,
+        error,
+    };
 };

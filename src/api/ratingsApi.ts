@@ -1,11 +1,14 @@
 import axiosClient from "./axiosClient";
 
+// Interfaces for Rating and RatingDto
 export interface Rating {
+    id: string;
     fournisseurId: string;
     qualiteProduit: number;
     respectDelais: number;
     fiabilite: number;
     commentaire: string;
+    createdAt: string;
 }
 
 export interface RatingDto {
@@ -15,39 +18,60 @@ export interface RatingDto {
     commentaire: string;
 }
 
+// Fetch rating for a supplier
 export const fetchRating = async (fournisseurId: string): Promise<Rating | null> => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-        throw new Error("No authentication token found");
-    }
     try {
-        const response = await axiosClient.get(`/fournisseurs/${fournisseurId}/rating`, {
+        console.log(`ratingsApi: Fetching rating for fournisseurId: ${fournisseurId}`);
+        const response = await axiosClient.get(`/fournisseurs/${fournisseurId}/evaluations`, {
             headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
             },
         });
-        return response.data.data || null;
+        console.log(`ratingsApi: Successfully fetched rating for fournisseurId: ${fournisseurId}`, response.data);
+        return response.data || null;
     } catch (error: any) {
-        if (error.response?.status === 404) {
-            return null; // No rating exists
-        }
-        throw new Error(error.response?.data?.message || "Erreur lors de la récupération de l'évaluation");
+        console.error("ratingsApi: Error fetching rating:", {
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
+        });
+        const errorMessage =
+            error.response?.status === 401
+                ? "Non autorisé : Veuillez vous reconnecter"
+                : error.response?.status === 404
+                    ? "Évaluation ou fournisseur non trouvé"
+                    : error.response?.data?.message || "Erreur lors du chargement de l'évaluation";
+        throw new Error(errorMessage);
     }
 };
 
+// Add or update a rating for a supplier
 export const addOrUpdateRating = async (fournisseurId: string, data: RatingDto): Promise<Rating> => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-        throw new Error("No authentication token found");
-    }
     try {
-        const response = await axiosClient.post(`/fournisseurs/${fournisseurId}/rating`, data, {
+        console.log(`ratingsApi: Saving rating for fournisseurId: ${fournisseurId}`, data);
+        const response = await axiosClient.post(`/fournisseurs/${fournisseurId}/evaluations`, data, {
             headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
             },
         });
+        console.log(`ratingsApi: Successfully saved rating for fournisseurId: ${fournisseurId}`, response.data);
         return response.data;
     } catch (error: any) {
-        throw new Error(error.response?.data?.message || "Erreur lors de l'ajout ou de la mise à jour de l'évaluation");
+        console.error("ratingsApi: Error saving rating:", {
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
+        });
+        const errorMessage =
+            error.response?.status === 400
+                ? error.response?.data?.message || "Données d'évaluation invalides"
+                : error.response?.status === 401
+                    ? "Non autorisé : Veuillez vous reconnecter"
+                    : error.response?.status === 404
+                        ? "Fournisseur non trouvé"
+                        : error.response?.status === 409
+                            ? "Une évaluation existe déjà pour ce fournisseur"
+                            : error.response?.data?.message || "Erreur lors de l'enregistrement de l'évaluation";
+        throw new Error(errorMessage);
     }
 };

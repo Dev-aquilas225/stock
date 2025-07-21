@@ -28,7 +28,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useActivity } from "../../contexts/ActivityContext";
 import { useFournisseurs, Fournisseur } from "../../hooks/useFournisseur";
 import { useProducts, Product, ProductDto } from "../../hooks/useProducts";
-import { useContacts, Contact, ContactDto } from "../../hooks/useContacts";
+import { useContacts, Contact } from "../../hooks/useContacts";
 import { usePriceHistory, PriceHistory } from "../../hooks/usePriceHistory";
 import { useRatings, Rating, RatingDto } from "../../hooks/useRatings";
 import { useInteractions, Interaction, InteractionDto } from "../../hooks/useInteractions";
@@ -77,7 +77,7 @@ const SuppliersPage: React.FC = () => {
     const { products, add: addProduct, update: updateProduct, remove: removeProduct, loading: productsLoading, error: productsError } = useProducts(selectedSupplier?.id || "");
     const { contacts, add: addContact, update: updateContact, remove: removeContact, loading: contactsLoading, error: contactsError } = useContacts(selectedSupplier?.id || "");
     const { priceHistory, loading: priceHistoryLoading, error: priceHistoryError } = usePriceHistory(selectedSupplier?.id || "", selectedProduct?.id || "");
-    const { ratings, addOrUpdate: addOrUpdateRating, error: ratingsError } = useRatings(selectedSupplier?.id || "");
+    const { ratings, addOrUpdate: addOrUpdateRating, loading: ratingsLoading, error: ratingsError } = useRatings(selectedSupplier?.id || "");
     const { interactions, add: addInteraction, update: updateInteraction, remove: removeInteraction, loading: interactionsLoading, error: interactionsError } = useInteractions(selectedSupplier?.id || "");
 
     const [supplierForm, setSupplierForm] = useState<Omit<Fournisseur, "id" | "minimumCommande" | "createdAt">>({
@@ -102,7 +102,7 @@ const SuppliersPage: React.FC = () => {
         note: "",
     });
 
-    const [contactForm, setContactForm] = useState<ContactDto>({
+    const [contactForm, setContactForm] = useState<Omit<Contact, "id" | "fournisseurId" | "createdAt">>({
         nom: "",
         fonction: "",
         email: "",
@@ -118,7 +118,7 @@ const SuppliersPage: React.FC = () => {
                 email: fournisseur.email,
                 phone: fournisseur.telephone,
                 address: fournisseur.adresse,
-                category: fournisseur.categorie,
+                categorie: fournisseur.categorie,
                 deliveryTime: fournisseur.delaiLivraison,
                 minimumOrder: fournisseur.minimumCommande,
                 discount: parseFloat(fournisseur.remise) || 0,
@@ -196,7 +196,7 @@ const SuppliersPage: React.FC = () => {
             email: supplier.email,
             telephone: supplier.phone,
             adresse: supplier.address,
-            categorie: supplier.category,
+            categorie: supplier.categorie,
             delaiLivraison: supplier.deliveryTime,
             remise: supplier.discount.toString(),
         });
@@ -222,7 +222,7 @@ const SuppliersPage: React.FC = () => {
                     duration: 3000,
                 });
             } catch (err: any) {
-                const errorMessage = err.message.includes("Unauthorized")
+                const errorMessage = err.response?.status === 401
                     ? "Non autorisé : Veuillez vous reconnecter"
                     : err.response?.data?.message || "Erreur lors de la suppression du fournisseur";
                 showToast({
@@ -268,11 +268,14 @@ const SuppliersPage: React.FC = () => {
                                 email: updatedSupplier.email,
                                 phone: updatedSupplier.telephone,
                                 address: updatedSupplier.adresse,
-                                category: updatedSupplier.categorie,
+                                categorie: updatedSupplier.categorie,
                                 deliveryTime: updatedSupplier.delaiLivraison,
                                 minimumOrder: updatedSupplier.minimumCommande,
                                 discount: parseFloat(updatedSupplier.remise) || 0,
                                 createdAt: updatedSupplier.createdAt,
+                                products: supplier.products,
+                                contacts: supplier.contacts,
+                                interactions: supplier.interactions,
                             }
                             : supplier,
                     ),
@@ -300,7 +303,7 @@ const SuppliersPage: React.FC = () => {
                         email: newSupplier.email,
                         phone: newSupplier.telephone,
                         address: newSupplier.adresse,
-                        category: newSupplier.categorie,
+                        categorie: newSupplier.categorie,
                         deliveryTime: newSupplier.delaiLivraison,
                         minimumOrder: newSupplier.minimumCommande,
                         discount: parseFloat(newSupplier.remise) || 0,
@@ -327,7 +330,7 @@ const SuppliersPage: React.FC = () => {
             setShowSupplierModal(false);
             resetForms();
         } catch (err: any) {
-            const errorMessage = err.message.includes("Unauthorized")
+            const errorMessage = err.response?.status === 401
                 ? "Non autorisé : Veuillez vous reconnecter"
                 : err.response?.data?.message || "Erreur lors de l'enregistrement du fournisseur";
             showToast({
@@ -426,7 +429,7 @@ const SuppliersPage: React.FC = () => {
             setShowProductModal(false);
             resetForms();
         } catch (err: any) {
-            const errorMessage = err.message.includes("Unauthorized")
+            const errorMessage = err.response?.status === 401
                 ? "Non autorisé : Veuillez vous reconnecter"
                 : err.response?.data?.message || "Erreur lors de l'enregistrement du produit";
             showToast({
@@ -457,9 +460,208 @@ const SuppliersPage: React.FC = () => {
                     duration: 3000,
                 });
             } catch (err: any) {
-                const errorMessage = err.message.includes("Unauthorized")
+                const errorMessage = err.response?.status === 401
                     ? "Non autorisé : Veuillez vous reconnecter"
                     : err.response?.data?.message || "Erreur lors de la suppression du produit";
+                showToast({
+                    type: "error",
+                    title: "Erreur",
+                    message: errorMessage,
+                    duration: 5000,
+                });
+            }
+        }
+    };
+
+    const handleAddContact = (supplier: Supplier) => {
+        setSelectedSupplier(supplier);
+        setEditingContact(null);
+        setContactForm({
+            nom: "",
+            fonction: "",
+            email: `test${Date.now()}@example.com`,
+            telephone: "",
+            isPrimary: false,
+        });
+        setShowContactModal(true);
+    };
+
+    const handleEditContact = (supplier: Supplier, contact: Contact) => {
+        setSelectedSupplier(supplier);
+        setEditingContact(contact);
+        setContactForm({
+            nom: contact.nom,
+            fonction: contact.fonction,
+            email: contact.email,
+            telephone: contact.telephone,
+            isPrimary: contact.isPrimary,
+        });
+        setShowContactModal(true);
+    };
+
+    const handleSaveContact = async () => {
+        if (!selectedSupplier) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Aucun fournisseur sélectionné",
+                duration: 5000,
+            });
+            return;
+        }
+
+        if (!contactForm.nom || !contactForm.email) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Nom et email sont requis",
+                duration: 5000,
+            });
+            return;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(contactForm.email)) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Format d'email invalide",
+                duration: 5000,
+            });
+            return;
+        }
+
+        if (contactForm.telephone && !/^\+?\d{10,}$/.test(contactForm.telephone)) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Format de téléphone invalide (ex: +1234567890)",
+                duration: 5000,
+            });
+            return;
+        }
+
+        const contactData: Omit<Contact, "id" | "fournisseurId" | "createdAt"> = {
+            nom: contactForm.nom,
+            fonction: contactForm.fonction,
+            email: contactForm.email,
+            telephone: contactForm.telephone,
+            isPrimary: contactForm.isPrimary,
+        };
+
+        try {
+            console.log("handleSaveContact: Saving contact with data:", { fournisseurId: selectedSupplier.id, contactData });
+
+            if (contactData.isPrimary) {
+                const currentPrimary = contacts.find(
+                    (c) => c.isPrimary && (!editingContact || c.id !== editingContact.id),
+                );
+                if (currentPrimary) {
+                    console.log("handleSaveContact: Unsetting existing primary contact:", currentPrimary);
+                    await updateContact(currentPrimary.id, {
+                        nom: currentPrimary.nom,
+                        fonction: currentPrimary.fonction,
+                        email: currentPrimary.email,
+                        telephone: currentPrimary.telephone,
+                        isPrimary: false,
+                    });
+                }
+            }
+
+            if (editingContact) {
+                await updateContact(editingContact.id, contactData);
+                logActivity({
+                    type: "update",
+                    module: "Contacts",
+                    description: `Contact modifié: ${contactForm.nom}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id, contactId: editingContact.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Contact modifié",
+                    message: "Le contact a été mis à jour avec succès",
+                    duration: 3000,
+                });
+            } else {
+                await addContact(contactData);
+                logActivity({
+                    type: "create",
+                    module: "Contacts",
+                    description: `Contact ajouté: ${contactForm.nom}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Contact ajouté",
+                    message: "Le nouveau contact a été ajouté avec succès",
+                    duration: 3000,
+                });
+            }
+            setShowContactModal(false);
+            resetForms();
+        } catch (err: any) {
+            console.error("handleSaveContact: Error saving contact:", {
+                message: err.message,
+                status: err.response?.status,
+                data: err.response?.data,
+                stack: err.stack,
+            });
+            const errorMessage =
+                err.message === "Nom et email sont requis" ||
+                    err.message === "Format d'email invalide" ||
+                    err.message === "Format de téléphone invalide"
+                    ? err.message
+                    : err.response?.status === 400
+                        ? err.response?.data?.message || "Données invalides fournies"
+                        : err.response?.status === 401
+                            ? "Non autorisé : Veuillez vous reconnecter"
+                            : err.response?.status === 404
+                                ? "Fournisseur non trouvé"
+                                : err.response?.status === 409
+                                    ? "Un contact avec cet email existe déjà"
+                                    : err.response?.data?.message || "Erreur lors de l'enregistrement du contact";
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+        }
+    };
+
+    const handleDeleteContact = async (contactId: string) => {
+        if (!selectedSupplier) return;
+        if (window.confirm("Êtes-vous sûr de vouloir supprimer ce contact ?")) {
+            try {
+                console.log("handleDeleteContact: Deleting contact:", { contactId, fournisseurId: selectedSupplier.id });
+                await removeContact(contactId);
+                logActivity({
+                    type: "delete",
+                    module: "Contacts",
+                    description: `Contact supprimé: ${contactId}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id, contactId },
+                });
+                showToast({
+                    type: "success",
+                    title: "Contact supprimé",
+                    message: "Le contact a été supprimé avec succès",
+                    duration: 3000,
+                });
+            } catch (err: any) {
+                console.error("handleDeleteContact: Error deleting contact:", {
+                    message: err.message,
+                    status: err.response?.status,
+                    data: err.response?.data,
+                    stack: err.stack,
+                });
+                const errorMessage = err.response?.status === 401
+                    ? "Non autorisé : Veuillez vous reconnecter"
+                    : err.response?.status === 404
+                        ? "Contact non trouvé"
+                        : err.response?.data?.message || "Erreur lors de la suppression du contact";
                 showToast({
                     type: "error",
                     title: "Erreur",
@@ -538,7 +740,7 @@ const SuppliersPage: React.FC = () => {
             setShowInteractionModal(false);
             resetForms();
         } catch (err: any) {
-            const errorMessage = err.message.includes("Unauthorized")
+            const errorMessage = err.response?.status === 401
                 ? "Non autorisé : Veuillez vous reconnecter"
                 : err.response?.data?.message || "Erreur lors de l'enregistrement de l'interaction";
             showToast({
@@ -569,127 +771,9 @@ const SuppliersPage: React.FC = () => {
                     duration: 3000,
                 });
             } catch (err: any) {
-                const errorMessage = err.message.includes("Unauthorized")
+                const errorMessage = err.response?.status === 401
                     ? "Non autorisé : Veuillez vous reconnecter"
                     : err.response?.data?.message || "Erreur lors de la suppression de l'interaction";
-                showToast({
-                    type: "error",
-                    title: "Erreur",
-                    message: errorMessage,
-                    duration: 5000,
-                });
-            }
-        }
-    };
-
-    const handleAddContact = (supplier: Supplier) => {
-        setSelectedSupplier(supplier);
-        setEditingContact(null);
-        resetForms();
-        setShowContactModal(true);
-    };
-
-    const handleEditContact = (supplier: Supplier, contact: Contact) => {
-        setSelectedSupplier(supplier);
-        setEditingContact(contact);
-        setContactForm({
-            nom: contact.nom,
-            fonction: contact.fonction,
-            email: contact.email,
-            telephone: contact.telephone,
-            isPrimary: contact.isPrimary,
-        });
-        setShowContactModal(true);
-    };
-
-    const handleSaveContact = async () => {
-        if (!selectedSupplier || !contactForm.nom || !contactForm.email) {
-            showToast({
-                type: "error",
-                title: "Erreur",
-                message: "Veuillez remplir tous les champs obligatoires (Nom, Email)",
-                duration: 5000,
-            });
-            return;
-        }
-
-        const contactData: ContactDto = {
-            nom: contactForm.nom,
-            fonction: contactForm.fonction,
-            email: contactForm.email,
-            telephone: contactForm.telephone,
-            isPrimary: contactForm.isPrimary,
-        };
-
-        try {
-            if (editingContact) {
-                await updateContact(editingContact.id, contactData);
-                logActivity({
-                    type: "update",
-                    module: "Contacts",
-                    description: `Contact modifié: ${contactForm.nom}`,
-                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
-                    metadata: { fournisseurId: selectedSupplier.id, contactId: editingContact.id },
-                });
-                showToast({
-                    type: "success",
-                    title: "Contact modifié",
-                    message: "Le contact a été mis à jour avec succès",
-                    duration: 3000,
-                });
-            } else {
-                await addContact(contactData);
-                logActivity({
-                    type: "create",
-                    module: "Contacts",
-                    description: `Contact ajouté: ${contactForm.nom}`,
-                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
-                    metadata: { fournisseurId: selectedSupplier.id },
-                });
-                showToast({
-                    type: "success",
-                    title: "Contact ajouté",
-                    message: "Le nouveau contact a été ajouté avec succès",
-                    duration: 3000,
-                });
-            }
-            setShowContactModal(false);
-            resetForms();
-        } catch (err: any) {
-            const errorMessage = err.message.includes("Unauthorized")
-                ? "Non autorisé : Veuillez vous reconnecter"
-                : err.response?.data?.message || "Erreur lors de l'enregistrement du contact";
-            showToast({
-                type: "error",
-                title: "Erreur",
-                message: errorMessage,
-                duration: 5000,
-            });
-        }
-    };
-
-    const handleDeleteContact = async (contactId: string) => {
-        if (!selectedSupplier) return;
-        if (window.confirm("Êtes-vous sûr de vouloir supprimer ce contact ?")) {
-            try {
-                await removeContact(contactId);
-                logActivity({
-                    type: "delete",
-                    module: "Contacts",
-                    description: `Contact supprimé: ${contactId}`,
-                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
-                    metadata: { fournisseurId: selectedSupplier.id, contactId },
-                });
-                showToast({
-                    type: "success",
-                    title: "Contact supprimé",
-                    message: "Le contact a été supprimé avec succès",
-                    duration: 3000,
-                });
-            } catch (err: any) {
-                const errorMessage = err.message.includes("Unauthorized")
-                    ? "Non autorisé : Veuillez vous reconnecter"
-                    : err.response?.data?.message || "Erreur lors de la suppression du contact";
                 showToast({
                     type: "error",
                     title: "Erreur",
@@ -706,6 +790,11 @@ const SuppliersPage: React.FC = () => {
     };
 
     const handleRateSupplier = (supplier: Supplier) => {
+        console.log("handleRateSupplier: Opening rating modal for supplier:", {
+            supplierId: supplier.id,
+            supplierName: supplier.name,
+            currentRatings: ratings
+        });
         setSelectedSupplier(supplier);
         setNewRating({
             qualiteProduit: ratings?.qualiteProduit || 0,
@@ -717,18 +806,38 @@ const SuppliersPage: React.FC = () => {
     };
 
     const handleSaveRating = async () => {
-        if (!selectedSupplier || newRating.qualiteProduit === 0 || newRating.respectDelais === 0 || newRating.fiabilite === 0) {
+        if (!selectedSupplier) {
             showToast({
                 type: "error",
                 title: "Erreur",
-                message: "Veuillez attribuer une note pour chaque critère",
+                message: "Aucun fournisseur sélectionné",
+                duration: 5000,
+            });
+            return;
+        }
+
+        // Client-side validation
+        if (
+            newRating.qualiteProduit < 1 || newRating.qualiteProduit > 5 ||
+            newRating.respectDelais < 1 || newRating.respectDelais > 5 ||
+            newRating.fiabilite < 1 || newRating.fiabilite > 5
+        ) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Les notes doivent être comprises entre 1 et 5",
                 duration: 5000,
             });
             return;
         }
 
         try {
-            await addOrUpdateRating(newRating);
+            console.log("handleSaveRating: Saving rating for supplier:", {
+                fournisseurId: selectedSupplier.id,
+                rating: newRating
+            });
+            const response = await addOrUpdateRating(newRating);
+            console.log("handleSaveRating: Rating saved successfully:", { response });
             logActivity({
                 type: "update",
                 module: "Évaluations",
@@ -750,9 +859,30 @@ const SuppliersPage: React.FC = () => {
             setShowRatingModal(false);
             resetForms();
         } catch (err: any) {
-            const errorMessage = err.message.includes("Unauthorized")
-                ? "Non autorisé : Veuillez vous reconnecter"
-                : err.response?.data?.message || "Erreur lors de l'enregistrement de l'évaluation";
+            console.error("handleSaveRating: Error saving rating:", {
+                message: err.message,
+                status: err.response?.status,
+                data: err.response?.data,
+                request: err.request,
+                stack: err.stack,
+            });
+            const errorMessage =
+                err.message === "Tous les critères de notation (qualité, délais, fiabilité) sont requis" ||
+                    err.message === "Les notes doivent être comprises entre 1 et 5"
+                    ? err.message
+                    : err.response?.status === 400
+                        ? err.response?.data?.message || "Données d'évaluation invalides"
+                        : err.response?.status === 401
+                            ? "Non autorisé : Veuillez vous reconnecter"
+                            : err.response?.status === 404
+                                ? "Fournisseur non trouvé"
+                                : err.response?.status === 409
+                                    ? "Une évaluation existe déjà pour ce fournisseur"
+                                    : err.response?.status === 500
+                                        ? "Erreur serveur : Veuillez réessayer plus tard"
+                                        : err.request
+                                            ? "Échec de la connexion au serveur. Vérifiez votre connexion réseau."
+                                            : err.response?.data?.message || "Erreur lors de l'enregistrement de l'évaluation";
             showToast({
                 type: "error",
                 title: "Erreur",
@@ -779,8 +909,8 @@ const SuppliersPage: React.FC = () => {
                     <button
                         key={star}
                         onClick={() => interactive && onRate && onRate(star)}
-                        disabled={!interactive}
-                        className={`${interactive ? "cursor-pointer hover:scale-110" : "cursor-default"} transition-transform`}
+                        disabled={!interactive || ratingsLoading}
+                        className={`${interactive && !ratingsLoading ? "cursor-pointer hover:scale-110" : "cursor-default"} transition-transform`}
                     >
                         <Star
                             className={`w-4 h-4 ${star <= rating ? "text-yellow-400 fill-current" : "text-gray-300"}`}
@@ -799,7 +929,7 @@ const SuppliersPage: React.FC = () => {
             supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             supplier.email.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory =
-            categoryFilter === "all" || supplier.category === categoryFilter;
+            categoryFilter === "all" || supplier.categorie === categoryFilter;
         return matchesSearch && matchesCategory;
     });
 
@@ -911,7 +1041,10 @@ const SuppliersPage: React.FC = () => {
                     </Card>
                 </motion.div>
 
-                {loading && <p className="text-center text-nexsaas-vanta-black dark:text-gray-300">Chargement des fournisseurs...</p>}
+                {(loading || ratingsLoading) && <p className="text-center text-nexsaas-vanta-black dark:text-gray-300">Chargement des fournisseurs...</p>}
+                {ratingsError && (
+                    <p className="text-center text-red-500">{ratingsError}</p>
+                )}
                 {!loading && filteredSuppliers.length === 0 && (
                     <p className="text-center text-nexsaas-vanta-black dark:text-gray-300">Aucun fournisseur trouvé</p>
                 )}
@@ -949,9 +1082,9 @@ const SuppliersPage: React.FC = () => {
                                             {supplier.name}
                                         </h2>
                                         <span
-                                            className={`text-xs font-medium px-2.5 py-0.5 rounded ${getCategoryColor(supplier.category)}`}
+                                            className={`text-xs font-medium px-2.5 py-0.5 rounded ${getCategoryColor(supplier.categorie)}`}
                                         >
-                                            {supplier.category === "1" ? "Principal" : "Secondaire"}
+                                            {supplier.categorie === "1" ? "Principal" : "Secondaire"}
                                         </span>
                                     </div>
                                 </div>
@@ -1007,9 +1140,10 @@ const SuppliersPage: React.FC = () => {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => handleRateSupplier(supplier)}
+                                        disabled={ratingsLoading}
                                     >
                                         <Star className="w-4 h-4 mr-2" />
-                                        Évaluer
+                                        {ratingsLoading ? "Chargement..." : "Évaluer"}
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -1116,6 +1250,9 @@ const SuppliersPage: React.FC = () => {
                                                         <div>
                                                             <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                                                                 {contact.nom} ({contact.fonction})
+                                                                {contact.isPrimary && (
+                                                                    <span className="ml-2 text-xs text-green-500">Principal</span>
+                                                                )}
                                                             </p>
                                                             <p className="text-xs text-gray-500 dark:text-gray-400">
                                                                 {contact.email} | {contact.telephone}
@@ -1685,7 +1822,10 @@ const SuppliersPage: React.FC = () => {
                                         Fiabilité
                                     </label>
                                     {renderStars(newRating.fiabilite, true, (rating) =>
-                                        setNewRating({ ...newRating, fiabilite: rating }),
+                                        setNewRating({
+                                            ...newRating,
+                                            fiabilite: rating,
+                                        }),
                                     )}
                                 </div>
                                 <div>
@@ -1716,9 +1856,10 @@ const SuppliersPage: React.FC = () => {
                                     variant="primary"
                                     size="sm"
                                     onClick={handleSaveRating}
+                                    disabled={ratingsLoading}
                                 >
                                     <Save className="w-4 h-4 mr-2" />
-                                    Enregistrer
+                                    {ratingsLoading ? "Enregistrement..." : "Enregistrer"}
                                 </Button>
                             </div>
                         </Card>
