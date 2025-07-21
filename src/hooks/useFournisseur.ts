@@ -5,8 +5,9 @@ import { useActivity } from "../contexts/ActivityContext";
 import {
     fetchFournisseurs,
     addFournisseur,
+    updateFournisseur,
+    deleteFournisseur,
     Fournisseur,
-    FournisseurDto,
 } from "../api/fournisseurApi";
 
 export const useFournisseurs = () => {
@@ -26,9 +27,9 @@ export const useFournisseurs = () => {
                 setFournisseurs(data);
                 console.log(data)
             } catch (err: any) {
-                const errorMessage =
-                    err.response?.data?.message ||
-                    "Erreur lors de la récupération des fournisseurs";
+                const errorMessage = err.message.includes("Unauthorized")
+                    ? "Non autorisé : Veuillez vous reconnecter"
+                    : err.response?.data?.message || "Erreur lors de la récupération des fournisseurs";
                 setError(errorMessage);
                 showToast({
                     type: "error",
@@ -43,24 +44,12 @@ export const useFournisseurs = () => {
         loadFournisseurs();
     }, [showToast]);
 
-    const add = async (formData: FournisseurDto) => {
+    const add = async (formData: Omit<Fournisseur, "id" | "minimumCommande" | "createdAt">) => {
         setLoading(true);
         setError(null);
         try {
             const res = await addFournisseur(formData);
-            const newFournisseur: Fournisseur = {
-                id: res.id || `fournisseur-${Date.now()}`,
-                nom: formData.nom,
-                adresse: formData.adresse,
-                email: formData.email,
-                telephone: formData.telephone,
-                categorie: formData.categorie,
-                delaiLivraison: formData.delaiLivraison,
-                remise: formData.remise,
-                minimumCommande: formData.minimumCommande,
-                createdAt: res.createdAt || new Date().toISOString(),
-            };
-            setFournisseurs([...fournisseurs, newFournisseur]);
+            setFournisseurs([...fournisseurs, res]);
             showToast({
                 type: "success",
                 title: "Fournisseur ajouté",
@@ -76,18 +65,15 @@ export const useFournisseurs = () => {
                     : "unknown",
                 metadata: {
                     email: formData.email,
-                    categorie:
-                        formData.categorie === "1"
-                            ? "Principale"
-                            : "Secondaire",
+                    categorie: formData.categorie === "1" ? "Principale" : "Secondaire",
                 },
             });
             navigate("/fournisseurs");
             return res;
         } catch (err: any) {
-            const errorMessage =
-                err.response?.data?.message ||
-                "Erreur lors de l'ajout du fournisseur";
+            const errorMessage = err.message.includes("Unauthorized")
+                ? "Non autorisé : Veuillez vous reconnecter"
+                : err.response?.data?.message || "Erreur lors de l'enregistrement du fournisseur";
             showToast({
                 type: "error",
                 title: "Erreur d'ajout",
@@ -101,7 +87,93 @@ export const useFournisseurs = () => {
         }
     };
 
-    return { add, fetchFournisseurs, fournisseurs, loading, error };
+    const update = async (id: string, formData: Omit<Fournisseur, "id" | "minimumCommande" | "createdAt">) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await updateFournisseur(id, formData);
+            setFournisseurs(fournisseurs.map((f) => (f.id === id ? res : f)));
+            showToast({
+                type: "success",
+                title: "Fournisseur modifié",
+                message: `Le fournisseur ${formData.nom} a été modifié avec succès.`,
+                duration: 3000,
+            });
+            logActivity({
+                type: "update",
+                module: "Fournisseurs",
+                description: `Fournisseur modifié: ${formData.nom}`,
+                userId: localStorage.getItem("nexsaas_user")
+                    ? JSON.parse(localStorage.getItem("nexsaas_user")!).id
+                    : "unknown",
+                metadata: {
+                    fournisseurId: id,
+                    email: formData.email,
+                    categorie: formData.categorie === "1" ? "Principale" : "Secondaire",
+                },
+            });
+            return res;
+        } catch (err: any) {
+            const errorMessage = err.message.includes("Unauthorized")
+                ? "Non autorisé : Veuillez vous reconnecter"
+                : err.response?.data?.message || "Erreur lors de la modification du fournisseur";
+            showToast({
+                type: "error",
+                title: "Erreur de modification",
+                message: errorMessage,
+                duration: 5000,
+            });
+            setError(errorMessage);
+            throw new Error(errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const remove = async (id: string) => {
+        setLoading(true);
+        setError(null);
+        try {
+            await deleteFournisseur(id);
+            setFournisseurs(fournisseurs.filter((f) => f.id !== id));
+            showToast({
+                type: "success",
+                title: "Fournisseur supprimé",
+                message: "Le fournisseur a été supprimé avec succès.",
+                duration: 3000,
+            });
+            logActivity({
+                type: "delete",
+                module: "Fournisseurs",
+                description: `Fournisseur supprimé: ${id}`,
+                userId: localStorage.getItem("nexsaas_user")
+                    ? JSON.parse(localStorage.getItem("nexsaas_user")!).id
+                    : "unknown",
+                metadata: { fournisseurId: id },
+            });
+        } catch (err: any) {
+            const errorMessage = err.message.includes("Unauthorized")
+                ? "Non autorisé : Veuillez vous reconnecter"
+                : err.response?.data?.message || "Erreur lors de la suppression du fournisseur";
+            showToast({
+                type: "error",
+                title: "Erreur de suppression",
+                message: errorMessage,
+                duration: 5000,
+            });
+            setError(errorMessage);
+            throw new Error(errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return { add, update, remove, fetchFournisseurs, fournisseurs, loading, error };
 };
+<<<<<<< HEAD
 export type { Fournisseur };
 
+||||||| c0eb2be
+=======
+export type { Fournisseur };
+>>>>>>> 688b5ce10d9a8c12626fce19113584cc6933af17

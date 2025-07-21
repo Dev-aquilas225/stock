@@ -5,25 +5,19 @@ import {
     Building2,
     Plus,
     Search,
-    Filter,
-    Eye,
     Edit,
     Trash2,
     ArrowLeft,
     Phone,
     Mail,
     MapPin,
-    Calendar,
     Star,
     Package,
-    TrendingUp,
     Clock,
     DollarSign,
     X,
     Save,
-    AlertTriangle,
     History,
-    ShoppingCart,
     Award,
     MessageCircle,
 } from "lucide-react";
@@ -32,186 +26,160 @@ import Button from "../../components/UI/Button";
 import Input from "../../components/UI/Input";
 import { useToast } from "../../contexts/ToastContext";
 import { useActivity } from "../../contexts/ActivityContext";
-import { useFournisseurs } from "../../hooks/useFournisseur";
+import { useFournisseurs, Fournisseur } from "../../hooks/useFournisseur";
+import { useProducts, Product, ProductDto } from "../../hooks/useProducts";
+import { useContacts, Contact } from "../../hooks/useContacts";
+import { usePriceHistory, PriceHistory } from "../../hooks/usePriceHistory";
+import { useRatings, Rating, RatingDto } from "../../hooks/useRatings";
+import { useInteractions, Interaction, InteractionDto } from "../../hooks/useInteractions";
 
-interface Supplier {
-    id: string;
+// Supplier interface aligned with Fournisseur and additional fields
+interface Supplier extends Omit<Fournisseur, "nom" | "adresse" | "telephone" | "delaiLivraison" | "remise" | "minimumCommande"> {
     name: string;
-    email: string;
-    phone: string;
     address: string;
-    category: "principal" | "secondaire";
-    rating: number;
-    paymentTerms: string;
+    phone: string;
     deliveryTime: string;
-    minimumOrder: number;
     discount: number;
-    status: "active" | "inactive";
-    createdAt: string;
-    lastOrder: string;
-    totalOrders: number;
-    totalAmount: number;
+    minimumOrder: number;
     products: Product[];
     contacts: Contact[];
-    notes: string;
-}
-
-interface Product {
-    id: string;
-    name: string;
-    category: string;
-    currentPrice: number;
-    previousPrice?: number;
-    deliveryTime: string;
-    minimumQuantity: number;
-    packaging: string;
-    priceHistory: PriceHistory[];
-}
-
-interface PriceHistory {
-    id: string;
-    price: number;
-    date: string;
-    negotiatedBy: string;
-    notes: string;
-}
-
-interface Contact {
-    id: string;
-    name: string;
-    role: string;
-    email: string;
-    phone: string;
-    isPrimary: boolean;
+    interactions: Interaction[];
 }
 
 const SuppliersPage: React.FC = () => {
-    const { fournisseurs, add, loading, error } = useFournisseurs();
-    console.log(fournisseurs);
+    const { fournisseurs, add, update, remove, loading, error: supplierError } = useFournisseurs();
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
-    const [categoryFilter, setCategoryFilter] = useState("all");
+    const [categoryFilter, setCategoryFilter] = useState<"all" | "1" | "2">("all");
     const [showSupplierModal, setShowSupplierModal] = useState(false);
     const [showProductModal, setShowProductModal] = useState(false);
-    const [showContactModal, setShowContactModal] = useState(false);
+    const [showInteractionModal, setShowInteractionModal] = useState(false);
     const [showPriceHistoryModal, setShowPriceHistoryModal] = useState(false);
     const [showRatingModal, setShowRatingModal] = useState(false);
-    const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
-        null,
-    );
-    const [selectedProduct, setSelectedProduct] = useState<Product | null>(
-        null,
-    );
-    const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(
-        null,
-    );
+    const [showContactModal, setShowContactModal] = useState(false);
+    const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-    const [newRating, setNewRating] = useState(0);
-    const [ratingComment, setRatingComment] = useState("");
+    const [editingInteraction, setEditingInteraction] = useState<Interaction | null>(null);
+    const [editingContact, setEditingContact] = useState<Contact | null>(null);
+    const [newRating, setNewRating] = useState<RatingDto>({
+        qualiteProduit: 0,
+        respectDelais: 0,
+        fiabilite: 0,
+        commentaire: "",
+    });
+    const [productLoadError, setProductLoadError] = useState<string | null>(null);
 
     const { showToast } = useToast();
     const { logActivity } = useActivity();
 
-    const [supplierForm, setSupplierForm] = useState({
-        name: "",
+    const { products, add: addProduct, update: updateProduct, remove: removeProduct, loading: productsLoading, error: productsError } = useProducts(selectedSupplier?.id || "");
+    const { contacts, add: addContact, update: updateContact, remove: removeContact, loading: contactsLoading, error: contactsError } = useContacts(selectedSupplier?.id || "");
+    const { priceHistory, loading: priceHistoryLoading, error: priceHistoryError } = usePriceHistory(selectedSupplier?.id || "", selectedProduct?.id || "");
+    const { ratings, addOrUpdate: addOrUpdateRating, loading: ratingsLoading, error: ratingsError } = useRatings(selectedSupplier?.id || "");
+    const { interactions, add: addInteraction, update: updateInteraction, remove: removeInteraction, loading: interactionsLoading, error: interactionsError } = useInteractions(selectedSupplier?.id || "");
+
+    const [supplierForm, setSupplierForm] = useState<Omit<Fournisseur, "id" | "minimumCommande" | "createdAt">>({
+        nom: "",
         email: "",
-        phone: "",
-        address: "",
-        category: "principal" as "principal" | "secondaire",
-        paymentTerms: "",
-        deliveryTime: "",
-        minimumOrder: "",
-        discount: "",
-        notes: "",
+        telephone: "",
+        adresse: "",
+        categorie: "1",
+        delaiLivraison: "",
+        remise: "",
     });
 
-    const [productForm, setProductForm] = useState({
-        name: "",
-        category: "",
-        currentPrice: "",
-        deliveryTime: "",
-        minimumQuantity: "",
-        packaging: "",
+    const [productForm, setProductForm] = useState<ProductDto>({
+        nomProduit: "",
+        prixNegocie: 0,
+        conditionnement: "",
+        delaiApprovisionnement: "",
     });
 
-    const [contactForm, setContactForm] = useState({
-        name: "",
-        role: "",
+    const [interactionForm, setInteractionForm] = useState<InteractionDto>({
+        type: "",
+        note: "",
+    });
+
+    const [contactForm, setContactForm] = useState<Omit<Contact, "id" | "fournisseurId" | "createdAt">>({
+        nom: "",
+        fonction: "",
         email: "",
-        phone: "",
+        telephone: "",
         isPrimary: false,
     });
 
     useEffect(() => {
         if (fournisseurs.length > 0) {
-            const mappedSuppliers: Supplier[] = fournisseurs.map(
-                (fournisseur) => ({
-                    id: fournisseur.id,
-                    name: fournisseur.nom,
-                    email: fournisseur.email,
-                    phone: fournisseur.telephone,
-                    address: fournisseur.adresse,
-                    category:
-                        fournisseur.categorie === "1"
-                            ? "principal"
-                            : "secondaire",
-                    rating: 0, // Default rating, as Fournisseur doesn't provide it
-                    paymentTerms: "", // Not provided in Fournisseur, default empty
-                    deliveryTime: fournisseur.delaiLivraison,
-                    minimumOrder: fournisseur.minimumCommande,
-                    discount: parseFloat(fournisseur.remise) || 0,
-                    status: "active", // Default status
-                    createdAt: fournisseur.createdAt,
-                    lastOrder: "", // Not provided in Fournisseur
-                    totalOrders: 0, // Not provided in Fournisseur
-                    totalAmount: 0, // Not provided in Fournisseur
-                    products: [], // Not provided in Fournisseur
-                    contacts: [], // Not provided in Fournisseur
-                    notes: "", // Not provided in Fournisseur
-                }),
-            );
+            const mappedSuppliers: Supplier[] = fournisseurs.map((fournisseur) => ({
+                id: fournisseur.id,
+                name: fournisseur.nom,
+                email: fournisseur.email,
+                phone: fournisseur.telephone,
+                address: fournisseur.adresse,
+                categorie: fournisseur.categorie,
+                deliveryTime: fournisseur.delaiLivraison,
+                minimumOrder: fournisseur.minimumCommande,
+                discount: parseFloat(fournisseur.remise) || 0,
+                createdAt: fournisseur.createdAt,
+                products: selectedSupplier?.id === fournisseur.id ? products : [],
+                contacts: selectedSupplier?.id === fournisseur.id ? contacts : [],
+                interactions: selectedSupplier?.id === fournisseur.id ? interactions : [],
+            }));
             setSuppliers(mappedSuppliers);
         }
-    }, [fournisseurs]);
+    }, [fournisseurs, products, contacts, interactions, selectedSupplier]);
 
     useEffect(() => {
+        const error = supplierError || productsError || contactsError || priceHistoryError || ratingsError || interactionsError;
         if (error) {
+            if (error === productsError) {
+                setProductLoadError(error);
+            }
             showToast({
                 type: "error",
                 title: "Erreur",
                 message: error,
                 duration: 5000,
             });
+        } else {
+            setProductLoadError(null);
         }
-    }, [error, showToast]);
+    }, [supplierError, productsError, contactsError, priceHistoryError, ratingsError, interactionsError, showToast]);
 
     const resetForms = () => {
         setSupplierForm({
-            name: "",
+            nom: "",
             email: "",
-            phone: "",
-            address: "",
-            category: "principal",
-            paymentTerms: "",
-            deliveryTime: "",
-            minimumOrder: "",
-            discount: "",
-            notes: "",
+            telephone: "",
+            adresse: "",
+            categorie: "1",
+            delaiLivraison: "",
+            remise: "",
         });
         setProductForm({
-            name: "",
-            category: "",
-            currentPrice: "",
-            deliveryTime: "",
-            minimumQuantity: "",
-            packaging: "",
+            nomProduit: "",
+            prixNegocie: 0,
+            conditionnement: "",
+            delaiApprovisionnement: "",
+        });
+        setInteractionForm({
+            type: "",
+            note: "",
         });
         setContactForm({
-            name: "",
-            role: "",
+            nom: "",
+            fonction: "",
             email: "",
-            phone: "",
+            telephone: "",
             isPrimary: false,
+        });
+        setNewRating({
+            qualiteProduit: 0,
+            respectDelais: 0,
+            fiabilite: 0,
+            commentaire: "",
         });
     };
 
@@ -224,100 +192,154 @@ const SuppliersPage: React.FC = () => {
     const handleEditSupplier = (supplier: Supplier) => {
         setEditingSupplier(supplier);
         setSupplierForm({
-            name: supplier.name,
+            nom: supplier.name,
             email: supplier.email,
-            phone: supplier.phone,
-            address: supplier.address,
-            category: supplier.category,
-            paymentTerms: supplier.paymentTerms,
-            deliveryTime: supplier.deliveryTime,
-            minimumOrder: supplier.minimumOrder.toString(),
-            discount: supplier.discount.toString(),
-            notes: supplier.notes,
+            telephone: supplier.phone,
+            adresse: supplier.address,
+            categorie: supplier.categorie,
+            delaiLivraison: supplier.deliveryTime,
+            remise: supplier.discount.toString(),
         });
         setShowSupplierModal(true);
     };
 
-    const handleDeleteSupplier = (supplierId: string) => {
-        if (confirm("Êtes-vous sûr de vouloir supprimer ce fournisseur ?")) {
-            setSuppliers((prev) => prev.filter((s) => s.id !== supplierId));
-
-            logActivity({
-                type: "delete",
-                module: "Fournisseurs",
-                description: `Fournisseur supprimé: ${supplierId}`,
-                metadata: { supplierId },
-            });
-
-            showToast({
-                type: "success",
-                title: "Fournisseur supprimé",
-                message: "Le fournisseur a été supprimé avec succès",
-            });
+    const handleDeleteSupplier = async (supplierId: string) => {
+        if (window.confirm("Êtes-vous sûr de vouloir supprimer ce fournisseur ?")) {
+            try {
+                await remove(supplierId);
+                setSuppliers((prev) => prev.filter((s) => s.id !== supplierId));
+                logActivity({
+                    type: "delete",
+                    module: "Fournisseurs",
+                    description: `Fournisseur supprimé: ${supplierId}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: supplierId },
+                });
+                showToast({
+                    type: "success",
+                    title: "Fournisseur supprimé",
+                    message: "Le fournisseur a été supprimé avec succès",
+                    duration: 3000,
+                });
+            } catch (err: any) {
+                const errorMessage = err.response?.status === 401
+                    ? "Non autorisé : Veuillez vous reconnecter"
+                    : err.response?.data?.message || "Erreur lors de la suppression du fournisseur";
+                showToast({
+                    type: "error",
+                    title: "Erreur",
+                    message: errorMessage,
+                    duration: 5000,
+                });
+            }
         }
     };
 
     const handleSaveSupplier = async () => {
-        if (!supplierForm.name || !supplierForm.email) {
+        if (!supplierForm.nom || !supplierForm.email) {
             showToast({
                 type: "error",
                 title: "Erreur",
                 message: "Veuillez remplir tous les champs obligatoires",
+                duration: 5000,
             });
             return;
         }
 
-        if (editingSupplier) {
-            // Update existing supplier (Note: API update not implemented in hook)
-            setSuppliers((prev) =>
-                prev.map((supplier) =>
-                    supplier.id === editingSupplier.id
-                        ? {
-                              ...supplier,
-                              ...supplierForm,
-                              minimumOrder:
-                                  parseFloat(supplierForm.minimumOrder) || 0,
-                              discount: parseFloat(supplierForm.discount) || 0,
-                          }
-                        : supplier,
-                ),
-            );
+        try {
+            const supplierData: Omit<Fournisseur, "id" | "minimumCommande" | "createdAt"> = {
+                nom: supplierForm.nom,
+                email: supplierForm.email,
+                telephone: supplierForm.telephone,
+                adresse: supplierForm.adresse,
+                categorie: supplierForm.categorie,
+                delaiLivraison: supplierForm.delaiLivraison,
+                remise: supplierForm.remise,
+            };
 
-            logActivity({
-                type: "update",
-                module: "Fournisseurs",
-                description: `Fournisseur modifié: ${supplierForm.name}`,
-                metadata: { supplierId: editingSupplier.id },
-            });
-
-            showToast({
-                type: "success",
-                title: "Fournisseur modifié",
-                message: "Les informations du fournisseur ont été mises à jour",
-            });
-        } else {
-            // Add new supplier using the hook
-            try {
-                const fournisseurDto = {
-                    nom: supplierForm.name,
-                    email: supplierForm.email,
-                    telephone: supplierForm.phone,
-                    adresse: supplierForm.address,
-                    categorie:
-                        supplierForm.category === "principal" ? "1" : "2",
-                    delaiLivraison: supplierForm.deliveryTime,
-                    minCommande: parseFloat(supplierForm.minimumOrder) || 0,
-                    remise: supplierForm.discount,
-                };
-                await add(fournisseurDto);
-                // The hook already updates the fournisseurs state and triggers useEffect
-            } catch (err) {
-                // Error is handled by the hook, no need to handle it here
+            if (editingSupplier) {
+                const updatedSupplier = await update(editingSupplier.id, supplierData);
+                setSuppliers((prev) =>
+                    prev.map((supplier) =>
+                        supplier.id === editingSupplier.id
+                            ? {
+                                ...supplier,
+                                name: updatedSupplier.nom,
+                                email: updatedSupplier.email,
+                                phone: updatedSupplier.telephone,
+                                address: updatedSupplier.adresse,
+                                categorie: updatedSupplier.categorie,
+                                deliveryTime: updatedSupplier.delaiLivraison,
+                                minimumOrder: updatedSupplier.minimumCommande,
+                                discount: parseFloat(updatedSupplier.remise) || 0,
+                                createdAt: updatedSupplier.createdAt,
+                                products: supplier.products,
+                                contacts: supplier.contacts,
+                                interactions: supplier.interactions,
+                            }
+                            : supplier,
+                    ),
+                );
+                logActivity({
+                    type: "update",
+                    module: "Fournisseurs",
+                    description: `Fournisseur modifié: ${supplierForm.nom}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: editingSupplier.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Fournisseur modifié",
+                    message: "Les informations du fournisseur ont été mises à jour",
+                    duration: 3000,
+                });
+            } else {
+                const newSupplier = await add(supplierData);
+                setSuppliers((prev) => [
+                    ...prev,
+                    {
+                        id: newSupplier.id,
+                        name: newSupplier.nom,
+                        email: newSupplier.email,
+                        phone: newSupplier.telephone,
+                        address: newSupplier.adresse,
+                        categorie: newSupplier.categorie,
+                        deliveryTime: newSupplier.delaiLivraison,
+                        minimumOrder: newSupplier.minimumCommande,
+                        discount: parseFloat(newSupplier.remise) || 0,
+                        createdAt: newSupplier.createdAt,
+                        products: [],
+                        contacts: [],
+                        interactions: [],
+                    },
+                ]);
+                logActivity({
+                    type: "create",
+                    module: "Fournisseurs",
+                    description: `Fournisseur ajouté: ${supplierForm.nom}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: newSupplier.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Fournisseur ajouté",
+                    message: "Le fournisseur a été ajouté avec succès",
+                    duration: 3000,
+                });
             }
+            setShowSupplierModal(false);
+            resetForms();
+        } catch (err: any) {
+            const errorMessage = err.response?.status === 401
+                ? "Non autorisé : Veuillez vous reconnecter"
+                : err.response?.data?.message || "Erreur lors de l'enregistrement du fournisseur";
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
         }
-
-        setShowSupplierModal(false);
-        resetForms();
     };
 
     const handleAddProduct = (supplier: Supplier) => {
@@ -331,90 +353,435 @@ const SuppliersPage: React.FC = () => {
         setSelectedSupplier(supplier);
         setEditingProduct(product);
         setProductForm({
-            name: product.name,
-            category: product.category,
-            currentPrice: product.currentPrice.toString(),
-            deliveryTime: product.deliveryTime,
-            minimumQuantity: product.minimumQuantity.toString(),
-            packaging: product.packaging,
+            nomProduit: product.nomProduit,
+            prixNegocie: product.prixNegocie,
+            conditionnement: product.conditionnement,
+            delaiApprovisionnement: product.delaiApprovisionnement,
         });
         setShowProductModal(true);
     };
 
-    const handleSaveProduct = () => {
-        if (!selectedSupplier || !productForm.name) return;
-
-        if (editingProduct) {
-            // Update existing product
-            setSuppliers((prev) =>
-                prev.map((supplier) =>
-                    supplier.id === selectedSupplier.id
-                        ? {
-                              ...supplier,
-                              products: supplier.products.map((product) =>
-                                  product.id === editingProduct.id
-                                      ? {
-                                            ...product,
-                                            ...productForm,
-                                            currentPrice:
-                                                parseFloat(
-                                                    productForm.currentPrice,
-                                                ) || 0,
-                                            minimumQuantity:
-                                                parseInt(
-                                                    productForm.minimumQuantity,
-                                                ) || 0,
-                                        }
-                                      : product,
-                              ),
-                          }
-                        : supplier,
-                ),
-            );
-
+    const handleSaveProduct = async () => {
+        if (!selectedSupplier) {
             showToast({
-                type: "success",
-                title: "Produit modifié",
-                message: "Le produit a été mis à jour avec succès",
+                type: "error",
+                title: "Erreur",
+                message: "Aucun fournisseur sélectionné",
+                duration: 5000,
             });
-        } else {
-            // Add new product
-            const newProduct: Product = {
-                id: `PROD-${Date.now()}`,
-                ...productForm,
-                currentPrice: parseFloat(productForm.currentPrice) || 0,
-                minimumQuantity: parseInt(productForm.minimumQuantity) || 0,
-                priceHistory: [
-                    {
-                        id: `PH-${Date.now()}`,
-                        price: parseFloat(productForm.currentPrice) || 0,
-                        date: new Date().toISOString().split("T")[0],
-                        negotiatedBy: "Système",
-                        notes: "Prix initial",
-                    },
-                ],
-            };
-
-            setSuppliers((prev) =>
-                prev.map((supplier) =>
-                    supplier.id === selectedSupplier.id
-                        ? {
-                              ...supplier,
-                              products: [...supplier.products, newProduct],
-                          }
-                        : supplier,
-                ),
-            );
-
-            showToast({
-                type: "success",
-                title: "Produit ajouté",
-                message: "Le nouveau produit a été ajouté au catalogue",
-            });
+            return;
         }
 
-        setShowProductModal(false);
+        if (
+            !productForm.nomProduit ||
+            productForm.prixNegocie === 0 ||
+            !productForm.conditionnement ||
+            !productForm.delaiApprovisionnement
+        ) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Veuillez remplir tous les champs obligatoires (Nom, Prix, Conditionnement, Délai)",
+                duration: 5000,
+            });
+            return;
+        }
+
+        const productData: ProductDto = {
+            nomProduit: productForm.nomProduit,
+            prixNegocie: productForm.prixNegocie,
+            conditionnement: productForm.conditionnement,
+            delaiApprovisionnement: productForm.delaiApprovisionnement,
+        };
+
+        try {
+            if (editingProduct) {
+                await updateProduct(editingProduct.id, productData);
+                logActivity({
+                    type: "update",
+                    module: "Produits",
+                    description: `Produit modifié: ${productForm.nomProduit}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id, productId: editingProduct.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Produit modifié",
+                    message: "Le produit a été mis à jour avec succès",
+                    duration: 3000,
+                });
+            } else {
+                await addProduct(productData);
+                logActivity({
+                    type: "create",
+                    module: "Produits",
+                    description: `Produit ajouté: ${productForm.nomProduit}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Produit ajouté",
+                    message: "Le nouveau produit a été ajouté au catalogue",
+                    duration: 3000,
+                });
+            }
+            setShowProductModal(false);
+            resetForms();
+        } catch (err: any) {
+            const errorMessage = err.response?.status === 401
+                ? "Non autorisé : Veuillez vous reconnecter"
+                : err.response?.data?.message || "Erreur lors de l'enregistrement du produit";
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+        }
+    };
+
+    const handleDeleteProduct = async (productId: string) => {
+        if (!selectedSupplier) return;
+        if (window.confirm("Êtes-vous sûr de vouloir supprimer ce produit ?")) {
+            try {
+                await removeProduct(productId);
+                logActivity({
+                    type: "delete",
+                    module: "Produits",
+                    description: `Produit supprimé: ${productId}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id, productId },
+                });
+                showToast({
+                    type: "success",
+                    title: "Produit supprimé",
+                    message: "Le produit a été supprimé avec succès",
+                    duration: 3000,
+                });
+            } catch (err: any) {
+                const errorMessage = err.response?.status === 401
+                    ? "Non autorisé : Veuillez vous reconnecter"
+                    : err.response?.data?.message || "Erreur lors de la suppression du produit";
+                showToast({
+                    type: "error",
+                    title: "Erreur",
+                    message: errorMessage,
+                    duration: 5000,
+                });
+            }
+        }
+    };
+
+    const handleAddContact = (supplier: Supplier) => {
+        setSelectedSupplier(supplier);
+        setEditingContact(null);
+        setContactForm({
+            nom: "",
+            fonction: "",
+            email: `test${Date.now()}@example.com`,
+            telephone: "",
+            isPrimary: false,
+        });
+        setShowContactModal(true);
+    };
+
+    const handleEditContact = (supplier: Supplier, contact: Contact) => {
+        setSelectedSupplier(supplier);
+        setEditingContact(contact);
+        setContactForm({
+            nom: contact.nom,
+            fonction: contact.fonction,
+            email: contact.email,
+            telephone: contact.telephone,
+            isPrimary: contact.isPrimary,
+        });
+        setShowContactModal(true);
+    };
+
+    const handleSaveContact = async () => {
+        if (!selectedSupplier) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Aucun fournisseur sélectionné",
+                duration: 5000,
+            });
+            return;
+        }
+
+        if (!contactForm.nom || !contactForm.email) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Nom et email sont requis",
+                duration: 5000,
+            });
+            return;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(contactForm.email)) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Format d'email invalide",
+                duration: 5000,
+            });
+            return;
+        }
+
+        if (contactForm.telephone && !/^\+?\d{10,}$/.test(contactForm.telephone)) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Format de téléphone invalide (ex: +1234567890)",
+                duration: 5000,
+            });
+            return;
+        }
+
+        const contactData: Omit<Contact, "id" | "fournisseurId" | "createdAt"> = {
+            nom: contactForm.nom,
+            fonction: contactForm.fonction,
+            email: contactForm.email,
+            telephone: contactForm.telephone,
+            isPrimary: contactForm.isPrimary,
+        };
+
+        try {
+            console.log("handleSaveContact: Saving contact with data:", { fournisseurId: selectedSupplier.id, contactData });
+
+            if (contactData.isPrimary) {
+                const currentPrimary = contacts.find(
+                    (c) => c.isPrimary && (!editingContact || c.id !== editingContact.id),
+                );
+                if (currentPrimary) {
+                    console.log("handleSaveContact: Unsetting existing primary contact:", currentPrimary);
+                    await updateContact(currentPrimary.id, {
+                        nom: currentPrimary.nom,
+                        fonction: currentPrimary.fonction,
+                        email: currentPrimary.email,
+                        telephone: currentPrimary.telephone,
+                        isPrimary: false,
+                    });
+                }
+            }
+
+            if (editingContact) {
+                await updateContact(editingContact.id, contactData);
+                logActivity({
+                    type: "update",
+                    module: "Contacts",
+                    description: `Contact modifié: ${contactForm.nom}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id, contactId: editingContact.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Contact modifié",
+                    message: "Le contact a été mis à jour avec succès",
+                    duration: 3000,
+                });
+            } else {
+                await addContact(contactData);
+                logActivity({
+                    type: "create",
+                    module: "Contacts",
+                    description: `Contact ajouté: ${contactForm.nom}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Contact ajouté",
+                    message: "Le nouveau contact a été ajouté avec succès",
+                    duration: 3000,
+                });
+            }
+            setShowContactModal(false);
+            resetForms();
+        } catch (err: any) {
+            console.error("handleSaveContact: Error saving contact:", {
+                message: err.message,
+                status: err.response?.status,
+                data: err.response?.data,
+                stack: err.stack,
+            });
+            const errorMessage =
+                err.message === "Nom et email sont requis" ||
+                    err.message === "Format d'email invalide" ||
+                    err.message === "Format de téléphone invalide"
+                    ? err.message
+                    : err.response?.status === 400
+                        ? err.response?.data?.message || "Données invalides fournies"
+                        : err.response?.status === 401
+                            ? "Non autorisé : Veuillez vous reconnecter"
+                            : err.response?.status === 404
+                                ? "Fournisseur non trouvé"
+                                : err.response?.status === 409
+                                    ? "Un contact avec cet email existe déjà"
+                                    : err.response?.data?.message || "Erreur lors de l'enregistrement du contact";
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+        }
+    };
+
+    const handleDeleteContact = async (contactId: string) => {
+        if (!selectedSupplier) return;
+        if (window.confirm("Êtes-vous sûr de vouloir supprimer ce contact ?")) {
+            try {
+                console.log("handleDeleteContact: Deleting contact:", { contactId, fournisseurId: selectedSupplier.id });
+                await removeContact(contactId);
+                logActivity({
+                    type: "delete",
+                    module: "Contacts",
+                    description: `Contact supprimé: ${contactId}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id, contactId },
+                });
+                showToast({
+                    type: "success",
+                    title: "Contact supprimé",
+                    message: "Le contact a été supprimé avec succès",
+                    duration: 3000,
+                });
+            } catch (err: any) {
+                console.error("handleDeleteContact: Error deleting contact:", {
+                    message: err.message,
+                    status: err.response?.status,
+                    data: err.response?.data,
+                    stack: err.stack,
+                });
+                const errorMessage = err.response?.status === 401
+                    ? "Non autorisé : Veuillez vous reconnecter"
+                    : err.response?.status === 404
+                        ? "Contact non trouvé"
+                        : err.response?.data?.message || "Erreur lors de la suppression du contact";
+                showToast({
+                    type: "error",
+                    title: "Erreur",
+                    message: errorMessage,
+                    duration: 5000,
+                });
+            }
+        }
+    };
+
+    const handleAddInteraction = (supplier: Supplier) => {
+        setSelectedSupplier(supplier);
+        setEditingInteraction(null);
         resetForms();
+        setShowInteractionModal(true);
+    };
+
+    const handleEditInteraction = (supplier: Supplier, interaction: Interaction) => {
+        setSelectedSupplier(supplier);
+        setEditingInteraction(interaction);
+        setInteractionForm({
+            type: interaction.type,
+            note: interaction.note,
+        });
+        setShowInteractionModal(true);
+    };
+
+    const handleSaveInteraction = async () => {
+        if (!selectedSupplier || !interactionForm.type || !interactionForm.note) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Veuillez remplir tous les champs obligatoires (Type, Note)",
+                duration: 5000,
+            });
+            return;
+        }
+
+        const interactionData: InteractionDto = {
+            type: interactionForm.type,
+            note: interactionForm.note,
+        };
+
+        try {
+            if (editingInteraction) {
+                await updateInteraction(editingInteraction.id, interactionData);
+                logActivity({
+                    type: "update",
+                    module: "Interactions",
+                    description: `Interaction modifiée: ${interactionForm.type}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id, interactionId: editingInteraction.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Interaction modifiée",
+                    message: "L'interaction a été mise à jour avec succès",
+                    duration: 3000,
+                });
+            } else {
+                await addInteraction(interactionData);
+                logActivity({
+                    type: "create",
+                    module: "Interactions",
+                    description: `Interaction ajoutée: ${interactionForm.type}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id },
+                });
+                showToast({
+                    type: "success",
+                    title: "Interaction ajoutée",
+                    message: "La nouvelle interaction a été ajoutée avec succès",
+                    duration: 3000,
+                });
+            }
+            setShowInteractionModal(false);
+            resetForms();
+        } catch (err: any) {
+            const errorMessage = err.response?.status === 401
+                ? "Non autorisé : Veuillez vous reconnecter"
+                : err.response?.data?.message || "Erreur lors de l'enregistrement de l'interaction";
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+        }
+    };
+
+    const handleDeleteInteraction = async (interactionId: string) => {
+        if (!selectedSupplier) return;
+        if (window.confirm("Êtes-vous sûr de vouloir supprimer cette interaction ?")) {
+            try {
+                await removeInteraction(interactionId);
+                logActivity({
+                    type: "delete",
+                    module: "Interactions",
+                    description: `Interaction supprimée: ${interactionId}`,
+                    userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                    metadata: { fournisseurId: selectedSupplier.id, interactionId },
+                });
+                showToast({
+                    type: "success",
+                    title: "Interaction supprimée",
+                    message: "L'interaction a été supprimée avec succès",
+                    duration: 3000,
+                });
+            } catch (err: any) {
+                const errorMessage = err.response?.status === 401
+                    ? "Non autorisé : Veuillez vous reconnecter"
+                    : err.response?.data?.message || "Erreur lors de la suppression de l'interaction";
+                showToast({
+                    type: "error",
+                    title: "Erreur",
+                    message: errorMessage,
+                    duration: 5000,
+                });
+            }
+        }
     };
 
     const handleShowPriceHistory = (product: Product) => {
@@ -423,53 +790,112 @@ const SuppliersPage: React.FC = () => {
     };
 
     const handleRateSupplier = (supplier: Supplier) => {
+        console.log("handleRateSupplier: Opening rating modal for supplier:", {
+            supplierId: supplier.id,
+            supplierName: supplier.name,
+            currentRatings: ratings
+        });
         setSelectedSupplier(supplier);
-        setNewRating(supplier.rating);
-        setRatingComment("");
+        setNewRating({
+            qualiteProduit: ratings?.qualiteProduit || 0,
+            respectDelais: ratings?.respectDelais || 0,
+            fiabilite: ratings?.fiabilite || 0,
+            commentaire: ratings?.commentaire || "",
+        });
         setShowRatingModal(true);
     };
 
-    const handleSaveRating = () => {
-        if (!selectedSupplier) return;
+    const handleSaveRating = async () => {
+        if (!selectedSupplier) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Aucun fournisseur sélectionné",
+                duration: 5000,
+            });
+            return;
+        }
 
-        setSuppliers((prev) =>
-            prev.map((supplier) =>
-                supplier.id === selectedSupplier.id
-                    ? { ...supplier, rating: newRating }
-                    : supplier,
-            ),
-        );
+        // Client-side validation
+        if (
+            newRating.qualiteProduit < 1 || newRating.qualiteProduit > 5 ||
+            newRating.respectDelais < 1 || newRating.respectDelais > 5 ||
+            newRating.fiabilite < 1 || newRating.fiabilite > 5
+        ) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Les notes doivent être comprises entre 1 et 5",
+                duration: 5000,
+            });
+            return;
+        }
 
-        logActivity({
-            type: "update",
-            module: "Fournisseurs",
-            description: `Note attribuée au fournisseur ${selectedSupplier.name}: ${newRating}/5`,
-            metadata: {
-                supplierId: selectedSupplier.id,
-                rating: newRating,
-                comment: ratingComment,
-            },
-        });
-
-        showToast({
-            type: "success",
-            title: "Note enregistrée",
-            message: `Note de ${newRating}/5 attribuée au fournisseur`,
-        });
-
-        setShowRatingModal(false);
+        try {
+            console.log("handleSaveRating: Saving rating for supplier:", {
+                fournisseurId: selectedSupplier.id,
+                rating: newRating
+            });
+            const response = await addOrUpdateRating(newRating);
+            console.log("handleSaveRating: Rating saved successfully:", { response });
+            logActivity({
+                type: "update",
+                module: "Évaluations",
+                description: `Évaluation attribuée au fournisseur ${selectedSupplier.name}`,
+                userId: localStorage.getItem("nexsaas_user") ? JSON.parse(localStorage.getItem("nexsaas_user")!).id ?? "unknown" : "unknown",
+                metadata: {
+                    fournisseurId: selectedSupplier.id,
+                    qualiteProduit: newRating.qualiteProduit,
+                    respectDelais: newRating.respectDelais,
+                    fiabilite: newRating.fiabilite,
+                },
+            });
+            showToast({
+                type: "success",
+                title: "Évaluation enregistrée",
+                message: "L'évaluation a été enregistrée avec succès",
+                duration: 3000,
+            });
+            setShowRatingModal(false);
+            resetForms();
+        } catch (err: any) {
+            console.error("handleSaveRating: Error saving rating:", {
+                message: err.message,
+                status: err.response?.status,
+                data: err.response?.data,
+                request: err.request,
+                stack: err.stack,
+            });
+            const errorMessage =
+                err.message === "Tous les critères de notation (qualité, délais, fiabilité) sont requis" ||
+                    err.message === "Les notes doivent être comprises entre 1 et 5"
+                    ? err.message
+                    : err.response?.status === 400
+                        ? err.response?.data?.message || "Données d'évaluation invalides"
+                        : err.response?.status === 401
+                            ? "Non autorisé : Veuillez vous reconnecter"
+                            : err.response?.status === 404
+                                ? "Fournisseur non trouvé"
+                                : err.response?.status === 409
+                                    ? "Une évaluation existe déjà pour ce fournisseur"
+                                    : err.response?.status === 500
+                                        ? "Erreur serveur : Veuillez réessayer plus tard"
+                                        : err.request
+                                            ? "Échec de la connexion au serveur. Vérifiez votre connexion réseau."
+                                            : err.response?.data?.message || "Erreur lors de l'enregistrement de l'évaluation";
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+        }
     };
 
-    const getCategoryColor = (category: string) => {
-        return category === "principal"
+    const getCategoryColor = (category: "1" | "2") => {
+        return category === "1"
             ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
             : "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400";
-    };
-
-    const getStatusColor = (status: string) => {
-        return status === "active"
-            ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
-            : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400";
     };
 
     const renderStars = (
@@ -483,19 +909,11 @@ const SuppliersPage: React.FC = () => {
                     <button
                         key={star}
                         onClick={() => interactive && onRate && onRate(star)}
-                        disabled={!interactive}
-                        className={`${
-                            interactive
-                                ? "cursor-pointer hover:scale-110"
-                                : "cursor-default"
-                        } transition-transform`}
+                        disabled={!interactive || ratingsLoading}
+                        className={`${interactive && !ratingsLoading ? "cursor-pointer hover:scale-110" : "cursor-default"} transition-transform`}
                     >
                         <Star
-                            className={`w-4 h-4 ${
-                                star <= rating
-                                    ? "text-yellow-400 fill-current"
-                                    : "text-gray-300"
-                            }`}
+                            className={`w-4 h-4 ${star <= rating ? "text-yellow-400 fill-current" : "text-gray-300"}`}
                         />
                     </button>
                 ))}
@@ -511,14 +929,13 @@ const SuppliersPage: React.FC = () => {
             supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             supplier.email.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory =
-            categoryFilter === "all" || supplier.category === categoryFilter;
+            categoryFilter === "all" || supplier.categorie === categoryFilter;
         return matchesSearch && matchesCategory;
     });
 
     return (
         <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
             <div className="container mx-auto px-4 py-8">
-                {/* Header */}
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -546,12 +963,11 @@ const SuppliersPage: React.FC = () => {
                     </div>
                 </motion.div>
 
-                {/* Stats Cards */}
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6, delay: 0.2 }}
-                    className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8"
+                    className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"
                 >
                     <Card className="text-center">
                         <div className="p-3 bg-indigo-500/10 rounded-lg inline-block mb-3">
@@ -564,56 +980,30 @@ const SuppliersPage: React.FC = () => {
                             Fournisseurs actifs
                         </p>
                     </Card>
-
                     <Card className="text-center">
                         <div className="p-3 bg-green-500/10 rounded-lg inline-block mb-3">
                             <Star className="w-6 h-6 text-green-500" />
                         </div>
                         <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                            {(
-                                suppliers.reduce(
-                                    (acc, s) => acc + s.rating,
-                                    0,
-                                ) / (suppliers.length || 1)
-                            ).toFixed(1)}
+                            {ratings ? ((ratings.qualiteProduit + ratings.respectDelais + ratings.fiabilite) / 3).toFixed(1) : "0.0"}
                         </h3>
                         <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                             Note moyenne
                         </p>
                     </Card>
-
                     <Card className="text-center">
                         <div className="p-3 bg-blue-500/10 rounded-lg inline-block mb-3">
                             <Package className="w-6 h-6 text-blue-500" />
                         </div>
                         <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                            {suppliers.reduce(
-                                (acc, s) => acc + s.products.length,
-                                0,
-                            )}
+                            {suppliers.reduce((acc, s) => acc + s.products.length, 0)}
                         </h3>
                         <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                             Produits catalogués
                         </p>
                     </Card>
-
-                    <Card className="text-center">
-                        <div className="p-3 bg-purple-500/10 rounded-lg inline-block mb-3">
-                            <DollarSign className="w-6 h-6 text-purple-500" />
-                        </div>
-                        <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                            €
-                            {suppliers
-                                .reduce((acc, s) => acc + s.totalAmount, 0)
-                                .toLocaleString()}
-                        </h3>
-                        <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                            Volume d'achats
-                        </p>
-                    </Card>
                 </motion.div>
 
-                {/* Actions Bar */}
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -629,787 +1019,851 @@ const SuppliersPage: React.FC = () => {
                                         type="text"
                                         placeholder="Rechercher un fournisseur..."
                                         value={searchTerm}
-                                        onChange={(e) =>
-                                            setSearchTerm(e.target.value)
-                                        }
+                                        onChange={(e) => setSearchTerm(e.target.value)}
                                         className="w-full pl-10 pr-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
                                     />
                                 </div>
-
                                 <select
                                     value={categoryFilter}
-                                    onChange={(e) =>
-                                        setCategoryFilter(e.target.value)
-                                    }
+                                    onChange={(e) => setCategoryFilter(e.target.value as "all" | "1" | "2")}
                                     className="px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
                                 >
-                                    <option value="all">
-                                        Toutes catégories
-                                    </option>
-                                    <option value="principal">Principal</option>
-                                    <option value="secondaire">
-                                        Secondaire
-                                    </option>
+                                    <option value="all">Toutes catégories</option>
+                                    <option value="1">Principal</option>
+                                    <option value="2">Secondaire</option>
                                 </select>
                             </div>
-
-                            <Button
-                                onClick={handleAddSupplier}
-                                disabled={loading}
-                            >
+                            <Button onClick={handleAddSupplier} variant="primary" size="md">
                                 <Plus className="w-4 h-4 mr-2" />
-                                Nouveau fournisseur
+                                Ajouter Fournisseur
                             </Button>
                         </div>
                     </Card>
                 </motion.div>
 
-                {/* Suppliers List */}
+                {(loading || ratingsLoading) && <p className="text-center text-nexsaas-vanta-black dark:text-gray-300">Chargement des fournisseurs...</p>}
+                {ratingsError && (
+                    <p className="text-center text-red-500">{ratingsError}</p>
+                )}
+                {!loading && filteredSuppliers.length === 0 && (
+                    <p className="text-center text-nexsaas-vanta-black dark:text-gray-300">Aucun fournisseur trouvé</p>
+                )}
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6, delay: 0.6 }}
-                    className="space-y-6"
+                    className="grid grid-cols-1 lg:grid-cols-2 gap-6"
                 >
-                    {loading ? (
-                        <p className="text-center text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                            Chargement des fournisseurs...
-                        </p>
-                    ) : filteredSuppliers.length === 0 ? (
-                        <p className="text-center text-nexsaas-vanta-black dark:text-gray-300">
-                            Aucun fournisseur trouvé.
-                        </p>
-                    ) : (
-                        filteredSuppliers.map((supplier, index) => (
-                            <motion.div
-                                key={supplier.id}
-                                initial={{ opacity: 0, x: -30 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{
-                                    duration: 0.6,
-                                    delay: index * 0.1,
-                                }}
-                            >
-                                <Card className="hover:shadow-md transition-shadow">
-                                    <div className="flex flex-col lg:flex-row lg:items-start justify-between">
-                                        <div className="flex-1">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="flex items-center space-x-3">
-                                                    <h3 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                        {supplier.name}
-                                                    </h3>
-                                                    <span
-                                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(
-                                                            supplier.category,
-                                                        )}`}
-                                                    >
-                                                        {supplier.category}
-                                                    </span>
-                                                    <span
-                                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                                                            supplier.status,
-                                                        )}`}
-                                                    >
-                                                        {supplier.status}
-                                                    </span>
-                                                </div>
-                                                {renderStars(supplier.rating)}
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                                                <div className="flex items-center">
-                                                    <Mail className="w-4 h-4 text-gray-400 mr-2" />
-                                                    <span className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                        {supplier.email}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <Phone className="w-4 h-4 text-gray-400 mr-2" />
-                                                    <span className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                        {supplier.phone}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <MapPin className="w-4 h-4 text-gray-400 mr-2" />
-                                                    <span className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                        {supplier.address}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <Clock className="w-4 h-4 text-gray-400 mr-2" />
-                                                    <span className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                        Délai:{" "}
-                                                        {supplier.deliveryTime}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <DollarSign className="w-4 h-4 text-gray-400 mr-2" />
-                                                    <span className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                        Min: €
-                                                        {supplier.minimumOrder}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <TrendingUp className="w-4 h-4 text-gray-400 mr-2" />
-                                                    <span className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                        Remise:{" "}
-                                                        {supplier.discount}%
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {/* Products */}
-                                            {supplier.products.length > 0 && (
-                                                <div className="mb-4">
-                                                    <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                                        Produits (
-                                                        {
-                                                            supplier.products
-                                                                .length
-                                                        }
-                                                        )
-                                                    </h4>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                        {supplier.products
-                                                            .slice(0, 4)
-                                                            .map((product) => (
-                                                                <div
-                                                                    key={
-                                                                        product.id
-                                                                    }
-                                                                    className="bg-nexsaas-light-gray dark:bg-gray-700 rounded-lg p-3"
-                                                                >
-                                                                    <div className="flex items-center justify-between">
-                                                                        <div>
-                                                                            <h5 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm">
-                                                                                {
-                                                                                    product.name
-                                                                                }
-                                                                            </h5>
-                                                                            <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
-                                                                                {
-                                                                                    product.category
-                                                                                }{" "}
-                                                                                •
-                                                                                Min:{" "}
-                                                                                {
-                                                                                    product.minimumQuantity
-                                                                                }
-                                                                            </p>
-                                                                        </div>
-                                                                        <div className="text-right">
-                                                                            <p className="font-bold text-nexsaas-saas-green">
-                                                                                €
-                                                                                {
-                                                                                    product.currentPrice
-                                                                                }
-                                                                            </p>
-                                                                            <div className="flex space-x-1">
-                                                                                <button
-                                                                                    onClick={() =>
-                                                                                        handleShowPriceHistory(
-                                                                                            product,
-                                                                                        )
-                                                                                    }
-                                                                                    className="text-xs text-blue-500 hover:text-blue-600"
-                                                                                >
-                                                                                    <History className="w-3 h-3" />
-                                                                                </button>
-                                                                                <button
-                                                                                    onClick={() =>
-                                                                                        handleEditProduct(
-                                                                                            supplier,
-                                                                                            product,
-                                                                                        )
-                                                                                    }
-                                                                                    className="text-xs text-gray-500 hover:text-gray-600"
-                                                                                >
-                                                                                    <Edit className="w-3 h-3" />
-                                                                                </button>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                    </div>
-                                                    {supplier.products.length >
-                                                        4 && (
-                                                        <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300 mt-2">
-                                                            +
-                                                            {supplier.products
-                                                                .length -
-                                                                4}{" "}
-                                                            autres produits
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* Stats */}
-                                            <div className="grid grid-cols-3 gap-4 text-center">
-                                                <div>
-                                                    <p className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                        {supplier.totalOrders}
-                                                    </p>
-                                                    <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
-                                                        Commandes
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-lg font-bold text-nexsaas-saas-green">
-                                                        €
-                                                        {supplier.totalAmount.toLocaleString()}
-                                                    </p>
-                                                    <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
-                                                        Volume total
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                        {supplier.lastOrder ||
-                                                            "Aucune"}
-                                                    </p>
-                                                    <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
-                                                        Dernière commande
-                                                    </p>
-                                                </div>
-                                            </div>
+                    {filteredSuppliers.map((supplier) => (
+                        <Card key={supplier.id} className="relative">
+                            <div className="absolute top-4 right-4 flex gap-2">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditSupplier(supplier)}
+                                >
+                                    <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteSupplier(supplier.id)}
+                                >
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                            </div>
+                            <div className="p-6">
+                                <div className="flex items-center mb-4">
+                                    <div className="p-3 bg-indigo-500/10 rounded-lg mr-4">
+                                        <Building2 className="w-6 h-6 text-indigo-500" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                            {supplier.name}
+                                        </h2>
+                                        <span
+                                            className={`text-xs font-medium px-2.5 py-0.5 rounded ${getCategoryColor(supplier.categorie)}`}
+                                        >
+                                            {supplier.categorie === "1" ? "Principal" : "Secondaire"}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                            <Mail className="w-4 h-4 mr-2" />
+                                            {supplier.email}
                                         </div>
-
-                                        <div className="flex flex-col space-y-2 mt-4 lg:mt-0 lg:ml-6">
+                                        <div className="flex items-center text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                            <Phone className="w-4 h-4 mr-2" />
+                                            {supplier.phone}
+                                        </div>
+                                        <div className="flex items-center text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                            <MapPin className="w-4 h-4 mr-2" />
+                                            {supplier.address}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                            <Clock className="w-4 h-4 mr-2" />
+                                            Délai: {supplier.deliveryTime}
+                                        </div>
+                                        <div className="flex items-center text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                            <Package className="w-4 h-4 mr-2" />
+                                            Min. Commande: {supplier.minimumOrder}
+                                        </div>
+                                        <div className="flex items-center text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                            <DollarSign className="w-4 h-4 mr-2" />
+                                            Remise: {supplier.discount}%
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-2 mb-4">
+                                    <div className="flex items-center text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                        <Award className="w-4 h-4 mr-2" />
+                                        Qualité Produit: {renderStars(ratings?.qualiteProduit || 0)}
+                                    </div>
+                                    <div className="flex items-center text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                        <Award className="w-4 h-4 mr-2" />
+                                        Respect Délais: {renderStars(ratings?.respectDelais || 0)}
+                                    </div>
+                                    <div className="flex items-center text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                        <Award className="w-4 h-4 mr-2" />
+                                        Fiabilité: {renderStars(ratings?.fiabilite || 0)}
+                                    </div>
+                                    <div className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                        Commentaire: {ratings?.commentaire || "Aucun"}
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleRateSupplier(supplier)}
+                                        disabled={ratingsLoading}
+                                    >
+                                        <Star className="w-4 h-4 mr-2" />
+                                        {ratingsLoading ? "Chargement..." : "Évaluer"}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setSelectedSupplier(supplier)}
+                                    >
+                                        <MessageCircle className="w-4 h-4 mr-2" />
+                                        Détails
+                                    </Button>
+                                </div>
+                            </div>
+                            {selectedSupplier?.id === supplier.id && (
+                                <div className="p-6 border-t border-nexsaas-light-gray dark:border-gray-700">
+                                    <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                        Détails du Fournisseur
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <h4 className="text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-2">
+                                                Produits
+                                            </h4>
+                                            {productsLoading && <p>Chargement des produits...</p>}
+                                            {productsError && (
+                                                <p className="text-red-500">{productsError}</p>
+                                            )}
+                                            {products.length > 0 ? (
+                                                products.map((product) => (
+                                                    <div
+                                                        key={product.id}
+                                                        className="flex justify-between items-center py-2 border-b border-nexsaas-light-gray dark:border-gray-700"
+                                                    >
+                                                        <div>
+                                                            <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                                                {product.nomProduit}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                                €{product.prixNegocie} |{" "}
+                                                                {product.conditionnement}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    handleEditProduct(
+                                                                        supplier,
+                                                                        product,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <Edit className="w-4 h-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    handleDeleteProduct(product.id)
+                                                                }
+                                                            >
+                                                                <Trash2 className="w-4 h-4 text-red-500" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    handleShowPriceHistory(product)
+                                                                }
+                                                            >
+                                                                <History className="w-4 h-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                    Aucun produit
+                                                </p>
+                                            )}
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() =>
-                                                    handleRateSupplier(supplier)
-                                                }
+                                                className="mt-2"
+                                                onClick={() => handleAddProduct(supplier)}
                                             >
-                                                <Award className="w-4 h-4 mr-1" />
-                                                Noter
+                                                <Plus className="w-4 h-4 mr-2" />
+                                                Ajouter Produit
                                             </Button>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-2">
+                                                Contacts
+                                            </h4>
+                                            {contactsLoading && <p>Chargement des contacts...</p>}
+                                            {contactsError && (
+                                                <p className="text-red-500">{contactsError}</p>
+                                            )}
+                                            {contacts.length > 0 ? (
+                                                contacts.map((contact) => (
+                                                    <div
+                                                        key={contact.id}
+                                                        className="flex justify-between items-center py-2 border-b border-nexsaas-light-gray dark:border-gray-700"
+                                                    >
+                                                        <div>
+                                                            <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                                                {contact.nom} ({contact.fonction})
+                                                                {contact.isPrimary && (
+                                                                    <span className="ml-2 text-xs text-green-500">Principal</span>
+                                                                )}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                                {contact.email} | {contact.telephone}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    handleEditContact(supplier, contact)
+                                                                }
+                                                            >
+                                                                <Edit className="w-4 h-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    handleDeleteContact(contact.id)
+                                                                }
+                                                            >
+                                                                <Trash2 className="w-4 h-4 text-red-500" />
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                    Aucun contact
+                                                </p>
+                                            )}
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() =>
-                                                    handleAddProduct(supplier)
-                                                }
+                                                className="mt-2"
+                                                onClick={() => handleAddContact(supplier)}
                                             >
-                                                <Plus className="w-4 h-4 mr-1" />
-                                                Produit
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() =>
-                                                    handleEditSupplier(supplier)
-                                                }
-                                            >
-                                                <Edit className="w-4 h-4 mr-1" />
-                                                Modifier
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() =>
-                                                    handleDeleteSupplier(
-                                                        supplier.id,
-                                                    )
-                                                }
-                                                className="text-red-500 hover:text-red-600"
-                                            >
-                                                <Trash2 className="w-4 h-4 mr-1" />
-                                                Supprimer
+                                                <Plus className="w-4 h-4 mr-2" />
+                                                Ajouter Contact
                                             </Button>
                                         </div>
                                     </div>
-                                </Card>
-                            </motion.div>
-                        ))
-                    )}
+                                    <div className="mt-6">
+                                        <h4 className="text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-2">
+                                            Interactions
+                                        </h4>
+                                        {interactionsLoading && (
+                                            <p>Chargement des interactions...</p>
+                                        )}
+                                        {interactionsError && (
+                                            <p className="text-red-500">{interactionsError}</p>
+                                        )}
+                                        {interactions.length > 0 ? (
+                                            interactions.map((interaction) => (
+                                                <div
+                                                    key={interaction.id}
+                                                    className="flex justify-between items-center py-2 border-b border-nexsaas-light-gray dark:border-gray-700"
+                                                >
+                                                    <div>
+                                                        <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                                            {interaction.type}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                            {interaction.note} |{" "}
+                                                            {new Date(interaction.createdAt).toLocaleDateString()}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleEditInteraction(supplier, interaction)}
+                                                        >
+                                                            <Edit className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleDeleteInteraction(interaction.id)}
+                                                        >
+                                                            <Trash2 className="w-4 h-4 text-red-500" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                Aucune interaction
+                                            </p>
+                                        )}
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="mt-2"
+                                            onClick={() => handleAddInteraction(supplier)}
+                                        >
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            Ajouter Interaction
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </Card>
+                    ))}
                 </motion.div>
 
-                {/* Supplier Modal */}
                 {showSupplierModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-                        onClick={() => setShowSupplierModal(false)}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <Card className="w-full max-w-md">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {editingSupplier
-                                        ? "Modifier le fournisseur"
-                                        : "Nouveau fournisseur"}
+                                        ? "Modifier Fournisseur"
+                                        : "Ajouter Fournisseur"}
                                 </h2>
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setShowSupplierModal(false)}
                                 >
-                                    <X className="w-6 h-6" />
+                                    <X className="w-4 h-4" />
                                 </Button>
                             </div>
-
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input
-                                        label="Nom du fournisseur"
-                                        value={supplierForm.name}
-                                        onChange={(value) =>
-                                            setSupplierForm((prev) => ({
-                                                ...prev,
-                                                name: value,
-                                            }))
-                                        }
-                                        required
-                                    />
-                                    <Input
-                                        label="Email"
-                                        type="email"
-                                        value={supplierForm.email}
-                                        onChange={(value) =>
-                                            setSupplierForm((prev) => ({
-                                                ...prev,
-                                                email: value,
-                                            }))
-                                        }
-                                        required
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input
-                                        label="Téléphone"
-                                        value={supplierForm.phone}
-                                        onChange={(value) =>
-                                            setSupplierForm((prev) => ({
-                                                ...prev,
-                                                phone: value,
-                                            }))
-                                        }
-                                    />
-                                    <div>
-                                        <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                            Catégorie
-                                        </label>
-                                        <select
-                                            value={supplierForm.category}
-                                            onChange={(e) =>
-                                                setSupplierForm((prev) => ({
-                                                    ...prev,
-                                                    category: e.target.value as
-                                                        | "principal"
-                                                        | "secondaire",
-                                                }))
-                                            }
-                                            className="w-full px-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
-                                        >
-                                            <option value="principal">
-                                                Principal
-                                            </option>
-                                            <option value="secondaire">
-                                                Secondaire
-                                            </option>
-                                        </select>
-                                    </div>
-                                </div>
-
+                            <div className="space-y-4">
                                 <Input
-                                    label="Adresse"
-                                    value={supplierForm.address}
+                                    label="Nom"
+                                    value={supplierForm.nom}
                                     onChange={(value) =>
-                                        setSupplierForm((prev) => ({
-                                            ...prev,
-                                            address: value,
-                                        }))
+                                        setSupplierForm({
+                                            ...supplierForm,
+                                            nom: value,
+                                        })
+                                    }
+                                    required
+                                />
+                                <Input
+                                    label="Email"
+                                    type="email"
+                                    value={supplierForm.email}
+                                    onChange={(value) =>
+                                        setSupplierForm({
+                                            ...supplierForm,
+                                            email: value,
+                                        })
+                                    }
+                                    required
+                                />
+                                <Input
+                                    label="Téléphone"
+                                    value={supplierForm.telephone}
+                                    onChange={(value) =>
+                                        setSupplierForm({
+                                            ...supplierForm,
+                                            telephone: value,
+                                        })
                                     }
                                 />
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input
-                                        label="Conditions de paiement"
-                                        value={supplierForm.paymentTerms}
-                                        onChange={(value) =>
-                                            setSupplierForm((prev) => ({
-                                                ...prev,
-                                                paymentTerms: value,
-                                            }))
-                                        }
-                                        placeholder="ex: 30 jours"
-                                    />
-                                    <Input
-                                        label="Délai de livraison"
-                                        value={supplierForm.deliveryTime}
-                                        onChange={(value) =>
-                                            setSupplierForm((prev) => ({
-                                                ...prev,
-                                                deliveryTime: value,
-                                            }))
-                                        }
-                                        placeholder="ex: 5-7 jours"
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input
-                                        label="Commande minimum (€)"
-                                        type="number"
-                                        value={supplierForm.minimumOrder}
-                                        onChange={(value) =>
-                                            setSupplierForm((prev) => ({
-                                                ...prev,
-                                                minimumOrder: value,
-                                            }))
-                                        }
-                                    />
-                                    <Input
-                                        label="Remise (%)"
-                                        type="number"
-                                        value={supplierForm.discount}
-                                        onChange={(value) =>
-                                            setSupplierForm((prev) => ({
-                                                ...prev,
-                                                discount: value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-
+                                <Input
+                                    label="Adresse"
+                                    value={supplierForm.adresse}
+                                    onChange={(value) =>
+                                        setSupplierForm({
+                                            ...supplierForm,
+                                            adresse: value,
+                                        })
+                                    }
+                                />
                                 <div>
-                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                        Notes
+                                    <label className="block text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-1">
+                                        Catégorie
                                     </label>
-                                    <textarea
-                                        value={supplierForm.notes}
+                                    <select
+                                        value={supplierForm.categorie}
                                         onChange={(e) =>
-                                            setSupplierForm((prev) => ({
-                                                ...prev,
-                                                notes: e.target.value,
-                                            }))
+                                            setSupplierForm({
+                                                ...supplierForm,
+                                                categorie: e.target.value as "1" | "2",
+                                            })
                                         }
-                                        rows={3}
-                                        className="w-full px-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
-                                        placeholder="Notes sur le fournisseur..."
-                                    />
-                                </div>
-
-                                <div className="flex justify-end space-x-4">
-                                    <Button
-                                        variant="outline"
-                                        onClick={() =>
-                                            setShowSupplierModal(false)
-                                        }
+                                        className="w-full px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
                                     >
-                                        Annuler
-                                    </Button>
-                                    <Button
-                                        onClick={handleSaveSupplier}
-                                        disabled={loading}
-                                    >
-                                        <Save className="w-4 h-4 mr-2" />
-                                        {editingSupplier ? "Modifier" : "Créer"}
-                                    </Button>
+                                        <option value="1">Principal</option>
+                                        <option value="2">Secondaire</option>
+                                    </select>
                                 </div>
+                                <Input
+                                    label="Délai de livraison"
+                                    value={supplierForm.delaiLivraison}
+                                    onChange={(value) =>
+                                        setSupplierForm({
+                                            ...supplierForm,
+                                            delaiLivraison: value,
+                                        })
+                                    }
+                                />
+                                <Input
+                                    label="Remise (%)"
+                                    type="number"
+                                    value={supplierForm.remise}
+                                    onChange={(value) =>
+                                        setSupplierForm({
+                                            ...supplierForm,
+                                            remise: value,
+                                        })
+                                    }
+                                />
                             </div>
-                        </motion.div>
-                    </motion.div>
+                            <div className="mt-6 flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowSupplierModal(false)}
+                                >
+                                    Annuler
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={handleSaveSupplier}
+                                >
+                                    <Save className="w-4 h-4 mr-2" />
+                                    Enregistrer
+                                </Button>
+                            </div>
+                        </Card>
+                    </div>
                 )}
 
-                {/* Product Modal */}
                 {showProductModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-                        onClick={() => setShowProductModal(false)}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <Card className="w-full max-w-md">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {editingProduct
-                                        ? "Modifier le produit"
-                                        : "Nouveau produit"}
+                                        ? "Modifier Produit"
+                                        : "Ajouter Produit"}
                                 </h2>
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setShowProductModal(false)}
                                 >
-                                    <X className="w-6 h-6" />
+                                    <X className="w-4 h-4" />
                                 </Button>
                             </div>
-
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input
-                                        label="Nom du produit"
-                                        value={productForm.name}
-                                        onChange={(value) =>
-                                            setProductForm((prev) => ({
-                                                ...prev,
-                                                name: value,
-                                            }))
-                                        }
-                                        required
-                                    />
-                                    <Input
-                                        label="Catégorie"
-                                        value={productForm.category}
-                                        onChange={(value) =>
-                                            setProductForm((prev) => ({
-                                                ...prev,
-                                                category: value,
-                                            }))
-                                        }
-                                        required
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input
-                                        label="Prix actuel (€)"
-                                        type="number"
-                                        step="0.01"
-                                        value={productForm.currentPrice}
-                                        onChange={(value) =>
-                                            setProductForm((prev) => ({
-                                                ...prev,
-                                                currentPrice: value,
-                                            }))
-                                        }
-                                        required
-                                    />
-                                    <Input
-                                        label="Quantité minimum"
-                                        type="number"
-                                        value={productForm.minimumQuantity}
-                                        onChange={(value) =>
-                                            setProductForm((prev) => ({
-                                                ...prev,
-                                                minimumQuantity: value,
-                                            }))
-                                        }
-                                        required
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input
-                                        label="Délai de livraison"
-                                        value={productForm.deliveryTime}
-                                        onChange={(value) =>
-                                            setProductForm((prev) => ({
-                                                ...prev,
-                                                deliveryTime: value,
-                                            }))
-                                        }
-                                        placeholder="ex: 3-5 jours"
-                                    />
-                                    <Input
-                                        label="Conditionnement"
-                                        value={productForm.packaging}
-                                        onChange={(value) =>
-                                            setProductForm((prev) => ({
-                                                ...prev,
-                                                packaging: value,
-                                            }))
-                                        }
-                                        placeholder="ex: Carton de 10"
-                                    />
-                                </div>
-
-                                <div className="flex justify-end space-x-4">
-                                    <Button
-                                        variant="outline"
-                                        onClick={() =>
-                                            setShowProductModal(false)
-                                        }
-                                    >
-                                        Annuler
-                                    </Button>
-                                    <Button onClick={handleSaveProduct}>
-                                        <Save className="w-4 h-4 mr-2" />
-                                        {editingProduct
-                                            ? "Modifier"
-                                            : "Ajouter"}
-                                    </Button>
-                                </div>
+                            <div className="space-y-4">
+                                <Input
+                                    label="Nom du produit"
+                                    value={productForm.nomProduit}
+                                    onChange={(value) =>
+                                        setProductForm({
+                                            ...productForm,
+                                            nomProduit: value,
+                                        })
+                                    }
+                                    required
+                                />
+                                <Input
+                                    label="Prix négocié (€)"
+                                    type="number"
+                                    value={productForm.prixNegocie.toString()}
+                                    onChange={(value) =>
+                                        setProductForm({
+                                            ...productForm,
+                                            prixNegocie: parseFloat(value) || 0,
+                                        })
+                                    }
+                                    required
+                                />
+                                <Input
+                                    label="Conditionnement"
+                                    value={productForm.conditionnement}
+                                    onChange={(value) =>
+                                        setProductForm({
+                                            ...productForm,
+                                            conditionnement: value,
+                                        })
+                                    }
+                                    required
+                                />
+                                <Input
+                                    label="Délai d'approvisionnement"
+                                    value={productForm.delaiApprovisionnement}
+                                    onChange={(value) =>
+                                        setProductForm({
+                                            ...productForm,
+                                            delaiApprovisionnement: value,
+                                        })
+                                    }
+                                    required
+                                />
                             </div>
-                        </motion.div>
-                    </motion.div>
+                            <div className="mt-6 flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowProductModal(false)}
+                                >
+                                    Annuler
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={handleSaveProduct}
+                                >
+                                    <Save className="w-4 h-4 mr-2" />
+                                    Enregistrer
+                                </Button>
+                            </div>
+                        </Card>
+                    </div>
                 )}
 
-                {/* Price History Modal */}
-                {showPriceHistoryModal && selectedProduct && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-                        onClick={() => setShowPriceHistoryModal(false)}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                    Historique des prix - {selectedProduct.name}
+                {showInteractionModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <Card className="w-full max-w-md">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    {editingInteraction
+                                        ? "Modifier Interaction"
+                                        : "Ajouter Interaction"}
                                 </h2>
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() =>
-                                        setShowPriceHistoryModal(false)
-                                    }
+                                    onClick={() => setShowInteractionModal(false)}
                                 >
-                                    <X className="w-6 h-6" />
+                                    <X className="w-4 h-4" />
                                 </Button>
                             </div>
-
                             <div className="space-y-4">
-                                {selectedProduct.priceHistory.map(
-                                    (history, index) => (
-                                        <div
-                                            key={history.id}
-                                            className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-4"
-                                        >
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center space-x-3">
-                                                    <span className="text-lg font-bold text-nexsaas-saas-green">
-                                                        €{history.price}
-                                                    </span>
-                                                    {index === 0 && (
-                                                        <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 px-2 py-1 rounded-full">
-                                                            Prix actuel
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <span className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                    {history.date}
-                                                </span>
-                                            </div>
-                                            <div className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                <p>
-                                                    <strong>
-                                                        Négocié par:
-                                                    </strong>{" "}
-                                                    {history.negotiatedBy}
-                                                </p>
-                                                <p>
-                                                    <strong>Notes:</strong>{" "}
-                                                    {history.notes}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ),
-                                )}
+                                <Input
+                                    label="Type"
+                                    value={interactionForm.type}
+                                    onChange={(value) =>
+                                        setInteractionForm({
+                                            ...interactionForm,
+                                            type: value,
+                                        })
+                                    }
+                                    required
+                                />
+                                <Input
+                                    label="Note"
+                                    value={interactionForm.note}
+                                    onChange={(value) =>
+                                        setInteractionForm({
+                                            ...interactionForm,
+                                            note: value,
+                                        })
+                                    }
+                                    required
+                                />
                             </div>
-                        </motion.div>
-                    </motion.div>
+                            <div className="mt-6 flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowInteractionModal(false)}
+                                >
+                                    Annuler
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={handleSaveInteraction}
+                                >
+                                    <Save className="w-4 h-4 mr-2" />
+                                    Enregistrer
+                                </Button>
+                            </div>
+                        </Card>
+                    </div>
                 )}
 
-                {/* Rating Modal */}
-                {showRatingModal && selectedSupplier && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-                        onClick={() => setShowRatingModal(false)}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                    Noter le fournisseur
+                {showContactModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <Card className="w-full max-w-md">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    {editingContact ? "Modifier Contact" : "Ajouter Contact"}
+                                </h2>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowContactModal(false)}
+                                >
+                                    <X className="w-4 h-4" />
+                                </Button>
+                            </div>
+                            <div className="space-y-4">
+                                <Input
+                                    label="Nom"
+                                    value={contactForm.nom}
+                                    onChange={(value) =>
+                                        setContactForm({
+                                            ...contactForm,
+                                            nom: value,
+                                        })
+                                    }
+                                    required
+                                />
+                                <Input
+                                    label="Fonction"
+                                    value={contactForm.fonction}
+                                    onChange={(value) =>
+                                        setContactForm({
+                                            ...contactForm,
+                                            fonction: value,
+                                        })
+                                    }
+                                />
+                                <Input
+                                    label="Email"
+                                    type="email"
+                                    value={contactForm.email}
+                                    onChange={(value) =>
+                                        setContactForm({
+                                            ...contactForm,
+                                            email: value,
+                                        })
+                                    }
+                                    required
+                                />
+                                <Input
+                                    label="Téléphone"
+                                    value={contactForm.telephone}
+                                    onChange={(value) =>
+                                        setContactForm({
+                                            ...contactForm,
+                                            telephone: value,
+                                        })
+                                    }
+                                />
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-1">
+                                        Contact Principal
+                                    </label>
+                                    <input
+                                        type="checkbox"
+                                        checked={contactForm.isPrimary}
+                                        onChange={(e) =>
+                                            setContactForm({
+                                                ...contactForm,
+                                                isPrimary: e.target.checked,
+                                            })
+                                        }
+                                        className="h-4 w-4 text-nexsaas-saas-green focus:ring-nexsaas-saas-green border-gray-300 rounded"
+                                    />
+                                </div>
+                            </div>
+                            <div className="mt-6 flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowContactModal(false)}
+                                >
+                                    Annuler
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={handleSaveContact}
+                                >
+                                    <Save className="w-4 h-4 mr-2" />
+                                    Enregistrer
+                                </Button>
+                            </div>
+                        </Card>
+                    </div>
+                )}
+
+                {showPriceHistoryModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <Card className="w-full max-w-md">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    Historique des Prix
+                                </h2>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowPriceHistoryModal(false)}
+                                >
+                                    <X className="w-4 h-4" />
+                                </Button>
+                            </div>
+                            {priceHistoryLoading && <p>Chargement...</p>}
+                            {priceHistoryError && (
+                                <p className="text-red-500">{priceHistoryError}</p>
+                            )}
+                            {priceHistory.length > 0 ? (
+                                priceHistory.map((history) => (
+                                    <div
+                                        key={history.id}
+                                        className="py-2 border-b border-nexsaas-light-gray dark:border-gray-700"
+                                    >
+                                        <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                            Prix: €{history.price} | Date:{" "}
+                                            {new Date(history.date).toLocaleDateString()}
+                                        </p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                            Négocié par: {history.negotiatedBy} | Notes:{" "}
+                                            {history.notes}
+                                        </p>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Aucun historique de prix
+                                </p>
+                            )}
+                            <div className="mt-6 flex justify-end">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowPriceHistoryModal(false)}
+                                >
+                                    Fermer
+                                </Button>
+                            </div>
+                        </Card>
+                    </div>
+                )}
+
+                {showRatingModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <Card className="w-full max-w-md">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    Évaluer Fournisseur
                                 </h2>
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setShowRatingModal(false)}
                                 >
-                                    <X className="w-6 h-6" />
+                                    <X className="w-4 h-4" />
                                 </Button>
                             </div>
-
-                            <div className="space-y-6">
-                                <div className="text-center">
-                                    <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                        {selectedSupplier.name}
-                                    </h3>
-                                    <p className="text-nexsaas-vanta-black dark:text-gray-300 mb-4">
-                                        Évaluez la performance de ce fournisseur
-                                    </p>
-
-                                    <div className="flex justify-center mb-4">
-                                        {renderStars(
-                                            newRating,
-                                            true,
-                                            setNewRating,
-                                        )}
-                                    </div>
-                                </div>
-
+                            <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                        Commentaire (optionnel)
+                                    <label className="block text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-1">
+                                        Qualité Produit
+                                    </label>
+                                    {renderStars(newRating.qualiteProduit, true, (rating) =>
+                                        setNewRating({
+                                            ...newRating,
+                                            qualiteProduit: rating,
+                                        }),
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-1">
+                                        Respect des Délais
+                                    </label>
+                                    {renderStars(newRating.respectDelais, true, (rating) =>
+                                        setNewRating({
+                                            ...newRating,
+                                            respectDelais: rating,
+                                        }),
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-1">
+                                        Fiabilité
+                                    </label>
+                                    {renderStars(newRating.fiabilite, true, (rating) =>
+                                        setNewRating({
+                                            ...newRating,
+                                            fiabilite: rating,
+                                        }),
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-1">
+                                        Commentaire
                                     </label>
                                     <textarea
-                                        value={ratingComment}
+                                        value={newRating.commentaire}
                                         onChange={(e) =>
-                                            setRatingComment(e.target.value)
+                                            setNewRating({
+                                                ...newRating,
+                                                commentaire: e.target.value,
+                                            })
                                         }
-                                        rows={3}
-                                        className="w-full px-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
-                                        placeholder="Votre évaluation..."
+                                        className="w-full px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
                                     />
                                 </div>
-
-                                <div className="flex justify-end space-x-4">
-                                    <Button
-                                        variant="outline"
-                                        onClick={() =>
-                                            setShowRatingModal(false)
-                                        }
-                                    >
-                                        Annuler
-                                    </Button>
-                                    <Button
-                                        onClick={handleSaveRating}
-                                        disabled={newRating === 0}
-                                    >
-                                        <Award className="w-4 h-4 mr-2" />
-                                        Enregistrer la note
-                                    </Button>
-                                </div>
                             </div>
-                        </motion.div>
-                    </motion.div>
+                            <div className="mt-6 flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowRatingModal(false)}
+                                >
+                                    Annuler
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={handleSaveRating}
+                                    disabled={ratingsLoading}
+                                >
+                                    <Save className="w-4 h-4 mr-2" />
+                                    {ratingsLoading ? "Enregistrement..." : "Enregistrer"}
+                                </Button>
+                            </div>
+                        </Card>
+                    </div>
                 )}
             </div>
         </div>
