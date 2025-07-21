@@ -1,31 +1,31 @@
 import { useState, useEffect } from "react";
 import { useToast } from "../contexts/ToastContext";
 import { useActivity } from "../contexts/ActivityContext";
-import { ContactDto, Contact, fetchContacts, addContact, updateContact, deleteContact } from "../api/contactsApi";
-export type { Contact, ContactDto };
-export const useContacts = (fournisseurId: string) => {
-    const [contacts, setContacts] = useState<Contact[]>([]);
+import { InteractionDto, Interaction, fetchInteractions, addInteraction, updateInteraction, deleteInteraction } from "../api/interactionsApi";
+export type { Interaction, InteractionDto };
+export const useInteractions = (fournisseurId: string) => {
+    const [interactions, setInteractions] = useState<Interaction[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { showToast } = useToast();
     const { logActivity } = useActivity();
 
-    const loadContacts = async () => {
+    const loadInteractions = async () => {
         if (!fournisseurId) {
-            console.log("No fournisseurId provided, skipping contact fetch");
-            setContacts([]);
+            console.log("No fournisseurId provided, skipping interaction fetch");
+            setInteractions([]);
             setError(null);
             return;
         }
 
         setLoading(true);
         try {
-            const fetchedContacts: Contact[] = await fetchContacts(fournisseurId);
-            setContacts(fetchedContacts);
+            const fetchedInteractions: Interaction[] = await fetchInteractions(fournisseurId);
+            setInteractions(fetchedInteractions);
             setError(null);
         } catch (error: any) {
-            const errorMessage = error.response?.data?.message || "Erreur lors du chargement des contacts";
-            console.error(`Error fetching contacts for fournisseurId ${fournisseurId}:`, error);
+            const errorMessage = error.response?.data?.message || "Erreur lors du chargement des interactions";
+            console.error(`Error fetching interactions for fournisseurId ${fournisseurId}:`, error);
             setError(errorMessage);
             showToast({
                 type: "error",
@@ -39,37 +39,37 @@ export const useContacts = (fournisseurId: string) => {
     };
 
     useEffect(() => {
-        loadContacts();
+        loadInteractions();
     }, [fournisseurId]);
 
-    const add = async (data: ContactDto): Promise<Contact> => {
+    const add = async (data: InteractionDto): Promise<Interaction> => {
         setLoading(true);
         try {
-            const newContact: Contact = await addContact(fournisseurId, data);
-            await loadContacts(); // Refetch to ensure UI reflects the latest data
+            const newInteraction: Interaction = await addInteraction(fournisseurId, data);
+            await loadInteractions();
             showToast({
                 type: "success",
-                title: "Contact ajouté",
-                message: `Le contact ${data.nom} a été ajouté avec succès.`,
+                title: "Interaction ajoutée",
+                message: `L'interaction ${data.type} a été ajoutée avec succès.`,
                 duration: 3000,
             });
             logActivity({
                 type: "create",
-                module: "Contacts",
-                description: `Nouveau contact ajouté: ${data.nom}`,
+                module: "Interactions",
+                description: `Nouvelle interaction ajoutée: ${data.type}`,
                 userId: localStorage.getItem("nexsaas_user")
                     ? JSON.parse(localStorage.getItem("nexsaas_user")!).id
                     : "unknown",
                 metadata: {
                     fournisseurId,
-                    email: data.email,
+                    type: data.type,
                 },
             });
             setError(null);
-            return newContact;
+            return newInteraction;
         } catch (error: any) {
-            const errorMessage = error.response?.data?.message || "Erreur lors de l'ajout du contact";
-            console.error("Error adding contact:", error);
+            const errorMessage = error.response?.data?.message || "Erreur lors de l'ajout de l'interaction";
+            console.error("Error adding interaction:", error);
             setError(errorMessage);
             showToast({
                 type: "error",
@@ -83,34 +83,34 @@ export const useContacts = (fournisseurId: string) => {
         }
     };
 
-    const update = async (contactId: string, data: Partial<ContactDto>): Promise<Contact> => {
+    const update = async (interactionId: string, data: Partial<InteractionDto>): Promise<Interaction> => {
         setLoading(true);
         try {
-            const updatedContact: Contact = await updateContact(contactId, fournisseurId, data);
-            await loadContacts(); // Refetch to ensure UI reflects the latest data
+            const updatedInteraction: Interaction = await updateInteraction(interactionId, fournisseurId, data);
+            await loadInteractions();
             showToast({
                 type: "success",
-                title: "Contact mis à jour",
-                message: `Le contact ${data.nom || updatedContact.nom} a été mis à jour avec succès.`,
+                title: "Interaction modifiée",
+                message: `L'interaction ${data.type || updatedInteraction.type} a été mise à jour avec succès.`,
                 duration: 3000,
             });
             logActivity({
                 type: "update",
-                module: "Contacts",
-                description: `Contact mis à jour: ${data.nom || updatedContact.nom}`,
+                module: "Interactions",
+                description: `Interaction modifiée: ${data.type || updatedInteraction.type}`,
                 userId: localStorage.getItem("nexsaas_user")
                     ? JSON.parse(localStorage.getItem("nexsaas_user")!).id
                     : "unknown",
                 metadata: {
                     fournisseurId,
-                    email: data.email || updatedContact.email,
+                    interactionId,
                 },
             });
             setError(null);
-            return updatedContact;
+            return updatedInteraction;
         } catch (error: any) {
-            const errorMessage = error.response?.data?.message || "Erreur lors de la mise à jour du contact";
-            console.error(`Error updating contact ${contactId}:`, error);
+            const errorMessage = error.response?.data?.message || "Erreur lors de la mise à jour de l'interaction";
+            console.error(`Error updating interaction ${interactionId}:`, error);
             setError(errorMessage);
             showToast({
                 type: "error",
@@ -124,32 +124,33 @@ export const useContacts = (fournisseurId: string) => {
         }
     };
 
-    const remove = async (contactId: string): Promise<void> => {
+    const remove = async (interactionId: string): Promise<void> => {
         setLoading(true);
         try {
-            await deleteContact(contactId, fournisseurId);
-            await loadContacts(); // Refetch to ensure UI reflects the latest data
+            await deleteInteraction(interactionId, fournisseurId);
+            await loadInteractions();
             showToast({
                 type: "success",
-                title: "Contact supprimé",
-                message: "Le contact a été supprimé avec succès.",
+                title: "Interaction supprimée",
+                message: "L'interaction a été supprimée avec succès.",
                 duration: 3000,
             });
             logActivity({
                 type: "delete",
-                module: "Contacts",
-                description: `Contact supprimé: ${contactId}`,
+                module: "Interactions",
+                description: `Interaction supprimée: ${interactionId}`,
                 userId: localStorage.getItem("nexsaas_user")
                     ? JSON.parse(localStorage.getItem("nexsaas_user")!).id
                     : "unknown",
                 metadata: {
                     fournisseurId,
+                    interactionId,
                 },
             });
             setError(null);
         } catch (error: any) {
-            const errorMessage = error.response?.data?.message || "Erreur lors de la suppression du contact";
-            console.error(`Error deleting contact ${contactId}:`, error);
+            const errorMessage = error.response?.data?.message || "Erreur lors de la suppression de l'interaction";
+            console.error(`Error deleting interaction ${interactionId}:`, error);
             setError(errorMessage);
             showToast({
                 type: "error",
@@ -163,5 +164,5 @@ export const useContacts = (fournisseurId: string) => {
         }
     };
 
-    return { contacts, add, update, remove, loading, error };
+    return { interactions, add, update, remove, loading, error };
 };

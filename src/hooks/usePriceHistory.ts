@@ -1,271 +1,628 @@
 import { useState, useEffect } from "react";
-import { useProducts, usePriceHistory, ProductDto, PriceHistoryDto } from "./useProducts";
-import { Button } from "./ui/button"; // Adjust based on your UI library
+import { useToast } from "../contexts/ToastContext";
+import { useActivity } from "../contexts/ActivityContext";
+import axiosClient from "../api/axiosClient";
 
-interface Supplier {
+export interface PriceHistory {
     id: string;
-    name: string;
+    price: number;
+    date: string;
+    negotiatedBy: string;
+    notes: string;
 }
 
-const SuppliersPage = () => {
-    const [suppliers, setSuppliers] = useState<Supplier[]>([]); // Fetch from API
-    const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-    const [productForm, setProductForm] = useState<ProductDto>({
-        nomProduit: "",
-        prixNegocie: 0,
-        conditionnement: "",
-        delaiApprovisionnement: "",
-    });
-    const [priceHistoryForm, setPriceHistoryForm] = useState<PriceHistoryDto>({
-        price: 0,
-        date: "",
-        negotiatedBy: "",
-        notes: "",
-    });
-    const [showPriceHistoryModal, setShowPriceHistoryModal] = useState(false);
+export interface PriceHistoryDto {
+    price: number;
+    date: string;
+    negotiatedBy: string;
+    notes: string;
+}
 
-    const { products, add: addProduct, update: updateProduct, remove: removeProduct, fetchProducts, loading, error } = useProducts(selectedSupplier?.id || "");
-    const { priceHistory, add: addPriceHistory, update: updatePriceHistory, remove: removePriceHistory, loading: priceLoading, error: priceError } = usePriceHistory(selectedSupplier?.id || "", selectedProduct?.id || "");
+export const usePriceHistory = (fournisseurId: string, productId: string) => {
+    const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
+    const [loading, setLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+    const { showToast } = useToast();
+    const { logActivity } = useActivity();
 
-    // Fetch suppliers on mount
     useEffect(() => {
-        const fetchSuppliers = async () => {
+        const fetchPriceHistory = async () => {
+            if (!fournisseurId || !productId) {
+                console.log("No fournisseurId or productId provided, skipping price history fetch");
+                setPriceHistory([]);
+                setError(null);
+                return;
+            }
+
+            setLoading(true);
             try {
                 const token = localStorage.getItem("token");
                 if (!token) throw new Error("No authentication token found");
-                const response = await axiosClient.get("/fournisseurs", {
-                    headers: { Authorization: `Bearer ${token}` },
+                // Attempt to fetch price history; adjust endpoint if needed
+                const response = await axiosClient.get(`/fournisseurs/${fournisseurId}/produits/${productId}/price-history`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
                 });
-                setSuppliers(response.data.data.map((s: any) => ({ id: s.id, name: s.name || `Fournisseur ${s.id}` })));
+                console.log(`Fetched price history for fournisseur ${fournisseurId}, product ${productId}:`, response.data);
+                const fetchedPriceHistory: PriceHistory[] = response.data.data?.map((entry: any) => ({
+                    id: entry.id,
+                    price: parseFloat(entry.price) || 0,
+                    date: entry.date || new Date().toISOString(),
+                    negotiatedBy: entry.negotiatedBy || "unknown",
+                    notes: entry.notes || "",
+                })) || [];
+                setPriceHistory(fetchedPriceHistory);
+                setError(null);
             } catch (error: any) {
-                console.error("Error fetching suppliers:", error);
+                const status = error.response?.status;
+                let errorMessage = "Erreur lors de la récupération de l'historique des prix";
+                if (status === 404) {
+                    errorMessage = `Historique des prix non trouvé pour le produit ${productId} du fournisseur ${fournisseurId}`;
+                    setPriceHistory([]); // Set empty array for 404
+                } else {
+                    errorMessage = error.response?.data?.message || errorMessage;
+                }
+                console.error(`Error fetching price history for product ${productId} of fournisseur ${fournisseurId}:`, error);
+                setError(errorMessage);
+                showToast({
+                    type: "error",
+                    title: "Erreur",
+                    message: errorMessage,
+                    duration: 5000,
+                });
+            } finally {
+                setLoading(false);
             }
         };
-        fetchSuppliers();
-    }, []);
+        fetchPriceHistory();
+    }, [fournisseurId, productId, showToast]);
 
-    // Reset products and selected product when supplier changes
-    useEffect(() => {
-        setSelectedProduct(null);
-        setShowPriceHistoryModal(false);
-        setPriceHistoryForm({ price: 0, date: "", negotiatedBy: "", notes: "" });
-        if (selectedSupplier?.id) {
-            fetchProducts();
-        }
-    }, [selectedSupplier, fetchProducts]);
-
-    const handleAddProduct = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedSupplier) return;
-        try {
-            await addProduct({
-                nomProduit: productForm.nomProduit,
-                prixNegocie: parseFloat(productForm.prixNegocie.toString()) || 0,
-                conditionnement: productForm.conditionnement,
-                delaiApprovisionnement: productForm.delaiApprovisionnement,
+    const add = async (data: PriceHistoryDto): Promise<PriceHistory> => {
+        if (!fournisseurId || !productId) {
+            const errorMessage = "fournisseurId or productId is missing";
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
             });
-            setProductForm({ nomProduit: "", prixNegocie: 0, conditionnement: "", delaiApprovisionnement: "" });
-        } catch (err) {
-            // Error handled by useProducts
+            throw new Error(errorMessage);
         }
-    };
 
-    const handleSavePriceHistory = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedSupplier || !selectedProduct) return;
+        setLoading(true);
         try {
-            const priceHistoryData: PriceHistoryDto = {
-                price: parseFloat(priceHistoryForm.price.toString()) || 0,
-                date: priceHistoryForm.date || new Date().toISOString(),
-                negotiatedBy: priceHistoryForm.negotiatedBy || "unknown",
-                notes: priceHistoryForm.notes,
+            const token = localStorage.getItem("token");
+            if (!token) throw new Error("No authentication token found");
+            const response = await axiosClient.post(`/fournisseurs/${fournisseurId}/produits/${productId}/price-history`, {
+                price: data.price,
+                date: data.date || new Date().toISOString(),
+                negotiatedBy: data.negotiatedBy || "unknown",
+                notes: data.notes || "",
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log(`Added price history for product ${productId}:`, response.data);
+            const newPriceHistory: PriceHistory = {
+                id: response.data.data.id,
+                price: parseFloat(response.data.data.price) || 0,
+                date: response.data.data.date || new Date().toISOString(),
+                negotiatedBy: response.data.data.negotiatedBy || "unknown",
+                notes: response.data.data.notes || "",
             };
-            await addPriceHistory(priceHistoryData);
-            // Update product's prixNegocie if changed
-            if (priceHistoryData.price !== selectedProduct.prixNegocie) {
-                await updateProduct(selectedProduct.id, {
-                    nomProduit: selectedProduct.nomProduit,
-                    prixNegocie: priceHistoryData.price,
-                    conditionnement: selectedProduct.conditionnement,
-                    delaiApprovisionnement: selectedProduct.delaiApprovisionnement,
-                });
-            }
-            setShowPriceHistoryModal(false);
-            setPriceHistoryForm({ price: 0, date: "", negotiatedBy: "", notes: "" });
-        } catch (err) {
-            // Error handled by usePriceHistory
+            // Refetch to ensure UI consistency
+            const fetchResponse = await axiosClient.get(`/fournisseurs/${fournisseurId}/produits/${productId}/price-history`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setPriceHistory(fetchResponse.data.data?.map((entry: any) => ({
+                id: entry.id,
+                price: parseFloat(entry.price) || 0,
+                date: entry.date || new Date().toISOString(),
+                negotiatedBy: entry.negotiatedBy || "unknown",
+                notes: entry.notes || "",
+            })) || []);
+            showToast({
+                type: "success",
+                title: "Historique des prix mis à jour",
+                message: `Nouveau prix ajouté: €${data.price}`,
+                duration: 3000,
+            });
+            logActivity({
+                type: "create",
+                module: "Historique des prix",
+                description: `Nouveau prix ajouté pour le produit ${productId}: €${data.price}`,
+                userId: localStorage.getItem("nexsaas_user")
+                    ? JSON.parse(localStorage.getItem("nexsaas_user")!)?.id || "unknown"
+                    : "unknown",
+                metadata: { fournisseurId, productId, price: data.price },
+            });
+            return newPriceHistory;
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || "Erreur lors de l'ajout de l'historique des prix";
+            console.error(`Error adding price history for product ${productId} of fournisseur ${fournisseurId}:`, error);
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw error;
+        } finally {
+            setLoading(false);
         }
     };
 
-    return (
-        <div className="p-4">
-            {/* Supplier selection */}
-            <select
-                value={selectedSupplier?.id || ""}
-                onChange={(e) => {
-                    const supplier = suppliers.find((s) => s.id === e.target.value) || null;
-                    setSelectedSupplier(supplier);
-                }}
-                className="border rounded p-2 mb-4"
-            >
-                <option value="">Sélectionner un fournisseur</option>
-                {suppliers.map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                        {supplier.name}
-                    </option>
-                ))}
-            </select>
+    const update = async (priceHistoryId: string, data: Partial<PriceHistoryDto>): Promise<PriceHistory> => {
+        if (!fournisseurId || !productId) {
+            const errorMessage = "fournisseurId or productId is missing";
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw new Error(errorMessage);
+        }
 
-            {/* Product creation form */}
-            {selectedSupplier && (
-                <form onSubmit={handleAddProduct} className="mb-4">
-                    <input
-                        type="text"
-                        value={productForm.nomProduit}
-                        onChange={(e) => setProductForm({ ...productForm, nomProduit: e.target.value })}
-                        placeholder="Nom du produit"
-                        className="border rounded p-2 mr-2"
-                    />
-                    <input
-                        type="number"
-                        value={productForm.prixNegocie}
-                        onChange={(e) => setProductForm({ ...productForm, prixNegocie: parseFloat(e.target.value) || 0 })}
-                        placeholder="Prix négocié"
-                        className="border rounded p-2 mr-2"
-                    />
-                    <input
-                        type="text"
-                        value={productForm.conditionnement}
-                        onChange={(e) => setProductForm({ ...productForm, conditionnement: e.target.value })}
-                        placeholder="Conditionnement"
-                        className="border rounded p-2 mr-2"
-                    />
-                    <input
-                        type="text"
-                        value={productForm.delaiApprovisionnement}
-                        onChange={(e) => setProductForm({ ...productForm, delaiApprovisionnement: e.target.value })}
-                        placeholder="Délai d'approvisionnement"
-                        className="border rounded p-2 mr-2"
-                    />
-                    <Button type="submit" disabled={loading || !selectedSupplier}>Ajouter Produit</Button>
-                </form>
-            )}
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            if (!token) throw new Error("No authentication token found");
+            const response = await axiosClient.put(`/fournisseurs/${fournisseurId}/produits/${productId}/price-history/${priceHistoryId}`, {
+                price: data.price,
+                date: data.date,
+                negotiatedBy: data.negotiatedBy,
+                notes: data.notes,
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log(`Updated price history ${priceHistoryId} for product ${productId}:`, response.data);
+            const updatedPriceHistory: PriceHistory = {
+                id: response.data.data.id,
+                price: parseFloat(response.data.data.price) || 0,
+                date: response.data.data.date || new Date().toISOString(),
+                negotiatedBy: response.data.data.negotiatedBy || "unknown",
+                notes: response.data.data.notes || "",
+            };
+            // Refetch to ensure UI consistency
+            const fetchResponse = await axiosClient.get(`/fournisseurs/${fournisseurId}/produits/${productId}/price-history`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setPriceHistory(fetchResponse.data.data?.map((entry: any) => ({
+                id: entry.id,
+                price: parseFloat(entry.price) || 0,
+                date: entry.date || new Date().toISOString(),
+                negotiatedBy: entry.negotiatedBy || "unknown",
+                notes: entry.notes || "",
+            })) || []);
+            showToast({
+                type: "success",
+                title: "Historique des prix mis à jour",
+                message: `Prix modifié: €${data.price || updatedPriceHistory.price}`,
+                duration: 3000,
+            });
+            logActivity({
+                type: "update",
+                module: "Historique des prix",
+                description: `Prix modifié pour le produit ${productId}: €${data.price || updatedPriceHistory.price}`,
+                userId: localStorage.getItem("nexsaas_user")
+                    ? JSON.parse(localStorage.getItem("nexsaas_user")!)?.id || "unknown"
+                    : "unknown",
+                metadata: { fournisseurId, productId, price: data.price || updatedPriceHistory.price },
+            });
+            return updatedPriceHistory;
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || "Erreur lors de la mise à jour de l'historique des prix";
+            console.error(`Error updating price history ${priceHistoryId} for product ${productId} of fournisseur ${fournisseurId}:`, error);
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    };
 
-            {/* Product list */}
-            {loading && <p>Chargement...</p>}
-            {error && <p className="text-red-500">Erreur: {error}</p>}
-            {selectedSupplier && (
-                <ul className="space-y-2">
-                    {products.map((product) => (
-                        <li key={product.id} className="border rounded p-2 flex justify-between items-center">
-                            <div>
-                                <p>{product.nomProduit} - €{product.prixNegocie.toFixed(2)}</p>
-                                <p>Conditionnement: {product.conditionnement}</p>
-                                <p>Délai: {product.delaiApprovisionnement}</p>
-                            </div>
-                            <div className="space-x-2">
-                                <Button onClick={() => { setSelectedProduct(product); setShowPriceHistoryModal(true); }} disabled={loading}>
-                                    Gérer l'historique des prix
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    onClick={async () => {
-                                        if (confirm("Supprimer ce produit ?")) {
-                                            await removeProduct(product.id);
-                                        }
-                                    }}
-                                    disabled={loading}
-                                >
-                                    Supprimer
-                                </Button>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-            )}
+    const remove = async (priceHistoryId: string): Promise<void> => {
+        if (!fournisseurId || !productId) {
+            const errorMessage = "fournisseurId or productId is missing";
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw new Error(errorMessage);
+        }
 
-            {/* Price history modal */}
-            {showPriceHistoryModal && selectedProduct && (
-                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
-                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg w-1/2">
-                        <h3 className="text-lg font-bold">Historique des prix pour {selectedProduct.nomProduit}</h3>
-                        {priceLoading && <p>Chargement...</p>}
-                        {priceError && <p className="text-red-500">Erreur: {priceError}</p>}
-                        {priceHistory.map((entry) => (
-                            <div key={entry.id} className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3 mb-2">
-                                <p>Prix: €{entry.price.toFixed(2)} • Date: {new Date(entry.date).toLocaleDateString()}</p>
-                                <p>Négocié par: {entry.negotiatedBy} • Notes: {entry.notes || "Aucune note"}</p>
-                                <div className="flex space-x-2 mt-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                            setPriceHistoryForm({
-                                                price: entry.price,
-                                                date: entry.date.split("T")[0],
-                                                negotiatedBy: entry.negotiatedBy,
-                                                notes: entry.notes,
-                                            });
-                                        }}
-                                    >
-                                        Modifier
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={async () => {
-                                            if (confirm("Supprimer cette entrée ?")) {
-                                                await removePriceHistory(entry.id);
-                                            }
-                                        }}
-                                    >
-                                        Supprimer
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                        <form onSubmit={handleSavePriceHistory} className="mt-4">
-                            <input
-                                type="number"
-                                value={priceHistoryForm.price}
-                                onChange={(e) => setPriceHistoryForm({ ...priceHistoryForm, price: parseFloat(e.target.value) || 0 })}
-                                placeholder="Prix"
-                                className="border rounded p-2 mr-2"
-                            />
-                            <input
-                                type="date"
-                                value={priceHistoryForm.date}
-                                onChange={(e) => setPriceHistoryForm({ ...priceHistoryForm, date: e.target.value })}
-                                className="border rounded p-2 mr-2"
-                            />
-                            <input
-                                type="text"
-                                value={priceHistoryForm.negotiatedBy}
-                                onChange={(e) => setPriceHistoryForm({ ...priceHistoryForm, negotiatedBy: e.target.value })}
-                                placeholder="Négocié par"
-                                className="border rounded p-2 mr-2"
-                            />
-                            <textarea
-                                value={priceHistoryForm.notes}
-                                onChange={(e) => setPriceHistoryForm({ ...priceHistoryForm, notes: e.target.value })}
-                                placeholder="Notes"
-                                className="border rounded p-2 w-full"
-                            />
-                            <Button type="submit" disabled={priceLoading}>Ajouter/Modifier</Button>
-                            <Button
-                                variant="outline"
-                                onClick={() => setShowPriceHistoryModal(false)}
-                                className="ml-2"
-                            >
-                                Fermer
-                            </Button>
-                        </form>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            if (!token) throw new Error("No authentication token found");
+            await axiosClient.delete(`/fournisseurs/${fournisseurId}/produits/${productId}/price-history/${priceHistoryId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log(`Deleted price history ${priceHistoryId} for product ${productId}`);
+            // Refetch to ensure UI consistency
+            const fetchResponse = await axiosClient.get(`/fournisseurs/${fournisseurId}/produits/${productId}/price-history`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setPriceHistory(fetchResponse.data.data?.map((entry: any) => ({
+                id: entry.id,
+                price: parseFloat(entry.price) || 0,
+                date: entry.date || new Date().toISOString(),
+                negotiatedBy: entry.negotiatedBy || "unknown",
+                notes: entry.notes || "",
+            })) || []);
+            showToast({
+                type: "success",
+                title: "Historique des prix mis à jour",
+                message: "Entrée de prix supprimée",
+                duration: 3000,
+            });
+            logActivity({
+                type: "delete",
+                module: "Historique des prix",
+                description: `Entrée de prix supprimée pour le produit ${productId}`,
+                userId: localStorage.getItem("nexsaas_user")
+                    ? JSON.parse(localStorage.getItem("nexsaas_user")!)?.id || "unknown"
+                    : "unknown",
+                metadata: { fournisseurId, productId },
+            });
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || "Erreur lors de la suppression de l'historique des prix";
+            console.error(`Error deleting price history ${priceHistoryId} for product ${productId} of fournisseur ${fournisseurId}:`, error);
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return { priceHistory, add, update, remove, loading, error };
 };
 
-export default SuppliersPage;
+export interface ProductDto {
+    nomProduit: string;
+    prixNegocie: number;
+    conditionnement: string;
+    delaiApprovisionnement: string;
+}
+
+export interface Product {
+    id: string;
+    nomProduit: string;
+    prixNegocie: number;
+    conditionnement: string;
+    delaiApprovisionnement: string;
+    fournisseurId: string;
+    createdAt: string;
+    priceHistory: PriceHistory[];
+}
+
+export const useProducts = (fournisseurId: string) => {
+    const [products, setProducts] = useState<Product[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const { showToast } = useToast();
+    const { logActivity } = useActivity();
+
+    const fetchProducts = async () => {
+        if (!fournisseurId) {
+            console.log("No fournisseurId provided, skipping product fetch");
+            setProducts([]);
+            setError(null);
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            if (!token) throw new Error("No authentication token found");
+            const response = await axiosClient.get(`/fournisseurs/${fournisseurId}/produits`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log(`Fetched products for fournisseur ${fournisseurId}:`, response.data);
+            const fetchedProducts: Product[] = response.data.data.map((product: any) => ({
+                id: product.id,
+                nomProduit: product.nomProduit || "",
+                prixNegocie: parseFloat(product.prixNegocie) || 0,
+                conditionnement: product.conditionnement || "",
+                delaiApprovisionnement: product.delaiApprovisionnement || "",
+                fournisseurId: product.fournisseurId || fournisseurId,
+                createdAt: product.createdAt || new Date().toISOString(),
+                priceHistory: product.priceHistory ? product.priceHistory.map((ph: any) => ({
+                    id: ph.id,
+                    price: parseFloat(ph.price) || 0,
+                    date: ph.date || new Date().toISOString(),
+                    negotiatedBy: ph.negotiatedBy || "unknown",
+                    notes: ph.notes || "",
+                })) : [],
+            }));
+            setProducts(fetchedProducts);
+            setError(null);
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || "Erreur lors du chargement des produits";
+            console.error(`Error fetching products for fournisseurId ${fournisseurId}:`, error);
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchProducts();
+    }, [fournisseurId]);
+
+    const add = async (data: ProductDto): Promise<Product> => {
+        if (!fournisseurId) {
+            const errorMessage = "fournisseurId is missing";
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw new Error(errorMessage);
+        }
+
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            if (!token) throw new Error("No authentication token found");
+            const response = await axiosClient.post(`/fournisseurs/${fournisseurId}/produits`, {
+                nomProduit: data.nomProduit,
+                prixNegocie: data.prixNegocie,
+                conditionnement: data.conditionnement,
+                delaiApprovisionnement: data.delaiApprovisionnement,
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log(`Added product for fournisseur ${fournisseurId}:`, response.data);
+            const newProduct: Product = {
+                id: response.data.id,
+                nomProduit: response.data.nomProduit || "",
+                prixNegocie: parseFloat(response.data.prixNegocie) || 0,
+                conditionnement: response.data.conditionnement || "",
+                delaiApprovisionnement: response.data.delaiApprovisionnement || "",
+                fournisseurId: response.data.fournisseurId || fournisseurId,
+                createdAt: response.data.createdAt || new Date().toISOString(),
+                priceHistory: response.data.priceHistory ? response.data.priceHistory.map((ph: any) => ({
+                    id: ph.id,
+                    price: parseFloat(ph.price) || 0,
+                    date: ph.date || new Date().toISOString(),
+                    negotiatedBy: ph.negotiatedBy || "unknown",
+                    notes: ph.notes || "",
+                })) : [],
+            };
+
+            // Add initial price history entry
+            const { add: addPriceHistory } = usePriceHistory(fournisseurId, newProduct.id);
+            const priceHistoryData: PriceHistoryDto = {
+                price: newProduct.prixNegocie,
+                date: new Date().toISOString(),
+                negotiatedBy: localStorage.getItem("nexsaas_user")
+                    ? JSON.parse(localStorage.getItem("nexsaas_user")!)?.name || "unknown"
+                    : "unknown",
+                notes: `Prix initial pour ${newProduct.nomProduit}`,
+            };
+            await addPriceHistory(priceHistoryData);
+
+            // Refetch products to include updated priceHistory
+            await fetchProducts();
+            showToast({
+                type: "success",
+                title: "Produit ajouté",
+                message: `Produit ${newProduct.nomProduit} ajouté avec succès pour le fournisseur ${fournisseurId}`,
+                duration: 3000,
+            });
+            logActivity({
+                type: "create",
+                module: "Produits",
+                description: `Nouveau produit ajouté: ${newProduct.nomProduit} pour le fournisseur ${fournisseurId}`,
+                userId: localStorage.getItem("nexsaas_user")
+                    ? JSON.parse(localStorage.getItem("nexsaas_user")!)?.id || "unknown"
+                    : "unknown",
+                metadata: { fournisseurId, productId: newProduct.id, prixNegocie: newProduct.prixNegocie },
+            });
+            return newProduct;
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || "Erreur lors de l'ajout du produit";
+            console.error(`Error adding product for fournisseur ${fournisseurId}:`, error);
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const update = async (productId: string, data: Partial<ProductDto>): Promise<Product> => {
+        if (!fournisseurId) {
+            const errorMessage = "fournisseurId is missing";
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw new Error(errorMessage);
+        }
+
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            if (!token) throw new Error("No authentication token found");
+            const response = await axiosClient.put(`/fournisseurs/${fournisseurId}/produits/${productId}`, {
+                nomProduit: data.nomProduit,
+                prixNegocie: data.prixNegocie,
+                conditionnement: data.conditionnement,
+                delaiApprovisionnement: data.delaiApprovisionnement,
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log(`Updated product ${productId} for fournisseur ${fournisseurId}:`, response.data);
+            const updatedProduct: Product = {
+                id: response.data.id,
+                nomProduit: response.data.nomProduit || "",
+                prixNegocie: parseFloat(response.data.prixNegocie) || 0,
+                conditionnement: response.data.conditionnement || "",
+                delaiApprovisionnement: response.data.delaiApprovisionnement || "",
+                fournisseurId: response.data.fournisseurId || fournisseurId,
+                createdAt: response.data.createdAt || new Date().toISOString(),
+                priceHistory: response.data.priceHistory ? response.data.priceHistory.map((ph: any) => ({
+                    id: ph.id,
+                    price: parseFloat(ph.price) || 0,
+                    date: ph.date || new Date().toISOString(),
+                    negotiatedBy: ph.negotiatedBy || "unknown",
+                    notes: ph.notes || "",
+                })) : [],
+            };
+
+            // Add price history entry if prixNegocie changed
+            const currentProduct = products.find((p) => p.id === productId);
+            if (currentProduct && data.prixNegocie && currentProduct.prixNegocie !== data.prixNegocie) {
+                const { add: addPriceHistory } = usePriceHistory(fournisseurId, productId);
+                const priceHistoryData: PriceHistoryDto = {
+                    price: data.prixNegocie,
+                    date: new Date().toISOString(),
+                    negotiatedBy: localStorage.getItem("nexsaas_user")
+                        ? JSON.parse(localStorage.getItem("nexsaas_user")!)?.name || "unknown"
+                        : "unknown",
+                    notes: `Mise à jour du prix pour ${updatedProduct.nomProduit}`,
+                };
+                await addPriceHistory(priceHistoryData);
+            }
+
+            // Refetch products to include updated priceHistory
+            await fetchProducts();
+            showToast({
+                type: "success",
+                title: "Produit mis à jour",
+                message: `Produit ${updatedProduct.nomProduit} mis à jour avec succès pour le fournisseur ${fournisseurId}`,
+                duration: 3000,
+            });
+            logActivity({
+                type: "update",
+                module: "Produits",
+                description: `Produit mis à jour: ${updatedProduct.nomProduit} pour le fournisseur ${fournisseurId}`,
+                userId: localStorage.getItem("nexsaas_user")
+                    ? JSON.parse(localStorage.getItem("nexsaas_user")!)?.id || "unknown"
+                    : "unknown",
+                metadata: { fournisseurId, productId, prixNegocie: updatedProduct.prixNegocie },
+            });
+            return updatedProduct;
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || "Erreur lors de la mise à jour du produit";
+            console.error(`Error updating product ${productId} for fournisseur ${fournisseurId}:`, error);
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const remove = async (productId: string): Promise<void> => {
+        if (!fournisseurId) {
+            const errorMessage = "fournisseurId is missing";
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw new Error(errorMessage);
+        }
+
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            if (!token) throw new Error("No authentication token found");
+            await axiosClient.delete(`/fournisseurs/${fournisseurId}/produits/${productId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            console.log(`Deleted product ${productId} for fournisseur ${fournisseurId}`);
+            // Refetch products to ensure UI reflects the latest data
+            await fetchProducts();
+            showToast({
+                type: "success",
+                title: "Produit supprimé",
+                message: `Produit ${productId} supprimé avec succès pour le fournisseur ${fournisseurId}`,
+                duration: 3000,
+            });
+            logActivity({
+                type: "delete",
+                module: "Produits",
+                description: `Produit supprimé: ${productId} pour le fournisseur ${fournisseurId}`,
+                userId: localStorage.getItem("nexsaas_user")
+                    ? JSON.parse(localStorage.getItem("nexsaas_user")!)?.id || "unknown"
+                    : "unknown",
+                metadata: { fournisseurId, productId },
+            });
+            setError(null);
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || "Erreur lors de la suppression du produit";
+            console.error(`Error deleting product ${productId} for fournisseur ${fournisseurId}:`, error);
+            setError(errorMessage);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 5000,
+            });
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return { products, add, update, remove, loading, error, fetchProducts };
+};
