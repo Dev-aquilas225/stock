@@ -24,6 +24,7 @@ export const useFournisseurs = () => {
             try {
                 const data = await fetchFournisseurs();
                 setFournisseurs(data);
+                console.log(data)
             } catch (err: any) {
                 const errorMessage =
                     err.response?.data?.message ||
@@ -102,3 +103,5 @@ export const useFournisseurs = () => {
 
     return { add, fetchFournisseurs, fournisseurs, loading, error };
 };
+export type { Fournisseur };
+
