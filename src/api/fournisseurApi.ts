@@ -1,204 +1,259 @@
+// src/api/fournisseurApi.ts
+
+import { Devise } from "../types";
 import axiosClient from "./axiosClient";
 
-<<<<<<< HEAD
-// Interface for Produit
-export interface Produit {
-    id: number;
-    nomProduit: string;
-    prixNegocie: string;
-    conditionnement: string;
-    delaiApprovisionnement: string;
-    creeLe: string;
-    image: string | null;
-    sku: string;
-    datePeremption: string | null;
-    majLe: string;
-}
 
-// Interface for FournisseurDto (used for POST requests)
-export interface FournisseurDto {
+export interface CreateFournisseurDto {
     nom: string;
     adresse: string;
     email: string;
     telephone: string;
     categorie: "1" | "2";
     delaiLivraison: string;
-    remise: string;
-    minimumCommande: number | null;
 }
 
-// Interface for Fournisseur (matches API response)
-||||||| c0eb2be
-export interface FournisseurDto {
-    nom: string;
-    adresse: string;
-    email: string;
-    telephone: string;
-    categorie: "1" | "2";
-    delaiLivraison: string;
-    remise: string;
-    minimumCommande: number;
-}
-
-=======
->>>>>>> 688b5ce10d9a8c12626fce19113584cc6933af17
+// Interface pour un fournisseur dans la liste
 export interface Fournisseur {
     id: number;
     nom: string;
     adresse: string;
-    email: string;
     telephone: string;
-    categorie: "1" | "2";
+    email: string;
+    categorie: string;
     delaiLivraison: string;
-    remise: string;
-    minimumCommande: number | null;
-    produits: Produit[];
-    contacts: unknown[];
-    evaluation: unknown | null;
-    interactions: unknown[];
     isDeleted: boolean;
     creeLe: string;
+    produits: Produit[];
+    contacts: any[];
+    interactions: any[];
+    evaluation: Evaluation;
 }
 
-// Fetch all fournisseurs
-export const fetchFournisseurs = async (): Promise<Fournisseur[]> => {
-    const token = localStorage.getItem("token");
-<<<<<<< HEAD
-    if (!token) {
-        throw new Error("No token found");
-    }
-    const response = await axiosClient.get("/fournisseurs", {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
-    return response.data.data;
-||||||| c0eb2be
-    const response = await axiosClient.get("fournisseurs", {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
-    return response.data.data;
-=======
-    if (!token) throw new Error("No authentication token found");
+export interface Evaluation {
+    id: number;
+    note: number;
+    done: boolean;
+    commentaire: string;
+    creeLe: Date;
+}
 
+export interface Produit {
+    id: number;
+    nom: string;
+    prix: string;
+    devise: Devise;
+    conditionnement: string;
+    delaiApprovisionnement: string;
+    sku: string;
+    creeLe: string;
+    majLe: string;
+    priceHistory?: {
+        id: string;
+        price: number;
+        date: any;
+        negotiatedBy: string;
+        notes: string;
+    }[];
+}
+
+// Interface pour les détails d’un fournisseur (différence = évaluationId)
+export interface FournisseurDetail extends Omit<Fournisseur, "evaluation"> {
+    evaluationId: number;
+}
+
+// ➕ Ajouter un fournisseur
+export const addFournisseur = async (fournisseurData: CreateFournisseurDto) => {
+    const token = localStorage.getItem("token");
     try {
-        const response = await axiosClient.get("fournisseurs", {
+        const response = await axiosClient.post(
+            "/fournisseurs",
+            fournisseurData,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            },
+        );
+        return response.data.data;
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de l'ajout du fournisseur";
+        throw new Error(errorMessage);
+    }
+};
+
+export type UpdateFournisseurDto = Partial<CreateFournisseurDto>;
+
+// ✏️ Modifier un fournisseur
+export const updateFournisseur = async (
+    id: number,
+    fournisseurData: UpdateFournisseurDto,
+) => {
+    const token = localStorage.getItem("token");
+    try {
+        const response = await axiosClient.patch(
+            `/fournisseurs/${id}`,
+            fournisseurData,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            },
+        );
+        return response.data.data;
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de la modification du fournisseur";
+        throw new Error(errorMessage);
+    }
+};
+
+// 📥 Récupérer tous les fournisseurs
+export const getFournisseurs = async (): Promise<Fournisseur[]> => {
+    const token = localStorage.getItem("token");
+    try {
+        const response = await axiosClient.get("/fournisseurs", {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
         });
         return response.data.data;
-    } catch (error: any) {
-        const message = error.response?.status === 401
-            ? "Non autorisé : Veuillez vous reconnecter"
-            : `Failed to fetch fournisseurs: ${error.response?.data?.message || error.message}`;
-        throw new Error(message);
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de la récupération des fournisseurs";
+        throw new Error(errorMessage);
     }
->>>>>>> 688b5ce10d9a8c12626fce19113584cc6933af17
 };
 
-<<<<<<< HEAD
-// Add a new fournisseur
-export const addFournisseur = async (
-    data: FournisseurDto,
-): Promise<Fournisseur> => {
-||||||| c0eb2be
-export const addFournisseur = async (
-    data: FournisseurDto,
-): Promise<Fournisseur> => {
-=======
-export const addFournisseur = async (data: Omit<Fournisseur, "id" | "minimumCommande" | "createdAt">): Promise<Fournisseur> => {
->>>>>>> 688b5ce10d9a8c12626fce19113584cc6933af17
+// 🔍 Récupérer un fournisseur via son ID
+export const getFournisseurById = async (
+    id: number,
+): Promise<FournisseurDetail> => {
     const token = localStorage.getItem("token");
-<<<<<<< HEAD
-    if (!token) {
-        throw new Error("No token found");
-    }
-    const response = await axiosClient.post("/fournisseurs", data, {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
-    return response.data.data; // Adjust based on actual API response structure
-||||||| c0eb2be
-    const response = await axiosClient.post("fournisseurs", data, {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
-    return response.data;
-=======
-    if (!token) throw new Error("No authentication token found");
-
     try {
-        const payload = {
-            nom: data.nom,
-            adresse: data.adresse,
-            email: data.email,
-            telephone: data.telephone,
-            categorie: data.categorie,
-            delaiLivraison: data.delaiLivraison,
-            remise: data.remise,
-        };
-        const response = await axiosClient.post("fournisseurs", payload, {
+        const response = await axiosClient.get(`/fournisseurs/${id}`, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
         });
-        return response.data;
-    } catch (error: any) {
-        const message = error.response?.status === 401
-            ? "Non autorisé : Veuillez vous reconnecter"
-            : `Failed to add fournisseur: ${error.response?.data?.message || error.message}`;
-        throw new Error(message);
+        return response.data.data;
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de la récupération du fournisseur";
+        throw new Error(errorMessage);
     }
->>>>>>> 688b5ce10d9a8c12626fce19113584cc6933af17
 };
 
-export const updateFournisseur = async (id: string, data: Omit<Fournisseur, "id" | "minimumCommande" | "createdAt">): Promise<Fournisseur> => {
+// 📦 Récupérer tous les fournisseurs (même ceux supprimés)
+export const getAllFournisseurs = async (): Promise<Fournisseur[]> => {
     const token = localStorage.getItem("token");
-    if (!token) throw new Error("No authentication token found");
-
     try {
-        const payload = {
-            nom: data.nom,
-            adresse: data.adresse,
-            email: data.email,
-            telephone: data.telephone,
-            categorie: data.categorie,
-            delaiLivraison: data.delaiLivraison,
-            remise: data.remise,
-        };
-        const response = await axiosClient.put(`fournisseurs/${id}`, payload, {
+        const response = await axiosClient.get("/fournisseurs/all", {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
         });
-        return response.data;
-    } catch (error: any) {
-        const message = error.response?.status === 401
-            ? "Non autorisé : Veuillez vous reconnecter"
-            : `Failed to update fournisseur: ${error.response?.data?.message || error.message}`;
-        throw new Error(message);
+        console.log(response.data.data);
+
+        return response.data.data;
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de la récupération de tous les fournisseurs";
+        throw new Error(errorMessage);
     }
 };
 
-export const deleteFournisseur = async (id: string): Promise<void> => {
-    const token = localStorage.getItem("token");
-    if (!token) throw new Error("No authentication token found");
+export interface EvaluationDto {
+    note: number;
+    commentaire: string;
+}
 
+// ✏️ Noter un fournisseur
+export const evaluateFournisseur = async (
+    fournisseurId: number,
+    evaluationData: EvaluationDto,
+) => {
+    const token = localStorage.getItem("token");
     try {
-        await axiosClient.delete(`fournisseurs/${id}`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
+        const response = await axiosClient.put(
+            `/fournisseurs/${fournisseurId}/evaluations`,
+            evaluationData,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
             },
-        });
-    } catch (error: any) {
-        const message = error.response?.status === 401
-            ? "Non autorisé : Veuillez vous reconnecter"
-            : `Failed to delete fournisseur: ${error.response?.data?.message || error.message}`;
-        throw new Error(message);
+        );
+        return response.data.data;
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de l'évaluation du fournisseur";
+        throw new Error(errorMessage);
+    }
+};
+
+export interface CreateProduitDto {
+    nom: string;
+    prix: number;
+    devise: Devise;
+    conditionnement: string;
+    delaiApprovisionnement: string;
+}
+
+// ➕ Ajouter un produit à un fournisseur
+export const addProduitToFournisseur = async (
+    fournisseurId: number,
+    produitData: CreateProduitDto,
+) => {
+    const token = localStorage.getItem("token");
+    try {
+        const response = await axiosClient.post(
+            `/fournisseurs/${fournisseurId}/produits`,
+            produitData,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            },
+        );
+        return response.data.data;
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de l'ajout du produit au fournisseur";
+        throw new Error(errorMessage);
+    }
+};
+
+
+export type UpdateProduitDto = Partial<CreateProduitDto>;
+
+
+// ✏️ Modifier un fournisseur
+export const updateProduit = async (id: number, produitData: UpdateProduitDto) => {
+    const token = localStorage.getItem("token");
+    try {
+        const response = await axiosClient.patch(
+            `/fournisseurs/produits/${id}`,
+            produitData,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            },
+        );
+        return response.data.data;
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de la modification du fournisseur";
+        throw new Error(errorMessage);
     }
 };

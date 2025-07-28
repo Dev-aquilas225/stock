@@ -1,29 +1,27 @@
 import axiosClient from "./axiosClient";
+import { Devise } from "../types";
 
-export interface User {
-    id: string;
-    email: string;
-    nom: string;
-    phone: string | null;
-    prenom: string;
-    motDePasse: string;
-    role: string;
-    type: "particulier" | "entreprise";
-    selfie: string | null;
-    num_rccm: string;
-    nomEntreprise: string;
-    actif: boolean;
-    description: string;
-    verified: boolean;
-    docsValides: boolean;
+export interface Commande {
+    id: number;
+    reference: string;
+    fournisseur: Fournisseur;
+    statut: StatutCommande;
+    note: string;
+    dateLivraisonEstimee: string;
+    produits: ProduitCommande[];
+    montantTotal: string;
+    montantTotalConverti: string;
+    deviseConvertion: Devise;
     creeLe: string;
+    majLe: string;
 }
 
-export interface Client {
-    id: string;
-    user: User;
-    abonnementActif: boolean;
-    type: "particulier" | "entreprise";
+export enum StatutCommande {
+    BROUILLON = "BROUILLON",
+    VALIDEE = "VALIDEE",
+    REÇUE = "REÇUE",
+    ANNULEE = "ANNULEE",
+    CLOTUREE = "CLOTUREE",
 }
 
 export interface Fournisseur {
@@ -32,226 +30,100 @@ export interface Fournisseur {
     adresse: string;
     telephone: string;
     email: string;
-    categorie: "1" | "2";
+    categorie: string;
     delaiLivraison: string;
-    remise: string;
-    minimumCommande: number | null;
-    client: Client;
     isDeleted: boolean;
     creeLe: string;
 }
 
-export interface ProduitItem {
+export interface ProduitCommande {
     id: number;
-    nomProduit: string;
-    prixNegocie: string;
-    conditionnement: string;
-    delaiApprovisionnement: string;
-    creeLe: string;
-    image: string;
-    sku: string;
-    datePeremption: string | null;
-    majLe: string;
-}
-
-export interface CommandeProduit {
-    id: number;
-    produit: ProduitItem;
+    produit: Produit;
+    prixBase: string;
     prixNegocie: string;
     quantite: number;
+    montantTotal: string;
+    devise: Devise;
+    montantTotalConverti: string;
+    deviseConvertion: Devise;
     sku: string;
     lot: string;
-    datePeremption: string | null;
     conditionnement: string;
+    quantiteRecue: number;
+    quantiteEndommage: number;
+    dateReception: string | null;
+    commentaireReception: string | null;
+    quantiteRetournee: number;
+    dateRetour: string | null;
+    motifRetour: string | null;
+    statutRetour: string | null;
 }
 
-export interface ReceptionProduit {
+export interface Produit {
     id: number;
-    nomProduit: string;
-    quantiteReçue: string;
-    commentaire: string | null;
-    photo: string | null;
-    ecart: boolean;
+    nom: string;
+    prix: string;
     conditionnement: string;
-    creeLe: string;
-}
-
-export interface Reception {
-    id: number;
-    utilisateur: User;
-    receptionComplete: boolean;
-    signatureLivreur: string | null;
-    valide: boolean;
-    produits: ReceptionProduit[];
-    creeLe: string;
-}
-
-export interface RetourProduit {
-    id: number;
-    receptionProduit: ReceptionProduit;
-    quantite: number;
-    raisonRetour: string;
-    creeLe: string;
-}
-
-export interface Retour {
-    id: number;
-    commande: {
-        id: number;
-        reference: string;
-        statut: string;
-        note: string;
-        dateLivraisonEstimee: string;
-        creeLe: string;
-        majLe: string;
-    };
-    produits: RetourProduit[];
-    motif: string;
-    statut: string;
-    documentTransportUrl: string | null;
-    creePar: User;
-    creeLe: string;
-}
-
-export interface Commande {
-    id: number;
-    reference: string;
-    fournisseur: Fournisseur;
-    statut: string;
-    note: string;
-    dateLivraisonEstimee: string;
-    produits: CommandeProduit[];
-    reception: Reception | null;
-    retour: Retour | null;
+    delaiApprovisionnement: string;
+    devise: Devise;
     creeLe: string;
     majLe: string;
+    sku: string;
+    image: string | null;
 }
 
-export interface UpdateProduitReceptionDto {
-    quantiteReçue?: number;
-    conditionnement?: string;
-    remarques?: string;
-}
-
-export const fetchCommandes = async (): Promise<Commande[]> => {
+// 📥 Récupérer toutes les commandes
+export const getCommandes = async (): Promise<Commande[]> => {
     const token = localStorage.getItem("token");
-    const response = await axiosClient.get("/commandes", {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
-    return response.data.data;
-};
 
-export interface CommandeCreateInput {
-    fournisseurId: number;
-    dateLivraisonEstimee: string;
-    note: string;
-    statut: string;
-    produits: {
-        produitId: number;
-        prixUnitaire: number;
-        quantite: number;
-        conditionnement: string;
-    }[];
-}
-
-export const addCommande = async (
-    commandeData: CommandeCreateInput,
-): Promise<Commande> => {
-    const token = localStorage.getItem("token");
     try {
-        const response = await axiosClient.post("/commandes", commandeData, {
+        const response = await axiosClient.get("/commandes", {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
         });
+
         return response.data.data;
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de la récupération des commandes";
+        throw new Error(errorMessage);
+    }
+};
+
+export interface ProduitCommandeInput {
+    produitId: number;
+    prixNegocie: number;
+    devise: Devise;
+    quantite: number;
+    conditionnement: string;
+}
+
+export interface CreateCommandePayload {
+    fournisseurId: number;
+    dateLivraisonEstimee: string;
+    note: string;
+    produits: ProduitCommandeInput[];
+}
+
+export const createCommande = async (
+    data: CreateCommandePayload,
+): Promise<any> => {
+    const token = localStorage.getItem("token");
+
+    try {
+        const response = await axiosClient.post("/commandes", data, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+
+        return response.data; // ou .data.data selon ton backend
     } catch (err: any) {
         const errorMessage =
             err.response?.data?.message ||
             "Erreur lors de la création de la commande";
-        throw new Error(errorMessage);
-    }
-};
-
-export const updateCommandeStatus = async (
-    commandeId: number,
-    statut: string,
-): Promise<Commande> => {
-    const token = localStorage.getItem("token");
-    try {
-        const response = await axiosClient.patch(
-            `/commandes/${commandeId}/statut`,
-            { statut },
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            },
-        );
-        return response.data.data;
-    } catch (err: any) {
-        const errorMessage =
-            err.response?.data?.message ||
-            "Erreur lors de la mise à jour du statut de la commande";
-        throw new Error(errorMessage);
-    }
-};
-
-export const modifierProduitReception = async (
-    produitId: number,
-    dto: UpdateProduitReceptionDto,
-): Promise<ReceptionProduit> => {
-    const token = localStorage.getItem("token");
-    try {
-        const response = await axiosClient.patch(
-            `receptions/produits/${produitId}`,
-            dto,
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            },
-        );
-        return response.data.data;
-    } catch (err: any) {
-        const errorMessage =
-            err.response?.data?.message ||
-            "Erreur lors de la modification de la réception du produit";
-        throw new Error(errorMessage);
-    }
-};
-
-export interface CreateRetourDto {
-    commandeId: number;
-    motif: string;
-    produits: {
-        receptionProduitId: number;
-        quantite: number;
-        raisonRetour: string;
-    }[];
-}
-
-export const createRetour = async (
-    retourData: CreateRetourDto,
-): Promise<Retour> => {
-    const token = localStorage.getItem("token");
-    try {
-        const response = await axiosClient.post(
-            "/retours-fournisseurs",
-            retourData,
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            },
-        );
-        return response.data.data;
-    } catch (err: any) {
-        const errorMessage =
-            err.response?.data?.message ||
-            "Erreur lors de la création de la demande de retour";
         throw new Error(errorMessage);
     }
 };

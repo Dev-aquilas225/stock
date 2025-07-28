@@ -78,7 +78,7 @@ export const addProduct = async (fournisseurId: string, data: ProductDto): Promi
 
 export const updateProduct = async (productId: string, data: ProductDto): Promise<Product> => {
     const token = localStorage.getItem("token");
-    const response = await axiosClient.put(`produits/${productId}`, data, {
+    const response = await axiosClient.patch(`produits/${productId}`, data, {
         headers: {
             Authorization: `Bearer ${token}`,
         },
