@@ -1,14 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { 
-  ShoppingCart, 
-  Package, 
-  TrendingUp, 
-  Users, 
-  FileText, 
-  BarChart3, 
-  CreditCard, 
+import {
+  ShoppingCart,
+  Package,
+  TrendingUp,
+  Users,
+  FileText,
+  BarChart3,
+  CreditCard,
   MessageCircle,
   ArrowUpRight,
   ArrowDownRight,
@@ -115,6 +115,14 @@ const DashboardPage: React.FC = () => {
       stats: 'Temps réel',
       link: '/activites',
     },
+    {
+      icon: Users,
+      title: 'Agents',
+      description: 'Gérer les gestionnaires et vendeurs',
+      color: 'bg-cyan-500',
+      stats: '10 agents actifs',
+      link: '/agents',
+    },
   ];
 
   const stats = [
@@ -180,9 +188,8 @@ const DashboardPage: React.FC = () => {
                   <div className="p-2 bg-nexsaas-saas-green/10 rounded-lg">
                     <stat.icon className="w-6 h-6 text-nexsaas-saas-green" />
                   </div>
-                  <div className={`flex items-center text-sm font-medium ${
-                    stat.isPositive ? 'text-green-600' : 'text-red-600'
-                  }`}>
+                  <div className={`flex items-center text-sm font-medium ${stat.isPositive ? 'text-green-600' : 'text-red-600'
+                    }`}>
                     {stat.isPositive ? (
                       <ArrowUpRight className="w-4 h-4 mr-1" />
                     ) : (
@@ -228,20 +235,18 @@ const DashboardPage: React.FC = () => {
                       </div>
                       <ChevronRight className="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                     </div>
-                    
+
                     <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2 group-hover:text-nexsaas-saas-green transition-colors">
                       {module.title}
                     </h3>
-                    
+
                     <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300 mb-3">
                       {module.description}
                     </p>
-                    
-                    <div className="mt-auto">
-                      <p className="text-xs text-nexsaas-saas-green font-medium">
-                        {module.stats}
-                      </p>
-                    </div>
+
+                    <p className="text-xs text-nexsaas-saas-green font-medium">
+                      {module.stats}
+                    </p>
                   </Card>
                 </Link>
               </motion.div>
@@ -280,6 +285,11 @@ const DashboardPage: React.FC = () => {
                 <Link to="/analytics">
                   <Button variant="outline" size="sm">
                     Générer un rapport
+                  </Button>
+                </Link>
+                <Link to="/agents">
+                  <Button variant="outline" size="sm">
+                    Ajouter un agent
                   </Button>
                 </Link>
               </div>

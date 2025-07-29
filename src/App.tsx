@@ -31,6 +31,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import DocumentsRequiredPage from './pages/DocumentsRequiredPage';
 import AccountPendingPage from './pages/AccountPendingPage';
 import SubscriptionInactivePage from './pages/SubscriptionInactivePage';
+import AgentsPage from './pages/modules/AgentsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 function AnimatedRoutes() {
@@ -52,141 +53,149 @@ function AnimatedRoutes() {
             <Route path="/mot-de-passe-oublie" element={<ForgotPasswordPage />} />
             <Route path="/reinitialiser-mot-de-passe" element={<ResetPasswordPage />} />
             <Route path="/inscription" element={<RegisterPage />} />
-            <Route 
-              path="/profil" 
+            <Route
+              path="/profil"
               element={
                 <ProtectedRoute>
                   <ProfilePage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/dashboard" 
+            <Route
+              path="/dashboard"
               element={
                 <ProtectedRoute>
                   <DashboardPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/approvisionnements" 
+            <Route
+              path="/approvisionnements"
               element={
                 <ProtectedRoute>
                   <SupplyPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/fournisseurs" 
+            <Route
+              path="/fournisseurs"
               element={
                 <ProtectedRoute>
                   <SuppliersPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/stocks" 
+            <Route
+              path="/stocks"
               element={
                 <ProtectedRoute>
                   <StockPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/ventes" 
+            <Route
+              path="/ventes"
               element={
                 <ProtectedRoute>
                   <SalesPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/commissions" 
+            <Route
+              path="/commissions"
               element={
                 <ProtectedRoute>
                   <CommissionsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/facturation" 
+            <Route
+              path="/facturation"
               element={
                 <ProtectedRoute>
                   <InvoicingPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/analytics" 
+            <Route
+              path="/analytics"
               element={
                 <ProtectedRoute>
                   <AnalyticsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/paiements" 
+            <Route
+              path="/paiements"
               element={
                 <ProtectedRoute>
                   <PaymentsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/support" 
+            <Route
+              path="/support"
               element={
                 <ProtectedRoute>
                   <SupportPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/pos" 
+            <Route
+              path="/pos"
               element={
                 <ProtectedRoute>
                   <POSPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/activites" 
+            <Route
+              path="/activites"
               element={
                 <ProtectedRoute>
                   <ActivityPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/notifications" 
+            <Route
+              path="/notifications"
               element={
                 <ProtectedRoute>
                   <NotificationsPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/documents-requis" 
+            <Route
+              path="/documents-requis"
               element={
                 <ProtectedRoute>
                   <DocumentsRequiredPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/compte-en-attente" 
+            <Route
+              path="/compte-en-attente"
               element={
                 <ProtectedRoute>
                   <AccountPendingPage />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/abonnement-inactif" 
+            <Route
+              path="/abonnement-inactif"
               element={
                 <ProtectedRoute>
                   <SubscriptionInactivePage />
                 </ProtectedRoute>
-              } 
+              }
+            />
+            <Route
+              path="/agents"
+              element={
+                <ProtectedRoute>
+                  <AgentsPage />
+                </ProtectedRoute>
+              }
             />
             {/* 404 Page - Must be last */}
             <Route path="*" element={<NotFoundPage />} />
