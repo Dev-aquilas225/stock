@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Users, Mail, Briefcase, Save, ArrowLeft, AlertCircle, Trash, ToggleLeft, ToggleRight } from 'lucide-react';
@@ -8,21 +8,13 @@ import Button from '../../components/UI/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useActivity } from '../../contexts/ActivityContext';
-
-interface Agent {
-    id: string;
-    nom: string;
-    prenom: string;
-    email: string;
-    role: 'vendeur' | 'gestionnaire';
-    actif: boolean;
-}
+import { addAgent, getAgents, deleteAgent, toggleAgentActif, Agent, CreateAgentDto, UserRole } from '../../api/agentApi';
 
 interface FormData {
     nom: string;
     prenom: string;
     email: string;
-    role: 'vendeur' | 'gestionnaire';
+    role: UserRole; // Explicitly use UserRole enum
 }
 
 const AgentsPage: React.FC = () => {
@@ -35,10 +27,31 @@ const AgentsPage: React.FC = () => {
         nom: '',
         prenom: '',
         email: '',
-        role: 'vendeur',
+        role: UserRole.VENDEUR, // Default to valid enum value
     });
     const [errors, setErrors] = useState<Record<string, string | undefined>>({});
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    // Fetch agents on mount
+    useEffect(() => {
+        const fetchAgents = async () => {
+            try {
+                setLoading(true);
+                const data = await getAgents();
+                setAgents(data);
+            } catch (err: any) {
+                showToast({
+                    type: 'error',
+                    title: 'Erreur',
+                    message: err.message || 'Erreur lors de la récupération des agents',
+                    duration: 5000,
+                });
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchAgents();
+    }, [showToast]);
 
     const validateForm = () => {
         const newErrors: Record<string, string | undefined> = {};
@@ -50,11 +63,8 @@ const AgentsPage: React.FC = () => {
         } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
             newErrors.email = 'Email invalide';
         }
-        if (!['vendeur', 'gestionnaire'].includes(formData.role)) {
+        if (!Object.values(UserRole).includes(formData.role)) {
             newErrors.role = 'Rôle invalide: choisissez Vendeur ou Gestionnaire';
-        }
-        if (agents.some((agent) => agent.email === formData.email.trim())) {
-            newErrors.email = 'Un agent avec cet email existe déjà';
         }
 
         setErrors(newErrors);
@@ -62,7 +72,10 @@ const AgentsPage: React.FC = () => {
     };
 
     const handleInputChange = (field: keyof FormData, value: string) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
+        setFormData((prev) => ({
+            ...prev,
+            [field]: field === 'role' ? value as UserRole : value, // Cast to UserRole for role field
+        }));
         if (errors[field]) {
             setErrors((prev) => ({ ...prev, [field]: undefined }));
         }
@@ -75,16 +88,16 @@ const AgentsPage: React.FC = () => {
 
         setLoading(true);
         try {
-            const newAgent: Agent = {
-                id: Math.random().toString(36).substr(2, 9), // Generate random ID
+            const agentData: CreateAgentDto = {
                 nom: formData.nom.trim(),
                 prenom: formData.prenom.trim(),
                 email: formData.email,
                 role: formData.role,
-                actif: true,
             };
 
-            setAgents((prev) => [...prev, newAgent]);
+            await addAgent(agentData);
+            const updatedAgents = await getAgents();
+            setAgents(updatedAgents);
 
             logActivity({
                 type: 'create',
@@ -101,14 +114,13 @@ const AgentsPage: React.FC = () => {
                 duration: 3000,
             });
 
-            setFormData({ nom: '', prenom: '', email: '', role: 'vendeur' });
+            setFormData({ nom: '', prenom: '', email: '', role: UserRole.VENDEUR });
             setErrors({});
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Une erreur est survenue lors de l\'opération';
+        } catch (err: any) {
             showToast({
                 type: 'error',
                 title: 'Erreur',
-                message: errorMessage,
+                message: err.message || 'Une erreur est survenue lors de l\'opération',
                 duration: 5000,
             });
         } finally {
@@ -116,12 +128,14 @@ const AgentsPage: React.FC = () => {
         }
     };
 
-    const handleDelete = async (id: string, name: string) => {
+    const handleDelete = async (id: number, name: string) => {
         if (!window.confirm(`Voulez-vous vraiment supprimer l'agent ${name} ?`)) return;
 
         setLoading(true);
         try {
-            setAgents((prev) => prev.filter((agent) => agent.id !== id));
+            await deleteAgent(id);
+            const updatedAgents = await getAgents();
+            setAgents(updatedAgents);
 
             logActivity({
                 type: 'delete',
@@ -137,12 +151,11 @@ const AgentsPage: React.FC = () => {
                 message: 'Agent supprimé avec succès',
                 duration: 3000,
             });
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Une erreur est survenue lors de la suppression';
+        } catch (err: any) {
             showToast({
                 type: 'error',
                 title: 'Erreur',
-                message: errorMessage,
+                message: err.message || 'Une erreur est survenue lors de la suppression',
                 duration: 5000,
             });
         } finally {
@@ -150,16 +163,14 @@ const AgentsPage: React.FC = () => {
         }
     };
 
-    const handleToggleStatus = async (id: string, name: string, actif: boolean) => {
+    const handleToggleStatus = async (id: number, name: string, actif: boolean) => {
         if (!window.confirm(`Voulez-vous vraiment ${actif ? 'désactiver' : 'activer'} l'agent ${name} ?`)) return;
 
         setLoading(true);
         try {
-            setAgents((prev) =>
-                prev.map((agent) =>
-                    agent.id === id ? { ...agent, actif: !actif } : agent
-                )
-            );
+            await toggleAgentActif(id);
+            const updatedAgents = await getAgents();
+            setAgents(updatedAgents);
 
             logActivity({
                 type: 'update',
@@ -175,12 +186,11 @@ const AgentsPage: React.FC = () => {
                 message: `Agent ${actif ? 'désactivé' : 'activé'} avec succès`,
                 duration: 3000,
             });
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Une erreur est survenue lors du changement de statut';
+        } catch (err: any) {
             showToast({
                 type: 'error',
                 title: 'Erreur',
-                message: errorMessage,
+                message: err.message || 'Une erreur est survenue lors du changement de statut',
                 duration: 5000,
             });
         } finally {
@@ -269,11 +279,11 @@ const AgentsPage: React.FC = () => {
                                 <div className="relative">
                                     <select
                                         value={formData.role}
-                                        onChange={(e) => handleInputChange('role', e.target.value as 'vendeur' | 'gestionnaire')}
+                                        onChange={(e) => handleInputChange('role', e.target.value)}
                                         className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none appearance-none"
                                     >
-                                        <option value="vendeur">Vendeur</option>
-                                        <option value="gestionnaire">Gestionnaire</option>
+                                        <option value={UserRole.VENDEUR}>Vendeur</option>
+                                        <option value={UserRole.GESTIONNAIRE}>Gestionnaire</option>
                                     </select>
                                     <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                                     {errors.role && (
@@ -302,7 +312,7 @@ const AgentsPage: React.FC = () => {
                             Liste des agents
                         </h2>
                         {loading && <p className="text-center text-nexsaas-vanta-black dark:text-gray-300">Chargement des agents...</p>}
-                        {agents.length === 0 && !loading && (
+                        {!loading && agents.length === 0 && (
                             <div className="text-center py-6">
                                 <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                                 <p className="text-nexsaas-vanta-black dark:text-gray-300">
@@ -353,7 +363,7 @@ const AgentsPage: React.FC = () => {
                                                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                                     <div className="flex items-center">
                                                         <Briefcase className="w-5 h-5 text-nexsaas-saas-green mr-2" />
-                                                        {agent.role === 'vendeur' ? 'Vendeur' : 'Gestionnaire'}
+                                                        {agent.role === UserRole.VENDEUR ? 'Vendeur' : 'Gestionnaire'}
                                                     </div>
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
