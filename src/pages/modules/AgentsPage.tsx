@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Users, Mail, Briefcase, Save, ArrowLeft, AlertCircle, Trash, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Users, Mail, Briefcase, Save, ArrowLeft, AlertCircle, ToggleLeft, ToggleRight } from 'lucide-react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useActivity } from '../../contexts/ActivityContext';
-import { addAgent, getAgents, deleteAgent, toggleAgentActif, Agent, CreateAgentDto, UserRole } from '../../api/agentApi';
+import { addAgent, getAgents, toggleAgentActif, Agent, CreateAgentDto, UserRole } from '../../api/agentApi';
 
 interface FormData {
     nom: string;
     prenom: string;
     email: string;
-    role: UserRole; // Explicitly use UserRole enum
+    role: UserRole;
 }
 
 const AgentsPage: React.FC = () => {
@@ -27,7 +27,7 @@ const AgentsPage: React.FC = () => {
         nom: '',
         prenom: '',
         email: '',
-        role: UserRole.VENDEUR, // Default to valid enum value
+        role: UserRole.VENDEUR,
     });
     const [errors, setErrors] = useState<Record<string, string | undefined>>({});
     const [loading, setLoading] = useState(true);
@@ -74,7 +74,7 @@ const AgentsPage: React.FC = () => {
     const handleInputChange = (field: keyof FormData, value: string) => {
         setFormData((prev) => ({
             ...prev,
-            [field]: field === 'role' ? value as UserRole : value, // Cast to UserRole for role field
+            [field]: field === 'role' ? value as UserRole : value,
         }));
         if (errors[field]) {
             setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -95,9 +95,10 @@ const AgentsPage: React.FC = () => {
                 role: formData.role,
             };
 
-            await addAgent(agentData);
-            const updatedAgents = await getAgents();
-            setAgents(updatedAgents);
+            console.debug("Envoi de l'agentData:", JSON.stringify(agentData, null, 2)); // Log payload for debugging
+
+            const newAgent = await addAgent(agentData);
+            setAgents((prev) => [...prev, newAgent]);
 
             logActivity({
                 type: 'create',
@@ -117,6 +118,10 @@ const AgentsPage: React.FC = () => {
             setFormData({ nom: '', prenom: '', email: '', role: UserRole.VENDEUR });
             setErrors({});
         } catch (err: any) {
+            console.error("Erreur dans handleSubmit:", {
+                message: err.message,
+                response: err.response?.data,
+            }); // Log error details
             showToast({
                 type: 'error',
                 title: 'Erreur',
@@ -128,49 +133,15 @@ const AgentsPage: React.FC = () => {
         }
     };
 
-    const handleDelete = async (id: number, name: string) => {
-        if (!window.confirm(`Voulez-vous vraiment supprimer l'agent ${name} ?`)) return;
-
-        setLoading(true);
-        try {
-            await deleteAgent(id);
-            const updatedAgents = await getAgents();
-            setAgents(updatedAgents);
-
-            logActivity({
-                type: 'delete',
-                module: 'Agents',
-                description: `Suppression de l'agent: ${name}`,
-                userId: user?.id ?? 'unknown',
-                metadata: { id },
-            });
-
-            showToast({
-                type: 'success',
-                title: 'Succès',
-                message: 'Agent supprimé avec succès',
-                duration: 3000,
-            });
-        } catch (err: any) {
-            showToast({
-                type: 'error',
-                title: 'Erreur',
-                message: err.message || 'Une erreur est survenue lors de la suppression',
-                duration: 5000,
-            });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleToggleStatus = async (id: number, name: string, actif: boolean) => {
+    const handleToggleStatus = async (id: string, name: string, actif: boolean) => {
         if (!window.confirm(`Voulez-vous vraiment ${actif ? 'désactiver' : 'activer'} l'agent ${name} ?`)) return;
 
         setLoading(true);
         try {
-            await toggleAgentActif(id);
-            const updatedAgents = await getAgents();
-            setAgents(updatedAgents);
+            const updatedAgent = await toggleAgentActif(id);
+            setAgents((prev) =>
+                prev.map((agent) => (agent.id === id ? updatedAgent : agent))
+            );
 
             logActivity({
                 type: 'update',
@@ -187,6 +158,10 @@ const AgentsPage: React.FC = () => {
                 duration: 3000,
             });
         } catch (err: any) {
+            console.error("Erreur dans handleToggleStatus:", {
+                message: err.message,
+                response: err.response?.data,
+            });
             showToast({
                 type: 'error',
                 title: 'Erreur',
@@ -377,30 +352,19 @@ const AgentsPage: React.FC = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
-                                                    <div className="flex gap-2">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleToggleStatus(agent.id, `${agent.nom} ${agent.prenom}`, agent.actif)}
-                                                            className={agent.actif ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800'}
-                                                            disabled={loading}
-                                                        >
-                                                            {agent.actif ? (
-                                                                <ToggleLeft className="w-4 h-4" />
-                                                            ) : (
-                                                                <ToggleRight className="w-4 h-4" />
-                                                            )}
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleDelete(agent.id, `${agent.nom} ${agent.prenom}`)}
-                                                            className="text-red-600 hover:text-red-800"
-                                                            disabled={loading}
-                                                        >
-                                                            <Trash className="w-4 h-4" />
-                                                        </Button>
-                                                    </div>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleToggleStatus(agent.id, `${agent.nom} ${agent.prenom}`, agent.actif)}
+                                                        className={agent.actif ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800'}
+                                                        disabled={loading}
+                                                    >
+                                                        {agent.actif ? (
+                                                            <ToggleLeft className="w-4 h-4" />
+                                                        ) : (
+                                                            <ToggleRight className="w-4 h-4" />
+                                                        )}
+                                                    </Button>
                                                 </td>
                                             </tr>
                                         ))}
