@@ -38,7 +38,8 @@ const AgentsPage: React.FC = () => {
             try {
                 setLoading(true);
                 const data = await getAgents();
-                console.debug("Agents récupérés:", JSON.stringify(data, null, 2));
+                console.log("data", data)
+                console.log("Agents récupérés:", JSON.stringify(data, null, 2));
                 setAgents(data);
             } catch (err: any) {
                 console.error("Erreur dans fetchAgents:", {

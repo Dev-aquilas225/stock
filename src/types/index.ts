@@ -44,6 +44,16 @@ export interface Order {
   date: Date;
 }
 
+export enum StatutProduitStock {
+    DISPONIBLE = "DISPONIBLE",
+    RETOURNE = "RETOURNE",
+    RESERVE = "RESERVE",
+    PERIME = "PERIME",
+    VENDU = "VENDU",
+    ENDOMMAGE = "ENDOMMAGE",
+    ENLEVE = "ENLEVE",
+}
+
 export enum Devise {
     AED = "AED",
     AFN = "AFN",
