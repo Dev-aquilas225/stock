@@ -38,8 +38,14 @@ const AgentsPage: React.FC = () => {
             try {
                 setLoading(true);
                 const data = await getAgents();
+                console.debug("Agents récupérés:", JSON.stringify(data, null, 2));
                 setAgents(data);
             } catch (err: any) {
+                console.error("Erreur dans fetchAgents:", {
+                    message: err.message,
+                    status: err.response?.status,
+                    response: JSON.stringify(err.response?.data, null, 2),
+                });
                 showToast({
                     type: 'error',
                     title: 'Erreur',
@@ -72,11 +78,15 @@ const AgentsPage: React.FC = () => {
     };
 
     const handleInputChange = (field: keyof FormData, value: string) => {
-        console.debug(`Mise à jour du champ ${field}:`, value); // Log input changes
-        setFormData((prev) => ({
-            ...prev,
-            [field]: field === 'role' ? value as UserRole : value,
-        }));
+        console.debug(`Mise à jour du champ ${field}:`, value);
+        setFormData((prev) => {
+            const newFormData = {
+                ...prev,
+                [field]: field === 'role' ? (value as UserRole) : value,
+            };
+            console.debug("Nouvel état formData:", JSON.stringify(newFormData, null, 2));
+            return newFormData;
+        });
         if (errors[field]) {
             setErrors((prev) => ({ ...prev, [field]: undefined }));
         }
@@ -97,9 +107,19 @@ const AgentsPage: React.FC = () => {
             };
 
             console.debug("Envoi de l'agentData:", JSON.stringify(agentData, null, 2));
+            // Optimistic update: add temporary agent to UI
+            const tempAgent: Agent = {
+                ...agentData,
+                id: 'temp-' + Date.now(),
+                actif: true,
+                creeLe: new Date().toISOString(),
+            };
+            setAgents((prev) => [...prev, tempAgent]);
+
             const newAgent = await addAgent(agentData);
             console.debug("Nouvel agent reçu:", JSON.stringify(newAgent, null, 2));
-            setAgents((prev) => [...prev, newAgent]);
+            // Replace temporary agent with real one
+            setAgents((prev) => prev.map((agent) => (agent.id === tempAgent.id ? newAgent : agent)));
 
             logActivity({
                 type: 'create',
@@ -121,8 +141,17 @@ const AgentsPage: React.FC = () => {
         } catch (err: any) {
             console.error("Erreur dans handleSubmit:", {
                 message: err.message,
+                status: err.response?.status,
                 response: JSON.stringify(err.response?.data, null, 2),
             });
+            // Revert optimistic update and refresh agents
+            setAgents((prev) => prev.filter((agent) => !agent.id.startsWith('temp-')));
+            try {
+                const data = await getAgents();
+                setAgents(data);
+            } catch (refreshErr: any) {
+                console.error("Erreur lors du rafraîchissement des agents:", refreshErr.message);
+            }
             showToast({
                 type: 'error',
                 title: 'Erreur',
@@ -138,9 +167,19 @@ const AgentsPage: React.FC = () => {
         if (!window.confirm(`Voulez-vous vraiment ${actif ? 'désactiver' : 'activer'} l'agent ${name} ?`)) return;
 
         setLoading(true);
+        console.debug(`Tentative de changement de statut pour l'agent ID: ${id}, actif: ${actif}`);
+        // Optimistic update: update status in UI immediately
+        const previousAgents = agents;
+        setAgents((prev) =>
+            prev.map((agent) =>
+                agent.id === id ? { ...agent, actif: !actif } : agent
+            )
+        );
+
         try {
             const updatedAgent = await toggleAgentActif(id);
             console.debug("Agent mis à jour:", JSON.stringify(updatedAgent, null, 2));
+            // Update with actual API response
             setAgents((prev) =>
                 prev.map((agent) => (agent.id === id ? updatedAgent : agent))
             );
@@ -162,14 +201,40 @@ const AgentsPage: React.FC = () => {
         } catch (err: any) {
             console.error("Erreur dans handleToggleStatus:", {
                 message: err.message,
+                status: err.response?.status,
                 response: JSON.stringify(err.response?.data, null, 2),
+                id,
             });
-            showToast({
-                type: 'error',
-                title: 'Erreur',
-                message: err.message || 'Une erreur est survenue lors du changement de statut',
-                duration: 5000,
-            });
+
+            // Only show toast for critical errors (e.g., 403, 500)
+            const status = err.response?.status;
+            const isCriticalError = status === 403 || status === 500;
+            if (isCriticalError) {
+                showToast({
+                    type: 'error',
+                    title: 'Erreur',
+                    message: err.message || 'Une erreur est survenue lors du changement de statut',
+                    duration: 5000,
+                });
+            } else {
+                console.debug("Erreur non critique, toast supprimé:", err.message);
+            }
+
+            // Revert optimistic update and refresh agents
+            setAgents(previousAgents);
+            try {
+                const data = await getAgents();
+                console.debug("Agents rafraîchis après erreur:", JSON.stringify(data, null, 2));
+                setAgents(data);
+            } catch (refreshErr: any) {
+                console.error("Erreur lors du rafraîchissement des agents:", refreshErr.message);
+                showToast({
+                    type: 'error',
+                    title: 'Erreur',
+                    message: 'Erreur lors du rafraîchissement des agents',
+                    duration: 5000,
+                });
+            }
         } finally {
             setLoading(false);
         }
