@@ -72,6 +72,7 @@ const AgentsPage: React.FC = () => {
     };
 
     const handleInputChange = (field: keyof FormData, value: string) => {
+        console.debug(`Mise à jour du champ ${field}:`, value); // Log input changes
         setFormData((prev) => ({
             ...prev,
             [field]: field === 'role' ? value as UserRole : value,
@@ -95,9 +96,9 @@ const AgentsPage: React.FC = () => {
                 role: formData.role,
             };
 
-            console.debug("Envoi de l'agentData:", JSON.stringify(agentData, null, 2)); // Log payload for debugging
-
+            console.debug("Envoi de l'agentData:", JSON.stringify(agentData, null, 2));
             const newAgent = await addAgent(agentData);
+            console.debug("Nouvel agent reçu:", JSON.stringify(newAgent, null, 2));
             setAgents((prev) => [...prev, newAgent]);
 
             logActivity({
@@ -120,8 +121,8 @@ const AgentsPage: React.FC = () => {
         } catch (err: any) {
             console.error("Erreur dans handleSubmit:", {
                 message: err.message,
-                response: err.response?.data,
-            }); // Log error details
+                response: JSON.stringify(err.response?.data, null, 2),
+            });
             showToast({
                 type: 'error',
                 title: 'Erreur',
@@ -139,6 +140,7 @@ const AgentsPage: React.FC = () => {
         setLoading(true);
         try {
             const updatedAgent = await toggleAgentActif(id);
+            console.debug("Agent mis à jour:", JSON.stringify(updatedAgent, null, 2));
             setAgents((prev) =>
                 prev.map((agent) => (agent.id === id ? updatedAgent : agent))
             );
@@ -160,7 +162,7 @@ const AgentsPage: React.FC = () => {
         } catch (err: any) {
             console.error("Erreur dans handleToggleStatus:", {
                 message: err.message,
-                response: err.response?.data,
+                response: JSON.stringify(err.response?.data, null, 2),
             });
             showToast({
                 type: 'error',
