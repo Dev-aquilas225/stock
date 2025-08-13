@@ -36,6 +36,8 @@ export const useAuth = () => {
     const { showToast } = useToast();
     const { logActivity } = useActivity();
 
+    const [token, setToken] = useState<string | null>(null);
+
     useEffect(() => {
         // Restore session from localStorage
         const savedUser = localStorage.getItem("nexsaas_user");
@@ -43,6 +45,7 @@ export const useAuth = () => {
         if (savedUser && savedToken) {
             try {
                 setUser(JSON.parse(savedUser));
+                setToken(savedToken);
             } catch (err) {
                 console.error("Failed to parse saved user:", err);
                 localStorage.removeItem("nexsaas_user");
@@ -67,6 +70,7 @@ export const useAuth = () => {
                 createdAt: res.createdAt || new Date().toISOString(),
             };
             setUser(userData);
+            setToken(res.token);
             localStorage.setItem("nexsaas_user", JSON.stringify(userData));
             localStorage.setItem("token", res.token);
             showToast({
@@ -148,6 +152,7 @@ export const useAuth = () => {
                 createdAt: res.user?.createdAt || new Date().toISOString(),
             };
             setUser(userData);
+            setToken(res.token);
             localStorage.setItem("nexsaas_user", JSON.stringify(userData));
             localStorage.setItem("token", res.token);
             showToast({
@@ -228,11 +233,12 @@ export const useAuth = () => {
             });
         }
         setUser(null);
+        setToken(null);
         localStorage.removeItem("token");
         localStorage.removeItem("nexsaas_user");
 
         navigate("/login-client");
     };
 
-    return { register, login, logout, loading, error, user };
+    return { register, login, logout, loading, error, user, token };
 };

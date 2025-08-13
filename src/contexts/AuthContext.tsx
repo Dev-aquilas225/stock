@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { User } from "../types";
 import { useToast } from "./ToastContext";
 import { useActivity } from "./ActivityContext";
-import axiosClient from "../api/axiosClient"; // Import axiosClient
 import {
     RegisterClientDto,
     LoginClientDto,

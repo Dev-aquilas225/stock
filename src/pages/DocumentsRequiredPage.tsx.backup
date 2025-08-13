@@ -1,10 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
-import {
-  FileText,
-  Upload,
-  AlertTriangle,
+import { Link } from 'react-router-dom';
+import { 
+  FileText, 
+  Upload, 
+  AlertTriangle, 
   CheckCircle,
   ArrowLeft,
   Camera,
@@ -14,186 +14,80 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { useAuth } from '../contexts/AuthContext';
 
-type DocumentItem = {
-  id: string;
-  name: string;
-  description: string;
-  status: string;
-  icon: React.ForwardRefExoticComponent<React.PropsWithoutRef<any> & React.RefAttributes<SVGSVGElement>>;
-  file: File | null;
-  previewUrl: string | null;
-};
-
 const DocumentsRequiredPage: React.FC = () => {
   const { user } = useAuth();
-  const token = localStorage.getItem('token');
-  const navigate = useNavigate();
 
-  // Ajout file et previewUrl pour chaque document
-  const [documents, setDocuments] = useState<DocumentItem[]>([
+  const [documents, setDocuments] = useState([
     {
-      id: 'cniFront',
-      name: 'CNI Recto',
-      description: 'Recto de la carte nationale d\'identité',
+      id: 'identity',
+      name: 'Pièce d\'identité',
+      description: 'Carte d\'identité, passeport ou permis de conduire',
       status: 'missing',
       icon: FileText,
-      file: null,
-      previewUrl: null,
     },
     {
-      id: 'cniBack',
-      name: 'CNI Verso',
-      description: 'Verso de la carte nationale d\'identité',
+      id: 'proof_address',
+      name: 'DFE',
+      description: '',
       status: 'missing',
       icon: FileText,
-      file: null,
-      previewUrl: null,
     },
     {
-      id: 'rccm',
+      id: 'business_registration',
       name: 'Registre de commerce (RCCM)',
       description: 'Document d\'enregistrement de votre entreprise',
       status: user?.type === 'entreprise' ? 'missing' : 'not_required',
       icon: Shield,
-      file: null,
-      previewUrl: null,
-    },
-    {
-      id: 'dfe',
-      name: 'DFE',
-      description: 'Document fiscal d\'entreprise',
-      status: 'missing',
-      icon: FileText,
-      file: null,
-      previewUrl: null,
     },
   ]);
 
-  // Références pour les inputs fichiers cachés
-  const fileInputs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  const handleUpload = async (id: string) => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pdf,.jpg,.jpeg,.png';
 
-  // Gestion de l'upload ou prise de photo
-  const handleUpload = (id: string, accept = '.pdf,.jpg,.jpeg,.png', capture = '') => {
-    const input = fileInputs.current[id];
+    fileInput.onchange = async () => {
+      if (fileInput.files && fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('documentId', id);
 
-    if (!input) return;
-    input.accept = accept;
+        try {
+          const res = await fetch('http://localhost:8000/documents/upload', {
+            method: 'POST',
+            body: formData,
+          });
 
-    if (capture) input.capture = capture;
-    else input.removeAttribute('capture');
+          if (res.ok) {
+            setDocuments(prev =>
+              prev.map(doc =>
+                doc.id === id ? { ...doc, status: 'uploaded' } : doc
+              )
+            );
+          } else {
+            console.error('Erreur upload', await res.text());
+          }
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    };
 
-    input.click();
+    fileInput.click();
   };
+
+
 
   const handleTakePhoto = (id: string) => {
-    const input = fileInputs.current[id];
-    if (!input) return;
-    input.accept = 'image/*';
-    input.capture = 'environment'; // Demande la caméra arrière sur mobile
-    input.click();
-  };
-  
-  // Quand un fichier est choisi
-  const handleFileChange = async (id: string, event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('documentId', id);
-
-    try {
-      const res = await fetch('http://localhost:8000/documents-user/upload', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (res.ok) {
-        const previewUrl = URL.createObjectURL(file);
-        setDocuments(prev =>
-          prev.map(doc =>
-            doc.id === id
-              ? { ...doc, status: 'uploaded', file, previewUrl }
-              : doc
-          )
-        );
-      } else {
-        // Gérer l'erreur d'upload ici
-        const data = await res.json();
-        alert(data.message || "Erreur lors de l'upload du document");
-        setDocuments(prev =>
-          prev.map(doc =>
-            doc.id === id
-              ? { ...doc, status: 'missing', file: null, previewUrl: null }
-              : doc
-          )
-        );
-      }
-    } catch (error) {
-        // Gérer l'erreur réseau ici
-        console.error('Erreur lors de l\'upload du document:', error);
-        alert("Erreur réseau lors de l'upload du document");
-        setDocuments(prev =>
-          prev.map(doc =>
-            doc.id === id
-              ? { ...doc, status: 'missing', file: null, previewUrl: null }
-              : doc
-          )
-        );
-    }
+    // Ici, on simule la prise de photo
+    setDocuments(prev =>
+      prev.map(doc =>
+        doc.id === id ? { ...doc, status: 'uploaded' } : doc
+      )
+    );
   };
 
-  // Validation dynamique
-  const allUploaded = documents
-    .filter(doc => doc.status !== 'not_required')
-    .every(doc => doc.status === 'uploaded');
-
-  // Envoi groupé
-  const handleSubmit = async () => {
-    // Vérifie que tous les documents requis sont présents
-    const missing = documents.filter(doc => doc.status !== 'not_required' && !doc.file);
-    if (missing.length > 0) {
-      alert("Tous les documents (CNI recto/verso, RCCM, DFE) sont requis.");
-      return;
-    }
-
-    const formData = new FormData();
-    documents.forEach(doc => {
-      // Toujours envoyer les 4 champs, même si rccm n'est pas requis
-      if (doc.file) {
-        formData.append(doc.id, doc.file);
-      } else if (doc.id === 'rccm') {
-        // Si rccm n'est pas requis, envoie un fichier vide avec extension valide pour ne pas bloquer le backend
-        formData.append('rccm', new File([""], "empty.pdf", { type: "application/pdf" }));
-      }
-    });
-
-    try {
-      console.log("Envoi des documents:", Array.from(formData.entries()));
-      const res = await fetch("http://localhost:8000/documents-user", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        navigate('/compte-en-attente');
-      } else {
-        alert(data.message || "Erreur lors de l'envoi");
-      }
-    } catch (err) {
-      alert("Erreur réseau");
-      console.error('Erreur lors de l\'envoi des documents:', err);
-    }
-  };
-
-  // Fonctions utilitaires pour le design
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'uploaded': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
@@ -222,14 +116,6 @@ const DocumentsRequiredPage: React.FC = () => {
       default: return 'Inconnu';
     }
   };
-
-  console.log(
-    documents.map(doc => ({
-      id: doc.id,
-      file: doc.file,
-      status: doc.status
-    }))
-  );
 
   return (
     <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
@@ -309,14 +195,7 @@ const DocumentsRequiredPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  {/* Input caché pour upload/take photo */}
-                  <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    style={{ display: 'none' }}
-                    ref={el => (fileInputs.current[document.id] = el)}
-                    onChange={e => handleFileChange(document.id, e)}
-                  />
+                  
                   {document.status === 'missing' && (
                     <div className="flex items-center space-x-2">
                       <Button variant="outline" size="sm" onClick={() => handleTakePhoto(document.id)}>
@@ -328,16 +207,6 @@ const DocumentsRequiredPage: React.FC = () => {
                         Télécharger
                       </Button>
                     </div>
-                  )}
-                  {document.status === 'uploaded' && document.previewUrl && (
-                    <a
-                      href={document.previewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-4 text-blue-600 underline text-sm"
-                    >
-                      Voir le document
-                    </a>
                   )}
                 </div>
               </Card>
@@ -395,7 +264,7 @@ const DocumentsRequiredPage: React.FC = () => {
               Retour au tableau de bord
             </Button>
           </Link>
-          <Button size="lg" disabled={!allUploaded} onClick={handleSubmit}>
+          <Button size="lg" disabled>
             <CheckCircle className="w-5 h-5 mr-2" />
             Valider les documents
           </Button>
