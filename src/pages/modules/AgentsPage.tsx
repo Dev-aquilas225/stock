@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Users, Mail, Briefcase, Save, ArrowLeft, AlertCircle, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Users, Mail, Briefcase, Save, ArrowLeft, CheckCircle, AlertCircle, ToggleLeft, ToggleRight, Lock, Eye, EyeOff } from 'lucide-react';
+
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useActivity } from '../../contexts/ActivityContext';
+
 import { addAgent, getAgents, toggleAgentActif, Agent, CreateAgentDto, UserRole } from '../../api/agentApi';
 
 interface FormData {
@@ -22,56 +24,32 @@ const AgentsPage: React.FC = () => {
     const { showToast } = useToast();
     const { logActivity } = useActivity();
 
-    const [agents, setAgents] = useState<Agent[]>([]);
-    const [formData, setFormData] = useState<FormData>({
-        nom: '',
-        prenom: '',
+    const [agents, setAgents] = useState<{ id: number; name: string; email: string; role: string; password: string }[]>([]);
+    const [formData, setFormData] = useState({
+        name: '',
         email: '',
-        role: UserRole.VENDEUR,
+        role: 'seller',
+        password: '',
     });
-    const [errors, setErrors] = useState<Record<string, string | undefined>>({});
-    const [loading, setLoading] = useState(true);
-
-    // Fetch agents on mount
-    useEffect(() => {
-        const fetchAgents = async () => {
-            try {
-                setLoading(true);
-                const data = await getAgents();
-                console.log("data", data)
-                console.log("Agents récupérés:", JSON.stringify(data, null, 2));
-                setAgents(data);
-            } catch (err: any) {
-                console.error("Erreur dans fetchAgents:", {
-                    message: err.message,
-                    status: err.response?.status,
-                    response: JSON.stringify(err.response?.data, null, 2),
-                });
-                showToast({
-                    type: 'error',
-                    title: 'Erreur',
-                    message: err.message || 'Erreur lors de la récupération des agents',
-                    duration: 5000,
-                });
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchAgents();
-    }, [showToast]);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const validateForm = () => {
-        const newErrors: Record<string, string | undefined> = {};
+        const newErrors: Record<string, string> = {};
 
-        if (!formData.nom.trim()) newErrors.nom = 'Nom requis';
-        if (!formData.prenom.trim()) newErrors.prenom = 'Prénom requis';
+        if (!formData.name) newErrors.name = 'Nom requis';
         if (!formData.email) {
             newErrors.email = 'Email requis';
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
             newErrors.email = 'Email invalide';
         }
-        if (!Object.values(UserRole).includes(formData.role)) {
-            newErrors.role = 'Rôle invalide: choisissez Vendeur ou Gestionnaire';
+        if (!formData.role) newErrors.role = 'Rôle requis';
+        if (!formData.password) {
+            newErrors.password = 'Mot de passe requis';
+        } else if (formData.password.length < 6) {
+            newErrors.password = 'Le mot de passe doit contenir au moins 6 caractères';
+
         }
 
         setErrors(newErrors);
@@ -99,6 +77,7 @@ const AgentsPage: React.FC = () => {
         if (!validateForm()) return;
 
         setLoading(true);
+
         try {
             const agentData: CreateAgentDto = {
                 nom: formData.nom.trim(),
@@ -122,16 +101,10 @@ const AgentsPage: React.FC = () => {
             // Replace temporary agent with real one
             setAgents((prev) => prev.map((agent) => (agent.id === tempAgent.id ? newAgent : agent)));
 
-            logActivity({
-                type: 'create',
-                module: 'Agents',
-                description: `Ajout d'un nouvel agent: ${formData.nom} ${formData.prenom}`,
-                userId: user?.id ?? 'unknown',
-                metadata: { email: formData.email, role: formData.role },
-            });
 
             showToast({
                 type: 'success',
+
                 title: 'Succès',
                 message: 'Agent ajouté avec succès',
                 duration: 3000,
@@ -163,6 +136,7 @@ const AgentsPage: React.FC = () => {
             setLoading(false);
         }
     };
+
 
     const handleToggleStatus = async (id: string, name: string, actif: boolean) => {
         if (!window.confirm(`Voulez-vous vraiment ${actif ? 'désactiver' : 'activer'} l'agent ${name} ?`)) return;
@@ -251,6 +225,7 @@ const AgentsPage: React.FC = () => {
                     transition={{ duration: 0.6 }}
                     className="mb-8"
                 >
+
                     <div className="flex flex-col sm:flex-row items-center mb-4 gap-4">
                         <Link to="/dashboard">
                             <Button variant="ghost" size="sm">
@@ -258,6 +233,7 @@ const AgentsPage: React.FC = () => {
                                 Retour
                             </Button>
                         </Link>
+
                         <div className="flex items-center gap-4">
                             <div className="p-3 bg-nexsaas-deep-blue rounded-lg">
                                 <Users className="w-8 h-8 text-white" />
@@ -286,6 +262,7 @@ const AgentsPage: React.FC = () => {
                             Ajouter un nouvel agent
                         </h2>
                         <form onSubmit={handleSubmit} className="space-y-6">
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <Input
                                     label="Nom"
@@ -315,16 +292,42 @@ const AgentsPage: React.FC = () => {
                                     placeholder="jean.dupont@example.com"
                                 />
                             </div>
+                            <div className="relative">
+                                <Input
+                                    label="Mot de passe"
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={formData.password}
+                                    onChange={(value) => handleInputChange('password', value)}
+                                    icon={Lock}
+                                    error={errors.password}
+                                    required
+                                    placeholder="••••••"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-9 text-gray-400 hover:text-nexsaas-deep-blue dark:hover:text-nexsaas-pure-white"
+                                >
+                                    {showPassword ? (
+                                        <EyeOff className="w-5 h-5" />
+                                    ) : (
+                                        <Eye className="w-5 h-5" />
+                                    )}
+                                </button>
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                     Rôle
                                 </label>
                                 <div className="relative">
                                     <select
+                                        name="role"
+
                                         value={formData.role}
                                         onChange={(e) => handleInputChange('role', e.target.value)}
                                         className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none appearance-none"
-                                    >
+
                                         <option value={UserRole.VENDEUR}>Vendeur</option>
                                         <option value={UserRole.GESTIONNAIRE}>Gestionnaire</option>
                                     </select>
@@ -354,6 +357,7 @@ const AgentsPage: React.FC = () => {
                         <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
                             Liste des agents
                         </h2>
+
                         {loading && <p className="text-center text-nexsaas-vanta-black dark:text-gray-300">Chargement des agents...</p>}
                         {!loading && agents.length === 0 && (
                             <div className="text-center py-6">
@@ -362,12 +366,14 @@ const AgentsPage: React.FC = () => {
                                     Aucun agent ajouté pour le moment.
                                 </p>
                             </div>
+
                         )}
                         {agents.length > 0 && (
                             <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-nexsaas-light-gray dark:divide-gray-600">
                                     <thead className="bg-nexsaas-light-gray dark:bg-gray-700">
                                         <tr>
+
                                             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
                                                 Nom
                                             </th>
@@ -391,49 +397,22 @@ const AgentsPage: React.FC = () => {
                                     <tbody className="bg-nexsaas-pure-white dark:bg-gray-800 divide-y divide-nexsaas-light-gray dark:divide-gray-600">
                                         {agents.map((agent) => (
                                             <tr key={agent.id}>
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                                     <div className="flex items-center">
                                                         <Users className="w-5 h-5 text-nexsaas-saas-green mr-2" />
-                                                        <span className="truncate">{agent.nom}</span>
+                                                        {agent.name}
                                                     </div>
                                                 </td>
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                    <span className="truncate">{agent.prenom}</span>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                                    {agent.email}
                                                 </td>
-                                                <td className="px-4 sm:px-6 py-4 text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                    <span className="truncate">{agent.email}</span>
-                                                </td>
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                                     <div className="flex items-center">
                                                         <Briefcase className="w-5 h-5 text-nexsaas-saas-green mr-2" />
-                                                        {agent.role === UserRole.VENDEUR ? 'Vendeur' : 'Gestionnaire'}
+                                                        {agent.role.charAt(0).toUpperCase() + agent.role.slice(1)}
                                                     </div>
                                                 </td>
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                    <div className="flex items-center">
-                                                        {agent.actif ? (
-                                                            <ToggleRight className="w-5 h-5 text-green-500 mr-2" />
-                                                        ) : (
-                                                            <ToggleLeft className="w-5 h-5 text-red-500 mr-2" />
-                                                        )}
-                                                        {agent.actif ? 'Actif' : 'Inactif'}
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleToggleStatus(agent.id, `${agent.nom} ${agent.prenom}`, agent.actif)}
-                                                        className={agent.actif ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800'}
-                                                        disabled={loading}
-                                                    >
-                                                        {agent.actif ? (
-                                                            <ToggleLeft className="w-4 h-4" />
-                                                        ) : (
-                                                            <ToggleRight className="w-4 h-4" />
-                                                        )}
-                                                    </Button>
-                                                </td>
+
                                             </tr>
                                         ))}
                                     </tbody>

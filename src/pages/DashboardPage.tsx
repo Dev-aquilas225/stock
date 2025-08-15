@@ -226,6 +226,7 @@ const DashboardPage: React.FC = () => {
                   <div className="p-2 bg-nexsaas-saas-green/10 rounded-lg">
                     <stat.icon className="w-6 h-6 text-nexsaas-saas-green" />
                   </div>
+
                   <div className={`flex items-center text-sm font-medium ${stat.isPositive ? 'text-green-600' : 'text-red-600'}`}>
                     {stat.isPositive ? (
                       <ArrowUpRight className="w-4 h-4 mr-1" />
