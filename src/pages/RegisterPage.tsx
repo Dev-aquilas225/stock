@@ -2,12 +2,12 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { User, Mail, Lock, Building, AlertCircle } from "lucide-react";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import Card from "../components/UI/Card";
 import Input from "../components/UI/Input";
 import Button from "../components/UI/Button";
 
-type TypeUser = "particulier" | "entreprise"; // Assumed to match backend TypeUser enum
+type TypeUser = "particulier" | "entreprise"; // Matches backend TypeUser enum
 
 const RegisterPage: React.FC = () => {
     const [formData, setFormData] = useState({
@@ -22,7 +22,7 @@ const RegisterPage: React.FC = () => {
         nif: "",
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
-    const { register, loading, error } = useAuth();
+    const { register, loading, user } = useAuth(); // Removed 'error' since AuthContext doesn't provide it
 
     const validateForm = () => {
         const newErrors: Record<string, string> = {};
@@ -57,15 +57,17 @@ const RegisterPage: React.FC = () => {
 
         try {
             await register({
-                prenom: formData.prenom,
                 nom: formData.nom,
+                prenom: formData.prenom,
                 email: formData.email,
-                type: formData.type,
+                password: formData.password, // Added to match RegisterClientDto
                 description: formData.description,
-                password: formData.password,
+                type: formData.type,
+                companyName: formData.companyName || undefined, // Convert empty string to undefined
+                nif: formData.nif || undefined, // Convert empty string to undefined
             });
         } catch (err) {
-            // Error is handled by useAuth hook
+            // Error is handled by AuthProvider via toast notifications
         }
     };
 
@@ -95,19 +97,6 @@ const RegisterPage: React.FC = () => {
 
                 <Card>
                     <form onSubmit={handleSubmit} className="space-y-6">
-                        {error && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
-                            >
-                                <AlertCircle className="w-5 h-5 text-red-500" />
-                                <span className="text-red-700 dark:text-red-400 text-sm">
-                                    {error}
-                                </span>
-                            </motion.div>
-                        )}
-
                         {/* Type Selection */}
                         <div className="space-y-3">
                             <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
