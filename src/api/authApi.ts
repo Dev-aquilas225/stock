@@ -17,14 +17,68 @@ export interface LoginClientDto {
     role: string;
 }
 
-export const registerClient = async (data: RegisterClientDto) => {
-    const response = await axiosClient.post("auth/request/client", data);
-    console.log(response.data);
-    return response.data;
+export interface AuthResponse {
+    token: string;
+    user?: {
+        id?: string;
+        nom?: string;
+        prenom?: string;
+        firstName?: string; // For backend compatibility
+        lastName?: string;  // For backend compatibility
+        email?: string;
+        type?: string;
+        role?: string;
+        nomEntreprise?: string;
+        companyName?: string;
+        createdAt?: string;
+        actif?: boolean;
+        verified?: boolean;
+        docsValides?: boolean;
+        profilePicture?: string;
+        phone?: string;
+        address?: string;
+        description?: string;
+        nif?: string;
+    };
+    id?: string;
+    nom?: string;
+    prenom?: string;
+    firstName?: string; // For backend compatibility
+    lastName?: string;  // For backend compatibility
+    email?: string;
+    type?: string;
+    role?: string;
+    nomEntreprise?: string;
+    companyName?: string;
+    createdAt?: string;
+    actif?: boolean;
+    verified?: boolean;
+    docsValides?: boolean;
+    profilePicture?: string;
+    phone?: string;
+    address?: string;
+    description?: string;
+    nif?: string;
+}
+
+export const registerClient = async (data: RegisterClientDto): Promise<AuthResponse> => {
+    try {
+        const response = await axiosClient.post("auth/request/client", data);
+        console.log("registerClient response:", response.data);
+        return response.data;
+    } catch (error: any) {
+        console.error("registerClient error:", error.response?.data || error.message);
+        throw error;
+    }
 };
 
-export const loginClient = async (data: LoginClientDto) => {
-    const response = await axiosClient.post("auth/login/client", data);
-    console.log(response.data);
-    return response.data;
+export const loginClient = async (data: LoginClientDto): Promise<AuthResponse> => {
+    try {
+        const response = await axiosClient.post("auth/login/client", data);
+        console.log("loginClient response:", response.data);
+        return response.data;
+    } catch (error: any) {
+        console.error("loginClient error:", error.response?.data || error.message);
+        throw error;
+    }
 };

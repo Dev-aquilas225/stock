@@ -1,18 +1,8 @@
-import { useState, useCallback } from "react";
-import { updateProfile, uploadSelfie, updatePassword, UpdateProfileDto, UpdatePasswordDto } from "../api/profileApi";
+import { useState, useCallback, useEffect } from "react";
+import { getProfile, updateProfile, uploadSelfie, updatePassword, UpdateProfileDto, UpdatePasswordDto } from "../api/profileApi";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
-
-// Extend UpdateProfileDto for ProfilePage
-export interface ExtendedUpdateProfileDto extends UpdateProfileDto {
-    description?: string;
-    companyName?: string;
-    nif?: string;
-    phone?: string;
-    address?: string;
-}
-
-// Define User interface with required fields
+// useProfile.ts
 export interface User {
     id: string;
     nom: string;
@@ -29,13 +19,19 @@ export interface User {
     nif?: string;
     companyName?: string;
 }
+// Extend UpdateProfileDto for ProfilePage
+export interface ExtendedUpdateProfileDto extends UpdateProfileDto {
+    description?: string;
+    companyName?: string;
+    nif?: string;
+    phone?: string;
+    address?: string;
+}
 
 export const useProfile = () => {
     const { user: authUser, setUser: setAuthUser } = useAuth();
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
-
-    // Initialize user state from AuthContext
     const [user, setUser] = useState<User | null>(authUser);
 
     // Sync local user state with AuthContext user
@@ -50,11 +46,42 @@ export const useProfile = () => {
         }
     }, [setAuthUser]);
 
+    // Fetch profile on mount
+    const fetchProfile = useCallback(async () => {
+        setLoading(true);
+        try {
+            const profile = await getProfile();
+            syncUser(profile);
+            showToast({
+                type: "success",
+                title: "Profil chargé",
+                message: "Vos informations de profil ont été récupérées avec succès.",
+                duration: 3000,
+            });
+        } catch (err: any) {
+            const errorMessage = err.message || "Erreur lors de la récupération du profil";
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: errorMessage,
+                duration: 4000,
+            });
+        } finally {
+            setLoading(false);
+        }
+    }, [syncUser, showToast]);
+
+    // Call fetchProfile on component mount
+    useEffect(() => {
+        if (!user) {
+            fetchProfile();
+        }
+    }, [fetchProfile, user]);
+
     // Update profile
     const handleUpdateProfile = useCallback(async (formData: ExtendedUpdateProfileDto) => {
         setLoading(true);
         try {
-            // Only send fields defined in UpdateProfileDto to the API
             const apiData: UpdateProfileDto = {
                 nom: formData.nom,
                 prenom: formData.prenom,
@@ -71,7 +98,7 @@ export const useProfile = () => {
                 nif: formData.nif || user?.nif || "",
                 phone: formData.phone || user?.phone || "",
                 address: formData.address || user?.address || "",
-                profilePicture: user?.profilePicture || "", // Preserve profilePicture
+                profilePicture: user?.profilePicture || "",
             } as User;
             syncUser(updatedUser);
             showToast({
@@ -97,7 +124,6 @@ export const useProfile = () => {
 
     // Upload selfie
     const handleUploadSelfie = useCallback(async (file: File) => {
-        // Validate file type
         const allowedTypes = ["image/jpeg", "image/png"];
         if (!allowedTypes.includes(file.type)) {
             const errorMessage = "Seuls les fichiers JPEG et PNG sont autorisés";
@@ -175,6 +201,7 @@ export const useProfile = () => {
         user,
         setUser: syncUser,
         loading,
+        fetchProfile,
         handleUpdateProfile,
         handleUploadSelfie,
         handleUpdatePassword,
