@@ -1,95 +1,130 @@
-// / hooks/useDocuments.ts - Hook personnalisé pour la gestion des documents
+// hooks/useDocuments.ts - Version corrigée pour s'aligner avec le backend
+import React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { documentService } from '../api/documentService';
 import { Document, DocumentStatus, UploadProgress } from '../types/document.type';
-import { useToast } from '../components/Toast/ToastProvider';
+import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
- * Retourne le nom lisible d'un type de document.
+ * Mapping des statuts API vers les statuts locaux
  */
-function getDocumentName(type: string): string {
-  switch (type.toLowerCase()) {
-    case 'cin': return 'Carte d\'Identité Nationale';
-    case 'passport': return 'Passeport';
-    case 'justificatif_domicile': return 'Justificatif de domicile';
-    // Ajoutez d'autres types selon vos besoins
-    default: return type;
-  }
-}
-
-function getDocumentDescription(type: string): string {
-  const descriptions: Record<string, string> = {
-    'CNI': 'Recto et verso de votre carte d\'identité',
-    'RCCM': 'Document d\'enregistrement de votre entreprise',
-    'DFE': 'Document fiscal d\'existence'
-  };
-  return descriptions[type] || '';
-}
-
 function mapApiStatusToLocal(apiStatus: string): DocumentStatus {
   const statusMapping: Record<string, DocumentStatus> = {
     'EN_ATTENTE': 'pending',
-    'VALIDE': 'validated',
+    'VALIDE': 'validated', 
     'REFUSE': 'rejected',
-    'EXPIRE': 'expired'
+    'EXPIRE': 'expired',
+    'UPLOADED': 'uploaded'
   };
   return statusMapping[apiStatus] || 'missing';
 }
 
 /**
- * Retourne l'icône associée à un type de document.
+ * Génère les documents par défaut selon le type d'utilisateur
  */
-function getDocumentIcon(type: string): string {
-  switch (type.toLowerCase()) {
-    case 'cin': return 'id-card';
-    case 'passport': return 'passport';
-    case 'justificatif_domicile': return 'home';
-    // Ajoutez d'autres types et icônes selon vos besoins
-    default: return 'file';
-  }
+function getDefaultDocuments(userType?: string): Document[] {
+  return [
+    {
+      id: 'cniFront',
+      name: 'CNI Recto',
+      description: 'Recto de la carte nationale d\'identité',
+      status: 'missing',
+      icon: React.Component<React.SVGProps<SVGSVGElement>>,
+      isRequired: true,
+    },
+    {
+      id: 'cniBack', 
+      name: 'CNI Verso',
+      description: 'Verso de la carte nationale d\'identité',
+      status: 'missing',
+      icon: React.Component<React.SVGProps<SVGSVGElement>>,
+      isRequired: true,
+    },
+    {
+      id: 'rccm',
+      name: 'Registre de commerce (RCCM)',
+      description: 'Document d\'enregistrement de votre entreprise',
+      status: userType === 'entreprise' ? 'missing' : 'not_required',
+      icon: React.Component<React.SVGProps<SVGSVGElement>>,
+      isRequired: userType === 'entreprise',
+    },
+    {
+      id: 'dfe',
+      name: 'DFE', 
+      description: 'Document fiscal d\'entreprise',
+      status: 'missing',
+      icon: React.Component<React.SVGProps<SVGSVGElement>>,
+      isRequired: true,
+    },
+  ];
 }
 
 export const useDocuments = () => {
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const { user } = useAuth();
+  const [documents, setDocuments] = useState<Document[]>(() => 
+    getDefaultDocuments(user?.type)
+  );
+  
   const [uploadProgress, setUploadProgress] = useState<Map<string, UploadProgress>>(new Map());
   const [activeUploads, setActiveUploads] = useState<Set<string>>(new Set());
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
 
-  // Charger les documents existants
+  // Stockage temporaire des fichiers avant envoi final
+  const [tempFiles, setTempFiles] = useState<Map<string, File>>(new Map());
+
+  // Charger les documents existants depuis l'API
   const loadDocuments = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await documentService.getUserDocuments();
       
-      if (response.success && response.data) {
-        // Transformer les données de l'API en format local
-        const transformedDocuments: Document[] = response.data.map((doc: any) => ({
-          id: doc.type.toLowerCase(),
-          name: getDocumentName(doc.type),
-          description: getDocumentDescription(doc.type),
-          status: mapApiStatusToLocal(doc.statut),
-          icon: getDocumentIcon(doc.type),
-          isRequired: true,
-          uploadedAt: doc.createdAt ? new Date(doc.createdAt) : undefined,
-          previewUrl: doc.fichierRectoUrl || doc.fichierVersoUrl
-        }));
+      if (response && response.success && response.data) {
+        // Transformer les données API en format local
+        const defaultDocs = getDefaultDocuments(user?.type);
         
-        setDocuments(transformedDocuments);
+        // Mettre à jour le statut des documents existants
+        const updatedDocuments = defaultDocs.map(doc => {
+          const apiDoc = response.data.find((d: any) => {
+            // Mapping des IDs
+            const docTypeMap: Record<string, string> = {
+              'cniFront': 'CNI',
+              'cniBack': 'CNI',
+              'rccm': 'RCCM', 
+              'dfe': 'DFE'
+            };
+            return d.type === docTypeMap[doc.id];
+          });
+
+          if (apiDoc) {
+            return {
+              ...doc,
+              status: mapApiStatusToLocal(apiDoc.statut),
+              uploadedAt: apiDoc.createdAt ? new Date(apiDoc.createdAt) : undefined,
+              previewUrl: apiDoc.fichierRectoUrl || apiDoc.fichierVersoUrl
+            };
+          }
+          
+          return doc;
+        });
+        
+        setDocuments(updatedDocuments);
+      } else {
+        // Aucun document trouvé, garder les documents par défaut
+        setDocuments(getDefaultDocuments(user?.type));
       }
     } catch (error) {
       console.error('Erreur lors du chargement des documents:', error);
-      showToast({
-        type: 'error',
-        title: 'Erreur de chargement',
-        message: 'Impossible de charger vos documents existants.'
-      });
+      // En cas d'erreur, garder les documents par défaut
+      setDocuments(getDefaultDocuments(user?.type));
     } finally {
       setIsLoading(false);
     }
-  }, [showToast]);
+  }, [user?.type]);
 
-  // Upload d'un document
+  // Upload individuel (pour prévisualisation uniquement)
   const uploadDocument = useCallback(async (documentId: string, file: File) => {
     // Validation du fichier
     const validation = documentService.validateFile(file, 10, ['.jpg', '.jpeg', '.png', '.pdf']);
@@ -104,7 +139,7 @@ export const useDocuments = () => {
 
     setActiveUploads(prev => new Set(prev).add(documentId));
     
-    // Mise à jour du statut à "uploading"
+    // Mise à jour du statut à "uploading" 
     setDocuments(prev => prev.map(doc =>
       doc.id === documentId 
         ? { ...doc, status: 'uploading' as DocumentStatus, file }
@@ -112,7 +147,7 @@ export const useDocuments = () => {
     ));
 
     try {
-      // Upload avec suivi de progression
+      // Upload simulé pour prévisualisation
       const response = await documentService.uploadDocument(
         file,
         documentId,
@@ -125,25 +160,29 @@ export const useDocuments = () => {
         }
       );
 
+      // Stocker le fichier temporairement
+      setTempFiles(prev => new Map(prev).set(documentId, file));
+
       // Génération de l'URL de prévisualisation
       const previewUrl = documentService.generatePreviewUrl(file);
 
-      // Mise à jour avec succès
+      // Mise à jour avec "prêt pour envoi"
       setDocuments(prev => prev.map(doc =>
         doc.id === documentId 
           ? { 
               ...doc, 
-              status: 'uploaded' as DocumentStatus,
+              status: 'uploaded' as DocumentStatus, // Status local pour l'UI
               uploadedAt: new Date(),
-              previewUrl: previewUrl || undefined
+              previewUrl: previewUrl || undefined,
+              file
             }
           : doc
       ));
 
       showToast({
         type: 'success',
-        title: 'Upload réussi',
-        message: response.message || 'Document téléchargé avec succès'
+        title: 'Fichier prêt',
+        message: 'Fichier ajouté avec succès. Cliquez sur "Valider" pour envoyer tous les documents.'
       });
 
       return true;
@@ -195,6 +234,145 @@ export const useDocuments = () => {
     }
   }, [showToast]);
 
+  // Envoi final de tous les documents
+  const submitAllDocuments = useCallback(async (expiryDates: {
+    cniExpiry?: string;
+    rccmExpiry?: string;
+    dfeExpiry?: string;
+  } = {}): Promise<boolean> => {
+    setIsSubmitting(true);
+
+    try {
+      // Préparation des fichiers depuis le stockage temporaire
+      const files = {
+        cniFront: tempFiles.get('cniFront'),
+        cniBack: tempFiles.get('cniBack'),
+        rccm: tempFiles.get('rccm'),
+        dfe: tempFiles.get('dfe'),
+      };
+
+      // Validation que tous les documents requis sont présents
+      const validation = documentService.validateAllRequiredDocuments(files);
+      if (!validation.isValid) {
+        showToast({
+          type: 'error',
+          title: 'Documents manquants',
+          message: `Documents requis manquants: ${validation.missingDocuments.join(', ')}`
+        });
+        return false;
+      }
+
+      // Envoi vers le backend
+      const response = await documentService.uploadAllDocuments(files, expiryDates);
+
+      if (response.success) {
+        // Mise à jour du statut des documents
+        setDocuments(prev => prev.map(doc => 
+          doc.isRequired ? { ...doc, status: 'pending' as DocumentStatus } : doc
+        ));
+
+        // Nettoyage des fichiers temporaires
+        setTempFiles(new Map());
+
+        showToast({
+          type: 'success',
+          title: 'Documents envoyés',
+          message: response.message || 'Vos documents ont été envoyés pour validation'
+        });
+
+        return true;
+      } else {
+        throw new Error(response.message);
+      }
+
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi des documents:', error);
+      showToast({
+        type: 'error',
+        title: 'Erreur d\'envoi',
+        message: error instanceof Error ? error.message : 'Erreur lors de l\'envoi des documents'
+      });
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [tempFiles, showToast]);
+
+  // Mise à jour des documents rejetés
+  const updateRejectedDocuments = useCallback(async (
+    rejectedFiles: {
+      cniFront?: File;
+      cniBack?: File;
+      rccm?: File;
+      dfe?: File;
+    },
+    expiryDates: {
+      cniExpiry?: string;
+      rccmExpiry?: string;
+      dfeExpiry?: string;
+    } = {}
+  ): Promise<boolean> => {
+    setIsSubmitting(true);
+
+    try {
+      const response = await documentService.updateAllDocuments(rejectedFiles, expiryDates);
+
+      if (response.success) {
+        // Recharger les documents après mise à jour
+        await loadDocuments();
+
+        showToast({
+          type: 'success',
+          title: 'Documents mis à jour',
+          message: response.message || 'Vos documents ont été mis à jour avec succès'
+        });
+
+        return true;
+      } else {
+        throw new Error(response.message);
+      }
+
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour:', error);
+      showToast({
+        type: 'error',
+        title: 'Erreur de mise à jour',
+        message: error instanceof Error ? error.message : 'Erreur lors de la mise à jour des documents'
+      });
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [loadDocuments, showToast]);
+
+  // Supprimer un fichier temporaire
+  const removeDocument = useCallback((documentId: string) => {
+    // Supprimer du stockage temporaire
+    setTempFiles(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(documentId);
+      return newMap;
+    });
+
+    // Remettre le document à l'état "missing"
+    setDocuments(prev => prev.map(doc =>
+      doc.id === documentId 
+        ? { 
+            ...doc, 
+            status: 'missing' as DocumentStatus,
+            file: undefined,
+            previewUrl: undefined
+          }
+        : doc
+    ));
+
+    showToast({
+      type: 'info',
+      title: 'Document supprimé',
+      message: 'Le document a été retiré de la liste d\'envoi'
+    });
+  }, [showToast]);
+
   // Initialisation
   useEffect(() => {
     loadDocuments();
@@ -203,20 +381,39 @@ export const useDocuments = () => {
   // Calculer les statistiques
   const stats = {
     total: documents.filter(doc => doc.isRequired).length,
-    uploaded: documents.filter(doc => doc.status === 'uploaded' || doc.status === 'validated').length,
-    missing: documents.filter(doc => doc.status === 'missing' || doc.status === 'rejected').length,
-    pending: documents.filter(doc => doc.status === 'pending').length
+    uploaded: documents.filter(doc => 
+      (doc.status === 'uploaded' || doc.status === 'validated') && doc.isRequired
+    ).length,
+    missing: documents.filter(doc => 
+      (doc.status === 'missing' || doc.status === 'rejected') && doc.isRequired
+    ).length,
+    pending: documents.filter(doc => doc.status === 'pending' && doc.isRequired).length
   };
+
+  const allRequiredUploaded = stats.total > 0 && stats.uploaded === stats.total;
+  const hasRequiredFiles = tempFiles.has('cniFront') && tempFiles.has('cniBack') && 
+                          tempFiles.has('rccm') && tempFiles.has('dfe');
 
   return {
     documents,
     uploadProgress,
     activeUploads,
     isLoading,
+    isSubmitting,
     stats,
+    tempFiles: Object.fromEntries(tempFiles),
+    
+    // Actions
     uploadDocument,
+    submitAllDocuments,
+    updateRejectedDocuments,
+    removeDocument,
     loadDocuments,
+    
+    // État calculé
     hasActiveUploads: activeUploads.size > 0,
-    allRequiredUploaded: stats.total > 0 && stats.uploaded === stats.total
+    allRequiredUploaded,
+    hasRequiredFiles,
+    canSubmit: hasRequiredFiles && !isSubmitting
   };
 };

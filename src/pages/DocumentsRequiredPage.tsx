@@ -1,3 +1,4 @@
+// src/pages/DocumentsRequiredPage.tsx - Version simplifiée sans chargement automatique
 import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
@@ -8,28 +9,42 @@ import {
   CheckCircle,
   ArrowLeft,
   Camera,
-  Shield
+  Shield,
+  Loader
 } from 'lucide-react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { documentService } from '../api/documentService';
 
-type DocumentItem = {
+type DocumentStatus = 'missing' | 'uploading' | 'uploaded' | 'validated' | 'rejected' | 'not_required';
+
+interface DocumentItem {
   id: string;
   name: string;
   description: string;
-  status: string;
-  icon: React.ForwardRefExoticComponent<React.PropsWithoutRef<any> & React.RefAttributes<SVGSVGElement>>;
-  file: File | null;
-  previewUrl: string | null;
-};
+  status: DocumentStatus;
+  icon: React.ComponentType<any>;
+  isRequired: boolean;
+  file?: File;
+  previewUrl?: string;
+}
+
+interface UploadProgress {
+  [key: string]: {
+    progress: number;
+    isUploading: boolean;
+    error?: string;
+  };
+}
 
 const DocumentsRequiredPage: React.FC = () => {
   const { user } = useAuth();
-  const token = localStorage.getItem('token');
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
-  // Ajout file et previewUrl pour chaque document
+  // Documents par défaut
   const [documents, setDocuments] = useState<DocumentItem[]>([
     {
       id: 'cniFront',
@@ -37,8 +52,7 @@ const DocumentsRequiredPage: React.FC = () => {
       description: 'Recto de la carte nationale d\'identité',
       status: 'missing',
       icon: FileText,
-      file: null,
-      previewUrl: null,
+      isRequired: true,
     },
     {
       id: 'cniBack',
@@ -46,8 +60,7 @@ const DocumentsRequiredPage: React.FC = () => {
       description: 'Verso de la carte nationale d\'identité',
       status: 'missing',
       icon: FileText,
-      file: null,
-      previewUrl: null,
+      isRequired: true,
     },
     {
       id: 'rccm',
@@ -55,8 +68,7 @@ const DocumentsRequiredPage: React.FC = () => {
       description: 'Document d\'enregistrement de votre entreprise',
       status: user?.type === 'entreprise' ? 'missing' : 'not_required',
       icon: Shield,
-      file: null,
-      previewUrl: null,
+      isRequired: user?.type === 'entreprise',
     },
     {
       id: 'dfe',
@@ -64,172 +76,269 @@ const DocumentsRequiredPage: React.FC = () => {
       description: 'Document fiscal d\'entreprise',
       status: 'missing',
       icon: FileText,
-      file: null,
-      previewUrl: null,
+      isRequired: true,
     },
   ]);
 
-  // Références pour les inputs fichiers cachés
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Références pour les inputs fichiers
   const fileInputs = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
-  // Gestion de l'upload ou prise de photo
-  const handleUpload = (id: string, accept = '.pdf,.jpg,.jpeg,.png', capture = '') => {
+  // Fonction pour tester la connexion API
+  const testConnection = async () => {
+    console.log('=== TEST CONNEXION API ===');
+    
+    const token = localStorage.getItem('token');
+    console.log('Token présent:', !!token);
+    
+    if (token) {
+      console.log('Token:', token.substring(0, 50) + '...');
+      
+      try {
+        const response = await documentService.getUserDocuments();
+        console.log('Réponse API:', response);
+        showToast({
+          type: 'success',
+          title: 'Connexion réussie',
+          message: 'L\'API répond correctement'
+        });
+      } catch (error) {
+        console.error('Erreur API:', error);
+        showToast({
+          type: 'error',
+          title: 'Erreur de connexion',
+          message: error instanceof Error ? error.message : 'Erreur inconnue'
+        });
+      }
+    } else {
+      showToast({
+        type: 'warning',
+        title: 'Token manquant',
+        message: 'Aucun token d\'authentification trouvé'
+      });
+    }
+  };
+
+  // Upload de fichier
+  const handleUpload = (id: string) => {
     const input = fileInputs.current[id];
-
     if (!input) return;
-    input.accept = accept;
-
-    if (capture) input.capture = capture;
-    else input.removeAttribute('capture');
-
+    
+    input.accept = '.pdf,.jpg,.jpeg,.png';
+    input.removeAttribute('capture');
     input.click();
   };
 
   const handleTakePhoto = (id: string) => {
     const input = fileInputs.current[id];
     if (!input) return;
+    
     input.accept = 'image/*';
-    input.capture = 'environment'; // Demande la caméra arrière sur mobile
+    input.setAttribute('capture', 'environment');
     input.click();
   };
-  
-  // Quand un fichier est choisi
+
   const handleFileChange = async (id: string, event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('documentId', id);
-
-    try {
-      const res = await fetch('http://localhost:8000/documents-user/upload', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
+    // Validation basique
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      showToast({
+        type: 'error',
+        title: 'Fichier trop volumineux',
+        message: 'Le fichier ne doit pas dépasser 10 MB'
       });
-
-      if (res.ok) {
-        const previewUrl = URL.createObjectURL(file);
-        setDocuments(prev =>
-          prev.map(doc =>
-            doc.id === id
-              ? { ...doc, status: 'uploaded', file, previewUrl }
-              : doc
-          )
-        );
-      } else {
-        // Gérer l'erreur d'upload ici
-        const data = await res.json();
-        alert(data.message || "Erreur lors de l'upload du document");
-        setDocuments(prev =>
-          prev.map(doc =>
-            doc.id === id
-              ? { ...doc, status: 'missing', file: null, previewUrl: null }
-              : doc
-          )
-        );
-      }
-    } catch (error) {
-        // Gérer l'erreur réseau ici
-        console.error('Erreur lors de l\'upload du document:', error);
-        alert("Erreur réseau lors de l'upload du document");
-        setDocuments(prev =>
-          prev.map(doc =>
-            doc.id === id
-              ? { ...doc, status: 'missing', file: null, previewUrl: null }
-              : doc
-          )
-        );
-    }
-  };
-
-  // Validation dynamique
-  const allUploaded = documents
-    .filter(doc => doc.status !== 'not_required')
-    .every(doc => doc.status === 'uploaded');
-
-  // Envoi groupé
-  const handleSubmit = async () => {
-    // Vérifie que tous les documents requis sont présents
-    const missing = documents.filter(doc => doc.status !== 'not_required' && !doc.file);
-    if (missing.length > 0) {
-      alert("Tous les documents (CNI recto/verso, RCCM, DFE) sont requis.");
       return;
     }
 
-    const formData = new FormData();
-    documents.forEach(doc => {
-      // Toujours envoyer les 4 champs, même si rccm n'est pas requis
-      if (doc.file) {
-        formData.append(doc.id, doc.file);
-      } else if (doc.id === 'rccm') {
-        // Si rccm n'est pas requis, envoie un fichier vide avec extension valide pour ne pas bloquer le backend
-        formData.append('rccm', new File([""], "empty.pdf", { type: "application/pdf" }));
-      }
-    });
+    // Démarrer l'upload
+    setUploadProgress(prev => ({
+      ...prev,
+      [id]: { progress: 0, isUploading: true }
+    }));
+
+    // Mettre à jour le document
+    setDocuments(prev => prev.map(doc => 
+      doc.id === id ? { 
+        ...doc, 
+        status: 'uploading', 
+        file,
+        previewUrl: URL.createObjectURL(file)
+      } : doc
+    ));
 
     try {
-      console.log("Envoi des documents:", Array.from(formData.entries()));
-      const res = await fetch("http://localhost:8000/documents-user", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
+      console.log(`Upload du fichier ${file.name} pour ${id}`);
+      
+      const response = await documentService.uploadDocument(
+        file,
+        id,
+        (progress) => {
+          setUploadProgress(prev => ({
+            ...prev,
+            [id]: { ...prev[id], progress }
+          }));
+        }
+      );
+
+      console.log('Réponse upload:', response);
+
+      // Succès
+      setDocuments(prev => prev.map(doc => 
+        doc.id === id ? { ...doc, status: 'uploaded' } : doc
+      ));
+
+      showToast({
+        type: 'success',
+        title: 'Upload réussi',
+        message: `${file.name} a été téléchargé avec succès`
       });
 
-      const data = await res.json();
-      if (res.ok) {
-        navigate('/compte-en-attente');
-      } else {
-        alert(data.message || "Erreur lors de l'envoi");
-      }
-    } catch (err) {
-      alert("Erreur réseau");
-      console.error('Erreur lors de l\'envoi des documents:', err);
+    } catch (error) {
+      console.error('Erreur upload:', error);
+      
+      // Réinitialiser en cas d'erreur
+      setDocuments(prev => prev.map(doc => 
+        doc.id === id ? { 
+          ...doc, 
+          status: 'missing',
+          file: undefined,
+          previewUrl: undefined
+        } : doc
+      ));
+
+      setUploadProgress(prev => ({
+        ...prev,
+        [id]: { 
+          progress: 0, 
+          isUploading: false, 
+          error: error instanceof Error ? error.message : 'Erreur inconnue'
+        }
+      }));
+
+      showToast({
+        type: 'error',
+        title: 'Erreur d\'upload',
+        message: error instanceof Error ? error.message : 'Une erreur est survenue'
+      });
+    }
+
+    // Nettoyage
+    setTimeout(() => {
+      setUploadProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[id];
+        return newProgress;
+      });
+    }, 3000);
+  };
+
+  // Soumission finale
+  const handleSubmit = async () => {
+    const requiredDocs = documents.filter(doc => doc.isRequired);
+    const uploadedDocs = requiredDocs.filter(doc => doc.status === 'uploaded');
+    
+    if (uploadedDocs.length < requiredDocs.length) {
+      showToast({
+        type: 'warning',
+        title: 'Documents manquants',
+        message: 'Tous les documents requis doivent être téléchargés'
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      // Ici vous pouvez appeler l'API pour soumettre tous les documents
+      // await documentService.uploadMultipleDocuments(...)
+      
+      showToast({
+        type: 'success',
+        title: 'Documents soumis',
+        message: 'Vos documents ont été envoyés pour validation'
+      });
+      
+      navigate('/compte-en-attente');
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: 'Erreur de soumission',
+        message: error instanceof Error ? error.message : 'Erreur lors de la soumission'
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Fonctions utilitaires pour le design
-  const getStatusColor = (status: string) => {
+  // Utilitaires UI
+  const getStatusColor = (status: DocumentStatus) => {
     switch (status) {
-      case 'uploaded': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
-      case 'missing': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
-      case 'pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
-      case 'not_required': return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
+      case 'uploaded': 
+      case 'validated': 
+        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
+      case 'missing': 
+        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+      case 'uploading': 
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
+      case 'rejected': 
+        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+      case 'not_required': 
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: DocumentStatus, id: string) => {
+    const progress = uploadProgress[id];
+    
+    if (progress?.isUploading) {
+      return <Loader className="w-4 h-4 animate-spin" />;
+    }
+
     switch (status) {
-      case 'uploaded': return <CheckCircle className="w-4 h-4" />;
-      case 'missing': return <AlertTriangle className="w-4 h-4" />;
-      case 'pending': return <Upload className="w-4 h-4" />;
-      default: return <FileText className="w-4 h-4" />;
+      case 'uploaded':
+      case 'validated':
+        return <CheckCircle className="w-4 h-4" />;
+      case 'missing':
+      case 'rejected':
+        return <AlertTriangle className="w-4 h-4" />;
+      case 'uploading':
+        return <Upload className="w-4 h-4" />;
+      default:
+        return <FileText className="w-4 h-4" />;
     }
   };
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: DocumentStatus, id: string) => {
+    const progress = uploadProgress[id];
+    
+    if (progress?.isUploading) {
+      return `Upload... ${progress.progress}%`;
+    }
+
+    if (progress?.error) {
+      return 'Erreur';
+    }
+
     switch (status) {
       case 'uploaded': return 'Téléchargé';
+      case 'validated': return 'Validé';
       case 'missing': return 'Manquant';
-      case 'pending': return 'En attente';
+      case 'uploading': return 'Envoi...';
+      case 'rejected': return 'Rejeté';
       case 'not_required': return 'Non requis';
       default: return 'Inconnu';
     }
   };
 
-  console.log(
-    documents.map(doc => ({
-      id: doc.id,
-      file: doc.file,
-      status: doc.status
-    }))
-  );
+  // Statistiques
+  const requiredDocs = documents.filter(doc => doc.isRequired);
+  const uploadedCount = requiredDocs.filter(doc => doc.status === 'uploaded').length;
+  const allRequiredUploaded = uploadedCount === requiredDocs.length;
 
   return (
     <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
@@ -252,100 +361,145 @@ const DocumentsRequiredPage: React.FC = () => {
           </p>
         </motion.div>
 
-        {/* Alert Banner */}
+        {/* Test API Button */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="mb-8"
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="mb-8 text-center"
         >
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <div className="flex items-center">
-              <AlertTriangle className="w-5 h-5 text-red-500 mr-3" />
-              <div>
-                <h3 className="text-sm font-medium text-red-800 dark:text-red-400">
-                  Accès limité
-                </h3>
-                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-                  Certaines fonctionnalités sont restreintes jusqu'à la validation de vos documents.
-                </p>
+          <Button variant="outline" onClick={testConnection}>
+            Tester la connexion API
+          </Button>
+        </motion.div>
+
+        {/* Progression */}
+        {requiredDocs.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="mb-8"
+          >
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-blue-800 dark:text-blue-400">
+                    Progression
+                  </h3>
+                  <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                    {uploadedCount} / {requiredDocs.length} documents téléchargés
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {Math.round((uploadedCount / requiredDocs.length) * 100)}%
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 w-full bg-blue-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
+                  style={{ width: `${(uploadedCount / requiredDocs.length) * 100}%` }}
+                />
               </div>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
         {/* Documents List */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
           className="space-y-6 mb-8"
         >
-          {documents.map((document, index) => (
-            <motion.div
-              key={document.id}
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.5 + index * 0.1 }}
-            >
-              <Card className="hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-nexsaas-deep-blue/10 rounded-lg">
-                      <document.icon className="w-6 h-6 text-nexsaas-deep-blue" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                        {document.name}
-                      </h3>
-                      <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                        {document.description}
-                      </p>
-                      <div className="flex items-center mt-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(document.status)}`}>
-                          {getStatusIcon(document.status)}
-                          <span className="ml-1">{getStatusText(document.status)}</span>
-                        </span>
+          {documents.map((document, index) => {
+            const progress = uploadProgress[document.id];
+            
+            return (
+              <motion.div
+                key={document.id}
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.6, delay: 0.4 + index * 0.1 }}
+              >
+                <Card className="hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="p-3 bg-nexsaas-deep-blue/10 rounded-lg">
+                        <document.icon className="w-6 h-6 text-nexsaas-deep-blue" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                          {document.name}
+                        </h3>
+                        <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                          {document.description}
+                        </p>
+                        <div className="flex items-center mt-2">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(document.status)}`}>
+                            {getStatusIcon(document.status, document.id)}
+                            <span className="ml-1">{getStatusText(document.status, document.id)}</span>
+                          </span>
+                          {progress?.error && (
+                            <span className="ml-2 text-xs text-red-500">
+                              {progress.error}
+                            </span>
+                          )}
+                        </div>
+                        {/* Barre de progression */}
+                        {progress?.isUploading && (
+                          <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                              style={{ width: `${progress.progress}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
+                    
+                    {/* Input caché */}
+                    <input
+                      type="file"
+                      style={{ display: 'none' }}
+                      ref={el => (fileInputs.current[document.id] = el)}
+                      onChange={e => handleFileChange(document.id, e)}
+                    />
+                    
+                    {/* Actions */}
+                    {(document.status === 'missing' || document.status === 'rejected') && !progress?.isUploading && (
+                      <div className="flex items-center space-x-2">
+                        <Button variant="outline" size="sm" onClick={() => handleTakePhoto(document.id)}>
+                          <Camera className="w-4 h-4 mr-2" />
+                          Photo
+                        </Button>
+                        <Button size="sm" onClick={() => handleUpload(document.id)}>
+                          <Upload className="w-4 h-4 mr-2" />
+                          Fichier
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {document.previewUrl && (document.status === 'uploaded' || document.status === 'validated') && (
+                      <a
+                        href={document.previewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-4 text-blue-600 hover:text-blue-800 underline text-sm"
+                      >
+                        Aperçu
+                      </a>
+                    )}
                   </div>
-                  {/* Input caché pour upload/take photo */}
-                  <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    style={{ display: 'none' }}
-                    ref={el => (fileInputs.current[document.id] = el)}
-                    onChange={e => handleFileChange(document.id, e)}
-                  />
-                  {document.status === 'missing' && (
-                    <div className="flex items-center space-x-2">
-                      <Button variant="outline" size="sm" onClick={() => handleTakePhoto(document.id)}>
-                        <Camera className="w-4 h-4 mr-2" />
-                        Prendre photo
-                      </Button>
-                      <Button size="sm" onClick={() => handleUpload(document.id)}>
-                        <Upload className="w-4 h-4 mr-2" />
-                        Télécharger
-                      </Button>
-                    </div>
-                  )}
-                  {document.status === 'uploaded' && document.previewUrl && (
-                    <a
-                      href={document.previewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-4 text-blue-600 underline text-sm"
-                    >
-                      Voir le document
-                    </a>
-                  )}
-                </div>
-              </Card>
-            </motion.div>
-          ))}
+                </Card>
+              </motion.div>
+            );
+          })}
         </motion.div>
 
-        {/* Upload Instructions */}
+        {/* Instructions */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -395,9 +549,17 @@ const DocumentsRequiredPage: React.FC = () => {
               Retour au tableau de bord
             </Button>
           </Link>
-          <Button size="lg" disabled={!allUploaded} onClick={handleSubmit}>
-            <CheckCircle className="w-5 h-5 mr-2" />
-            Valider les documents
+          <Button 
+            size="lg" 
+            disabled={!allRequiredUploaded || isSubmitting} 
+            onClick={handleSubmit}
+          >
+            {isSubmitting ? (
+              <Loader className="w-5 h-5 mr-2 animate-spin" />
+            ) : (
+              <CheckCircle className="w-5 h-5 mr-2" />
+            )}
+            {isSubmitting ? 'Validation en cours...' : 'Valider les documents'}
           </Button>
         </motion.div>
 

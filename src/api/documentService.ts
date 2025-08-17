@@ -1,13 +1,15 @@
-// services/documentService.ts
+// services/documentService.ts - Version corrigée pour s'aligner avec le backend
 import { DocumentUploadResponse } from '../types/document.type';
+import axios from 'axios';
 
 export class DocumentService {
   private baseUrl: string;
   private authToken: string | null;
+  
 
   constructor(baseUrl: string = 'http://localhost:8000') {
     this.baseUrl = baseUrl;
-    this.authToken = localStorage.getItem('auth-token');
+    this.authToken = localStorage.getItem('token');
   }
 
   private getHeaders(): HeadersInit {
@@ -19,74 +21,9 @@ export class DocumentService {
   }
 
   /**
-   * Upload d'un document avec suivi de progression
+   * NOUVEAU: Upload de tous les documents requis d'un coup (comme attendu par le backend)
    */
-  async uploadDocument(
-    file: File, 
-    documentId: string,
-    onProgress?: (progress: number) => void
-  ): Promise<DocumentUploadResponse> {
-    return new Promise((resolve, reject) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('documentId', documentId);
-
-      const xhr = new XMLHttpRequest();
-
-      // Gestion de la progression
-      xhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable && onProgress) {
-          const progress = Math.round((event.loaded / event.total) * 100);
-          onProgress(progress);
-        }
-      });
-
-      // Gestion de la réponse
-      xhr.addEventListener('load', () => {
-        try {
-          const response = JSON.parse(xhr.responseText);
-          
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve({
-              success: true,
-              message: response.message || 'Upload réussi',
-              data: response.data
-            });
-          } else {
-            reject(new Error(response.message || `Erreur HTTP ${xhr.status}`));
-          }
-        } catch (error) {
-          reject(new Error('Erreur de parsing de la réponse'));
-          console.error('Erreur de parsing de la réponse:', error);
-        }
-      });
-
-      // Gestion des erreurs
-      xhr.addEventListener('error', () => {
-        reject(new Error('Erreur réseau lors de l\'upload'));
-      });
-
-      xhr.addEventListener('timeout', () => {
-        reject(new Error('Timeout lors de l\'upload'));
-      });
-
-      // Configuration de la requête
-      xhr.open('POST', `${this.baseUrl}/documents-user/upload`);
-      xhr.timeout = 300000; // 5 minutes
-
-      // Ajout des headers
-      Object.entries(this.getHeaders()).forEach(([key, value]) => {
-        xhr.setRequestHeader(key, value as string);
-      });
-
-      xhr.send(formData);
-    });
-  }
-
-  /**
-   * Upload multiple documents (pour CNI recto/verso + autres)
-   */
-  async uploadMultipleDocuments(files: {
+  async uploadAllDocuments(files: {
     cniFront?: File;
     cniBack?: File;
     rccm?: File;
@@ -96,36 +33,163 @@ export class DocumentService {
     rccmExpiry?: string;
     dfeExpiry?: string;
   }): Promise<DocumentUploadResponse> {
-    const formData = new FormData();
+    try {
+      const token = localStorage.getItem("token");
+      const formData = new FormData();
 
-    // Ajout des fichiers
-    if (files.cniFront) formData.append('cniFront', files.cniFront);
-    if (files.cniBack) formData.append('cniBack', files.cniBack);
-    if (files.rccm) formData.append('rccm', files.rccm);
-    if (files.dfe) formData.append('dfe', files.dfe);
+      // Validation: tous les documents sont requis selon le backend
+      if (!files.cniFront || !files.cniBack || !files.rccm || !files.dfe) {
+        throw new Error('Tous les documents (CNI recto/verso, RCCM, DFE) sont requis');
+      }
 
-    // Ajout des dates d'expiration
-    if (expiryDates.cniExpiry) formData.append('cniExpiry', expiryDates.cniExpiry);
-    if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
-    if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
+      // Ajout des fichiers
+      formData.append('cniFront', files.cniFront);
+      formData.append('cniBack', files.cniBack);
+      formData.append('rccm', files.rccm);
+      formData.append('dfe', files.dfe);
 
-    const response = await fetch(`${this.baseUrl}/documents-user`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: formData
-    });
+      // Ajout des dates d'expiration
+      if (expiryDates.cniExpiry) formData.append('cniExpiry', expiryDates.cniExpiry);
+      if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
+      if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
 
-    const data = await response.json();
+      const response = await axios.post(
+        `${this.baseUrl}/documents-user`,
+        formData,
+        {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          }
+        }
+      );
 
-    if (!response.ok) {
-      throw new Error(data.message || 'Erreur lors de l\'upload');
+      return {
+        success: true,
+        message: response.data.message || "Documents uploadés avec succès",
+        data: response.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || "Erreur d'upload",
+        data: undefined,
+      };
     }
+  }
 
-    return {
-      success: true,
-      message: data.message,
-      data: data.paths
-    };
+  /**
+   * NOUVEAU: Mise à jour des documents (pour les documents rejetés)
+   */
+  async updateAllDocuments(files: {
+    cniFront?: File;
+    cniBack?: File;
+    rccm?: File;
+    dfe?: File;
+  }, expiryDates: {
+    cniExpiry?: string;
+    rccmExpiry?: string;
+    dfeExpiry?: string;
+  }): Promise<DocumentUploadResponse> {
+    try {
+      const token = localStorage.getItem("token");
+      const formData = new FormData();
+
+      // Ajout des fichiers (optionnels pour la mise à jour)
+      if (files.cniFront) formData.append('cniFront', files.cniFront);
+      if (files.cniBack) formData.append('cniBack', files.cniBack);
+      if (files.rccm) formData.append('rccm', files.rccm);
+      if (files.dfe) formData.append('dfe', files.dfe);
+
+      // Ajout des dates d'expiration
+      if (expiryDates.cniExpiry) formData.append('cniExpiry', expiryDates.cniExpiry);
+      if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
+      if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
+
+      const response = await axios.put(
+        `${this.baseUrl}/documents-user`,
+        formData,
+        {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          }
+        }
+      );
+
+      return {
+        success: true,
+        message: response.data.message || "Documents mis à jour avec succès",
+        data: response.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || "Erreur de mise à jour",
+        data: undefined,
+      };
+    }
+  }
+
+  /**
+   * ANCIEN: Upload d'un document individuel - NE SAUVEGARDE PAS EN BASE
+   * Utilisé uniquement pour la prévisualisation locale
+   */
+  async uploadDocument(
+    file: File, 
+    documentId: string,
+    onProgress?: (progress: number) => void
+  ): Promise<DocumentUploadResponse> {
+    // Cette méthode simule un upload pour la prévisualisation
+    // Elle ne fait PAS appel au backend car l'endpoint /upload ne sauvegarde pas
+    
+    return new Promise((resolve) => {
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += 10;
+        if (onProgress) {
+          onProgress(progress);
+        }
+        
+        if (progress >= 100) {
+          clearInterval(interval);
+          resolve({
+            success: true,
+            message: "Fichier prêt pour l'envoi final",
+            data: { 
+              documentId,
+              filePath: `uploads/${file.name}`, // Simule un chemin de fichier
+              originalName: file.name,
+              uploadedAt: new Date().toISOString(),
+              // size: file.size,
+              // type: file.type,
+              preview: true // Indique que c'est juste une prévisualisation
+            },
+          });
+        }
+      }, 100);
+    });
+  }
+
+  /**
+   * Récupération des documents de l'utilisateur
+   */
+  async getUserDocuments(): Promise<any> {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(`${this.baseUrl}/documents-user`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        }
+      });
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || error.message || 'Erreur lors de la récupération des documents');
+    }
   }
 
   /**
@@ -203,125 +267,25 @@ export class DocumentService {
   }
 
   /**
-   * Compression d'image avant upload (optionnel)
+   * Vérifier si tous les documents requis sont présents
    */
-  async compressImage(file: File, maxWidth: number = 1920, quality: number = 0.8): Promise<File> {
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
-
-      img.onload = () => {
-        // Calculer les nouvelles dimensions
-        const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
-        const width = img.width * ratio;
-        const height = img.height * ratio;
-
-        canvas.width = width;
-        canvas.height = height;
-
-        // Dessiner l'image redimensionnée
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              const compressedFile = new File([blob], file.name, {
-                type: file.type,
-                lastModified: Date.now()
-              });
-              resolve(compressedFile);
-            } else {
-              reject(new Error('Erreur lors de la compression'));
-            }
-          },
-          file.type,
-          quality
-        );
-      };
-
-      img.onerror = () => reject(new Error('Erreur lors du chargement de l\'image'));
-      img.src = URL.createObjectURL(file);
-    });
-  }
-
-  /**
-   * Convertir un fichier en Base64 (utile pour certains cas)
-   */
-  async fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-      reader.readAsDataURL(file);
-    });
-  }
-
-  /**
-   * Récupérer les statistiques des documents
-   */
-  async getDocumentStats(): Promise<{
-    total: number;
-    uploaded: number;
-    validated: number;
-    rejected: number;
-    pending: number;
-  }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/documents-user/stats`, {
-        method: 'GET',
-        headers: this.getHeaders()
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Erreur lors de la récupération des statistiques');
-      }
-
-      return data;
-    } catch (error) {
-        console.error('Erreur lors de la récupération des statistiques:', error);
-      // En cas d'erreur, retourner des statistiques par défaut
-      return {
-        total: 0,
-        uploaded: 0,
-        validated: 0,
-        rejected: 0,
-        pending: 0
-      };
-    }
-  }
-
-  /**
-   * Vérifier le statut de validation des documents
-   */
-  async checkValidationStatus(): Promise<{
-    isComplete: boolean;
-    missingDocuments: string[];
-    nextSteps: string[];
-  }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/documents-user/validation-status`, {
-        method: 'GET',
-        headers: this.getHeaders()
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Erreur lors de la vérification du statut');
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Erreur lors de la vérification du statut:', error);
-      return {
-        isComplete: false,
-        missingDocuments: [],
-        nextSteps: ['Contactez le support technique']
-      };
-    }
+  validateAllRequiredDocuments(files: {
+    cniFront?: File;
+    cniBack?: File;
+    rccm?: File;
+    dfe?: File;
+  }): { isValid: boolean; missingDocuments: string[] } {
+    const missing: string[] = [];
+    
+    if (!files.cniFront) missing.push('CNI Recto');
+    if (!files.cniBack) missing.push('CNI Verso');
+    if (!files.rccm) missing.push('RCCM');
+    if (!files.dfe) missing.push('DFE');
+    
+    return {
+      isValid: missing.length === 0,
+      missingDocuments: missing
+    };
   }
 
   /**
@@ -329,7 +293,7 @@ export class DocumentService {
    */
   setAuthToken(token: string): void {
     this.authToken = token;
-    localStorage.setItem('auth-token', token);
+    localStorage.setItem('token', token);
   }
 
   /**
@@ -337,75 +301,9 @@ export class DocumentService {
    */
   clearAuthToken(): void {
     this.authToken = null;
-    localStorage.removeItem('auth-token');
-  }
-  /**
-   * Mise à jour des documents refusés
-   */
-  async updateRejectedDocuments(
-    files: {
-      cniFront?: File;
-      cniBack?: File;
-      rccm?: File;
-      dfe?: File;
-    },
-    expiryDates: {
-      cniExpiry?: string;
-      rccmExpiry?: string;
-      dfeExpiry?: string;
-    }
-  ): Promise<DocumentUploadResponse> {
-    const formData = new FormData();
-
-    // Ajout des fichiers
-    if (files.cniFront) formData.append('cniFront', files.cniFront);
-    if (files.cniBack) formData.append('cniBack', files.cniBack);
-    if (files.rccm) formData.append('rccm', files.rccm);
-    if (files.dfe) formData.append('dfe', files.dfe);
-
-    // Ajout des dates d'expiration
-    if (expiryDates.cniExpiry) formData.append('cniExpiry', expiryDates.cniExpiry);
-    if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
-    if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
-
-    const response = await fetch(`${this.baseUrl}/documents-user`, {
-      method: 'PUT',
-      headers: this.getHeaders(),
-      body: formData
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Erreur lors de la mise à jour');
-    }
-
-    return {
-      success: true,
-      message: data.message,
-      data: data.paths
-    };
-  }
-
-  /**
-   * Récupération des documents de l'utilisateur
-   */
-  async getUserDocuments(): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/documents-user`, {
-      method: 'GET',
-      headers: this.getHeaders()
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Erreur lors de la récupération des documents');
-    }
-
-    return data;
+    localStorage.removeItem('token');
   }
 }
 
 // Instance singleton du service
 export const documentService = new DocumentService();
-

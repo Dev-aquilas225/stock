@@ -5,26 +5,61 @@ import { Building2, Moon, Sun, LogOut, User, Bell, Settings, Menu, X } from 'luc
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useNotifications } from '../../contexts/NotificationContext';
+import { useToast } from '../../contexts/ToastContext';
 import NotificationDropdown from '../Notifications/NotificationDropdown';
 
 const Header: React.FC = () => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, displayUser, isAuthenticated, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const { unreadCount } = useNotifications();
+  const { showToast } = useToast();
   const navigate = useNavigate();
-  
+
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [imageKey, setImageKey] = useState(Date.now()); // Initialize with timestamp
   const notificationRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  // Refresh imageKey when user or displayUser changes
+  useEffect(() => {
+    if (user?.profilePicture || displayUser?.profilePicture) {
+      setImageError(false); // Reset error on user change
+      setImageKey(Date.now()); // Refresh cache
+    }
+  }, [user, displayUser]);
+
+  const handleImageError = async (e: React.SyntheticEvent<HTMLImageElement>) => {
+    console.error("Image load error:", (user || displayUser)?.profilePicture, e);
+    try {
+      const response = await fetch((user || displayUser)?.profilePicture || '');
+      console.error("Image fetch status:", response.status, response.statusText);
+    } catch (fetchError) {
+      console.error("Image fetch error:", fetchError);
+    }
+    setImageError(true);
+    showToast({
+      type: "error",
+      title: "Erreur",
+      message: "Impossible de charger l'image de profil",
+      duration: 4000,
+    });
+  };
 
   const handleLogout = () => {
     logout();
     navigate('/');
     setShowUserMenu(false);
     setShowMobileMenu(false);
+    showToast({
+      type: "info",
+      title: "Déconnexion",
+      message: "Vous avez été déconnecté avec succès.",
+      duration: 3000,
+    });
   };
 
   // Close dropdowns when clicking outside
@@ -64,11 +99,9 @@ const Header: React.FC = () => {
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.3 }}
-      className={`fixed top-0 left-0 right-0 z-40 ${
-        isDark ? 'bg-nexsaas-vanta-black/95' : 'bg-nexsaas-pure-white/95'
-      } backdrop-blur-md border-b ${
-        isDark ? 'border-gray-800' : 'border-nexsaas-light-gray'
-      }`}
+      className={`fixed top-0 left-0 right-0 z-40 ${isDark ? 'bg-nexsaas-vanta-black/95' : 'bg-nexsaas-pure-white/95'
+        } backdrop-blur-md border-b ${isDark ? 'border-gray-800' : 'border-nexsaas-light-gray'
+        }`}
     >
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
@@ -77,9 +110,8 @@ const Header: React.FC = () => {
             <div className="p-2 bg-nexsaas-deep-blue rounded-lg">
               <Building2 className="w-6 h-6 text-nexsaas-pure-white" />
             </div>
-            <span className={`text-xl font-bold ${
-              isDark ? 'text-nexsaas-pure-white' : 'text-nexsaas-deep-blue'
-            }`}>
+            <span className={`text-xl font-bold ${isDark ? 'text-nexsaas-pure-white' : 'text-nexsaas-deep-blue'
+              }`}>
               FOREVER SAAS
             </span>
           </Link>
@@ -89,9 +121,8 @@ const Header: React.FC = () => {
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className={`p-2 rounded-lg transition-colors ${
-                isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
-              }`}
+              className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
+                }`}
             >
               {isDark ? (
                 <Sun className="w-5 h-5 text-nexsaas-saas-green" />
@@ -106,13 +137,11 @@ const Header: React.FC = () => {
                 <div className="relative" ref={notificationRef}>
                   <button
                     onClick={() => setShowNotifications(!showNotifications)}
-                    className={`relative p-2 rounded-lg transition-colors ${
-                      isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
-                    }`}
+                    className={`relative p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
+                      }`}
                   >
-                    <Bell className={`w-5 h-5 ${
-                      isDark ? 'text-nexsaas-pure-white' : 'text-nexsaas-deep-blue'
-                    }`} />
+                    <Bell className={`w-5 h-5 ${isDark ? 'text-nexsaas-pure-white' : 'text-nexsaas-deep-blue'
+                      }`} />
                     {unreadCount > 0 && (
                       <motion.span
                         initial={{ scale: 0 }}
@@ -123,10 +152,9 @@ const Header: React.FC = () => {
                       </motion.span>
                     )}
                   </button>
-                  
-                  <NotificationDropdown 
-                    isOpen={showNotifications} 
-                    onClose={() => setShowNotifications(false)} 
+                  <NotificationDropdown
+                    isOpen={showNotifications}
+                    onClose={() => setShowNotifications(false)}
                   />
                 </div>
 
@@ -134,19 +162,22 @@ const Header: React.FC = () => {
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setShowUserMenu(!showUserMenu)}
-                    className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                      isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
-                    }`}
+                    className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
+                      }`}
                   >
-                    <div className="w-8 h-8 bg-nexsaas-deep-blue rounded-full flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">
-                        {user?.nom?.[0]}{user?.prenom?.[0]}
-                      </span>
-                    </div>
-                    <span className={`text-sm font-medium hidden lg:block ${
-                      isDark ? 'text-nexsaas-pure-white' : 'text-nexsaas-deep-blue'
-                    }`}>
-                      {user?.nom} {user?.prenom}
+                    {(user || displayUser)?.profilePicture && !imageError ? (
+                      <img
+                        src={`${(user || displayUser)?.profilePicture}?t=${imageKey}`}
+                        alt="Profile"
+                        className="w-8 h-8 rounded-full object-cover"
+                        onError={handleImageError}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center" />
+                    )}
+                    <span className={`text-sm font-medium hidden lg:block ${isDark ? 'text-nexsaas-pure-white' : 'text-nexsaas-deep-blue'
+                      }`}>
+                      {(user || displayUser)?.nom} {(user || displayUser)?.prenom}
                     </span>
                   </button>
 
@@ -162,14 +193,19 @@ const Header: React.FC = () => {
                       >
                         <div className="p-4 border-b border-nexsaas-light-gray dark:border-gray-700">
                           <div className="flex items-center space-x-3">
-                            <div className="w-12 h-12 bg-nexsaas-deep-blue rounded-full flex items-center justify-center">
-                              <span className="text-white font-bold">
-                                {user?.nom?.[0]}{user?.prenom?.[0]}
-                              </span>
-                            </div>
+                            {(user || displayUser)?.profilePicture && !imageError ? (
+                              <img
+                                src={`${(user || displayUser)?.profilePicture}?t=${imageKey}`}
+                                alt="Profile"
+                                className="w-12 h-12 rounded-full object-cover"
+                                onError={handleImageError}
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center" />
+                            )}
                             <div>
                               <p className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                {user?.nom} {user?.prenom}
+                                {(user || displayUser)?.nom} {(user || displayUser)?.prenom}
                               </p>
                               <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                                 {user?.email}
@@ -187,7 +223,6 @@ const Header: React.FC = () => {
                             <User className="w-4 h-4" />
                             <span>Mon profil</span>
                           </Link>
-                          
                           <Link
                             to="/dashboard"
                             onClick={() => setShowUserMenu(false)}
@@ -216,11 +251,10 @@ const Header: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <Link
                   to="/login-client"
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    isDark 
-                      ? 'text-nexsaas-pure-white hover:bg-gray-800' 
-                      : 'text-nexsaas-deep-blue hover:bg-nexsaas-light-gray'
-                  }`}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${isDark
+                    ? 'text-nexsaas-pure-white hover:bg-gray-800'
+                    : 'text-nexsaas-deep-blue hover:bg-nexsaas-light-gray'
+                    }`}
                 >
                   Connexion
                 </Link>
@@ -239,9 +273,8 @@ const Header: React.FC = () => {
             {/* Theme Toggle Mobile */}
             <button
               onClick={toggleTheme}
-              className={`p-2 rounded-lg transition-colors ${
-                isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
-              }`}
+              className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
+                }`}
             >
               {isDark ? (
                 <Sun className="w-5 h-5 text-nexsaas-saas-green" />
@@ -253,9 +286,8 @@ const Header: React.FC = () => {
             {/* Mobile Menu Toggle */}
             <button
               onClick={() => setShowMobileMenu(!showMobileMenu)}
-              className={`p-2 rounded-lg transition-colors ${
-                isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
-              }`}
+              className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
+                }`}
             >
               {showMobileMenu ? (
                 <X className={`w-6 h-6 ${isDark ? 'text-nexsaas-pure-white' : 'text-nexsaas-deep-blue'}`} />
@@ -275,9 +307,8 @@ const Header: React.FC = () => {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3 }}
-              className={`md:hidden border-t ${
-                isDark ? 'border-gray-800' : 'border-nexsaas-light-gray'
-              } overflow-hidden`}
+              className={`md:hidden border-t ${isDark ? 'border-gray-800' : 'border-nexsaas-light-gray'
+                } overflow-hidden`}
             >
               <div className="py-4 space-y-2">
                 {isAuthenticated ? (
@@ -285,14 +316,19 @@ const Header: React.FC = () => {
                     {/* User Info Mobile */}
                     <div className="px-4 py-3 border-b border-nexsaas-light-gray dark:border-gray-700">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-nexsaas-deep-blue rounded-full flex items-center justify-center">
-                          <span className="text-white font-bold text-sm">
-                            {user?.nom?.[0]}{user?.prenom?.[0]}
-                          </span>
-                        </div>
+                        {(user || displayUser)?.profilePicture && !imageError ? (
+                          <img
+                            src={`${(user || displayUser)?.profilePicture}?t=${imageKey}`}
+                            alt="Profile"
+                            className="w-10 h-10 rounded-full object-cover"
+                            onError={handleImageError}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center" />
+                        )}
                         <div>
                           <p className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                            {user?.nom} {user?.prenom}
+                            {(user || displayUser)?.nom} {(user || displayUser)?.prenom}
                           </p>
                           <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                             {user?.email}
@@ -307,9 +343,8 @@ const Header: React.FC = () => {
                         setShowNotifications(!showNotifications);
                         setShowMobileMenu(false);
                       }}
-                      className={`flex items-center justify-between w-full px-4 py-3 text-left transition-colors ${
-                        isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
-                      }`}
+                      className={`flex items-center justify-between w-full px-4 py-3 text-left transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-nexsaas-light-gray'
+                        }`}
                     >
                       <div className="flex items-center space-x-3">
                         <Bell className={`w-5 h-5 ${isDark ? 'text-nexsaas-pure-white' : 'text-nexsaas-deep-blue'}`} />
@@ -328,9 +363,8 @@ const Header: React.FC = () => {
                     <Link
                       to="/dashboard"
                       onClick={() => setShowMobileMenu(false)}
-                      className={`flex items-center space-x-3 px-4 py-3 transition-colors ${
-                        isDark ? 'hover:bg-gray-800 text-nexsaas-pure-white' : 'hover:bg-nexsaas-light-gray text-nexsaas-deep-blue'
-                      }`}
+                      className={`flex items-center space-x-3 px-4 py-3 transition-colors ${isDark ? 'hover:bg-gray-800 text-nexsaas-pure-white' : 'hover:bg-nexsaas-light-gray text-nexsaas-deep-blue'
+                        }`}
                     >
                       <Settings className="w-5 h-5" />
                       <span className="font-medium">Tableau de bord</span>
@@ -339,9 +373,8 @@ const Header: React.FC = () => {
                     <Link
                       to="/profil"
                       onClick={() => setShowMobileMenu(false)}
-                      className={`flex items-center space-x-3 px-4 py-3 transition-colors ${
-                        isDark ? 'hover:bg-gray-800 text-nexsaas-pure-white' : 'hover:bg-nexsaas-light-gray text-nexsaas-deep-blue'
-                      }`}
+                      className={`flex items-center space-x-3 px-4 py-3 transition-colors ${isDark ? 'hover:bg-gray-800 text-nexsaas-pure-white' : 'hover:bg-nexsaas-light-gray text-nexsaas-deep-blue'
+                        }`}
                     >
                       <User className="w-5 h-5" />
                       <span className="font-medium">Mon profil</span>
@@ -361,9 +394,8 @@ const Header: React.FC = () => {
                     <Link
                       to="/login-client"
                       onClick={() => setShowMobileMenu(false)}
-                      className={`block px-4 py-3 font-medium transition-colors ${
-                        isDark ? 'text-nexsaas-pure-white hover:bg-gray-800' : 'text-nexsaas-deep-blue hover:bg-nexsaas-light-gray'
-                      }`}
+                      className={`block px-4 py-3 font-medium transition-colors ${isDark ? 'text-nexsaas-pure-white hover:bg-gray-800' : 'text-nexsaas-deep-blue hover:bg-nexsaas-light-gray'
+                        }`}
                     >
                       Connexion
                     </Link>
