@@ -12,9 +12,51 @@ export interface UpdatePasswordDto {
     newPassword: string;
 }
 
+// Interface for user profile
+export interface User {
+    id: string;
+    nom: string;
+    prenom: string;
+    email: string;
+    type: string;
+    role: string;
+    actif: boolean;
+    createdAt: Date;
+    profilePicture?: string;
+    phone?: string;
+    address?: string;
+    description?: string;
+    nif?: string;
+    companyName?: string;
+}
+
+// Get profile
+export const getProfile = async (): Promise<User> => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+        console.error("No token found in localStorage for getProfile");
+        throw new Error("No authentication token found");
+    }
+
+    try {
+        const response = await axiosClient.get("/auth/me", {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+        console.log("Profile retrieved:", response.data);
+        return response.data;
+    } catch (error: any) {
+        console.error("Get profile error:", error.response?.data || error.message);
+        if (error.response?.status === 401) {
+            throw new Error("Non autorisé : Veuillez vous reconnecter");
+        }
+        throw new Error(error.response?.data?.message || "Échec de la récupération du profil");
+    }
+};
+
 // Update profile
 export const updateProfile = async (data: UpdateProfileDto) => {
-    // Retrieve token from localStorage
     const token = localStorage.getItem("token");
     if (!token) {
         console.error("No token found in localStorage for updateProfile");
@@ -41,9 +83,8 @@ export const updateProfile = async (data: UpdateProfileDto) => {
 // Upload selfie
 export const uploadSelfie = async (file: File) => {
     const formData = new FormData();
-    formData.append("selfie", file); // Use "selfie" as field name
+    formData.append("selfie", file);
 
-    // Retrieve token from localStorage
     const token = localStorage.getItem("token");
     if (!token) {
         console.error("No token found in localStorage for uploadSelfie");
@@ -78,7 +119,6 @@ export const uploadSelfie = async (file: File) => {
 
 // Update password
 export const updatePassword = async (data: UpdatePasswordDto) => {
-    // Retrieve token from localStorage
     const token = localStorage.getItem("token");
     if (!token) {
         console.error("No token found in localStorage for updatePassword");
