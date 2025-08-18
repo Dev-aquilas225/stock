@@ -1,19 +1,26 @@
-// src/api/fournisseurApi.ts
-
 import { Devise } from "../types";
 import axiosClient from "./axiosClient";
 
-
 export interface CreateFournisseurDto {
     nom: string;
-    adresse: string;
-    email: string;
-    telephone: string;
+    adresse?: string;
+    email?: string;
+    telephone?: string;
     categorie: "1" | "2";
-    delaiLivraison: string;
+    delaiLivraison?: string;
+    doc1Name?: string;
+    doc2Name?: string;
+    doc3Name?: string;
+    doc4Name?: string;
+    doc5Name?: string;
 }
 
-// Interface pour un fournisseur dans la liste
+export interface DocumentFournisseur {
+    id: number;
+    nom: string;
+    url: string;
+}
+
 export interface Fournisseur {
     id: number;
     nom: string;
@@ -28,6 +35,7 @@ export interface Fournisseur {
     contacts: any[];
     interactions: any[];
     evaluation: Evaluation;
+    documents: DocumentFournisseur[];
 }
 
 export interface Evaluation {
@@ -57,25 +65,45 @@ export interface Produit {
     }[];
 }
 
-// Interface pour les détails d’un fournisseur (différence = évaluationId)
 export interface FournisseurDetail extends Omit<Fournisseur, "evaluation"> {
     evaluationId: number;
 }
 
-// ➕ Ajouter un fournisseur
-export const addFournisseur = async (fournisseurData: CreateFournisseurDto) => {
+export const addFournisseur = async (
+    fournisseurData: CreateFournisseurDto,
+    files: {
+        doc1?: File;
+        doc2?: File;
+        doc3?: File;
+        doc4?: File;
+        doc5?: File;
+    },
+) => {
     const token = localStorage.getItem("token");
+    const formData = new FormData();
+
+    // Append DTO fields to FormData
+    Object.entries(fournisseurData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+            formData.append(key, value);
+        }
+    });
+
+    // Append files to FormData
+    if (files.doc1) formData.append("doc1", files.doc1);
+    if (files.doc2) formData.append("doc2", files.doc2);
+    if (files.doc3) formData.append("doc3", files.doc3);
+    if (files.doc4) formData.append("doc4", files.doc4);
+    if (files.doc5) formData.append("doc5", files.doc5);
+
     try {
-        const response = await axiosClient.post(
-            "/fournisseurs",
-            fournisseurData,
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+        const response = await axiosClient.post("/fournisseurs", formData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "multipart/form-data",
             },
-        );
-        return response.data.data;
+        });
+        return response.data;
     } catch (err: any) {
         const errorMessage =
             err.response?.data?.message ||
@@ -232,12 +260,13 @@ export const addProduitToFournisseur = async (
     }
 };
 
-
 export type UpdateProduitDto = Partial<CreateProduitDto>;
 
-
 // ✏️ Modifier un fournisseur
-export const updateProduit = async (id: number, produitData: UpdateProduitDto) => {
+export const updateProduit = async (
+    id: number,
+    produitData: UpdateProduitDto,
+) => {
     const token = localStorage.getItem("token");
     try {
         const response = await axiosClient.patch(

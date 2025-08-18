@@ -21,6 +21,8 @@ import {
     Package,
     ChevronDown,
     ChevronUp,
+    CheckCircle,
+    FileText,
 } from "lucide-react";
 import Card from "../../components/UI/Card";
 import Button from "../../components/UI/Button";
@@ -46,15 +48,11 @@ import {
 import { debounce } from "lodash";
 import { Devise } from "../../types";
 
-
-
 // Interface aligned with API's Fournisseur
-interface Supplier extends Fournisseur {
-    category: "principal" | "secondaire";
-}
+interface Supplier extends Fournisseur {}
 
 interface Product extends Produit {
-    priceHistory: PriceHistory[];
+    priceHistory?: PriceHistory[];
 }
 
 interface PriceHistory {
@@ -73,6 +71,21 @@ interface ProductForm {
     delaiApprovisionnement: string;
 }
 
+interface DocumentField {
+    name: string;
+    file: File | null;
+}
+
+interface SupplierForm {
+    nom: string;
+    email: string;
+    telephone: string;
+    adresse: string;
+    categorie: "1" | "2";
+    delaiLivraison: string;
+    documents: DocumentField[];
+}
+
 const SuppliersPage: React.FC = () => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
@@ -82,6 +95,7 @@ const SuppliersPage: React.FC = () => {
     const [showProductModal, setShowProductModal] = useState(false);
     const [showPriceHistoryModal, setShowPriceHistoryModal] = useState(false);
     const [showRatingModal, setShowRatingModal] = useState(false);
+    const [showDocumentsModal, setShowDocumentsModal] = useState(false);
     const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
         null,
     );
@@ -106,13 +120,14 @@ const SuppliersPage: React.FC = () => {
     const { showToast } = useToast();
     const { logActivity } = useActivity();
 
-    const [supplierForm, setSupplierForm] = useState({
+    const [supplierForm, setSupplierForm] = useState<SupplierForm>({
         nom: "",
         email: "",
         telephone: "",
         adresse: "",
-        categorie: "1" as "1" | "2",
+        categorie: "1",
         delaiLivraison: "",
+        documents: [],
     });
 
     const [productForm, setProductForm] = useState<ProductForm>({
@@ -128,31 +143,7 @@ const SuppliersPage: React.FC = () => {
         const fetchAllSuppliers = async () => {
             try {
                 const data = await getAllFournisseurs();
-                const validSuppliers = data
-                    .filter(
-                        (fournisseur): fournisseur is Fournisseur =>
-                            fournisseur &&
-                            typeof fournisseur.nom === "string" &&
-                            typeof fournisseur.email === "string" &&
-                            typeof fournisseur.categorie === "string" &&
-                            ["1", "2"].includes(fournisseur.categorie),
-                    )
-                    .map((fournisseur) => ({
-                        ...fournisseur,
-                        category:
-                            fournisseur.categorie === "1"
-                                ? "principal"
-                                : "secondaire",
-                    }));
-                setAllSuppliers(validSuppliers);
-                if (data.length !== validSuppliers.length) {
-                    showToast({
-                        type: "warning",
-                        title: "Données invalides",
-                        message:
-                            "Certaines données de fournisseurs étaient invalides et ont été ignorées",
-                    });
-                }
+                setAllSuppliers(data);
             } catch (err: any) {
                 showToast({
                     type: "error",
@@ -172,43 +163,7 @@ const SuppliersPage: React.FC = () => {
             try {
                 setLoading(true);
                 const data = await getFournisseurs();
-                const mappedSuppliers = data
-                    .filter(
-                        (fournisseur): fournisseur is Fournisseur =>
-                            fournisseur &&
-                            typeof fournisseur.nom === "string" &&
-                            typeof fournisseur.email === "string" &&
-                            typeof fournisseur.categorie === "string" &&
-                            ["1", "2"].includes(fournisseur.categorie),
-                    )
-                    .map((fournisseur) => ({
-                        ...fournisseur,
-                        category:
-                            fournisseur.categorie === "1"
-                                ? "principal"
-                                : "secondaire",
-                        produits: fournisseur.produits.map(
-                            (produit: Produit) => ({
-                                ...produit,
-                                priceHistory: [
-                                    {
-                                        id: `PH-${produit.id}-${Date.now()}`,
-                                        price: parseFloat(produit.prix) || 0,
-                                        date: produit.creeLe
-                                            ? new Date(produit.creeLe)
-                                                  .toISOString()
-                                                  .split("T")[0]
-                                            : new Date()
-                                                  .toISOString()
-                                                  .split("T")[0],
-                                        negotiatedBy: "Système",
-                                        notes: "Prix initial",
-                                    },
-                                ],
-                            }),
-                        ),
-                    }));
-                setSuppliers(mappedSuppliers);
+                setSuppliers(data);
             } catch (err: any) {
                 setError(err.message);
                 showToast({
@@ -233,16 +188,13 @@ const SuppliersPage: React.FC = () => {
             }
             const filtered = allSuppliers.filter(
                 (supplier) =>
-                    supplier &&
-                    (supplier.nom
+                    supplier.nom.toLowerCase().includes(search.toLowerCase()) ||
+                    supplier.email
                         .toLowerCase()
                         .includes(search.toLowerCase()) ||
-                        supplier.email
-                            .toLowerCase()
-                            .includes(search.toLowerCase()) ||
-                        supplier.telephone
-                            .toLowerCase()
-                            .includes(search.toLowerCase())),
+                    supplier.telephone
+                        .toLowerCase()
+                        .includes(search.toLowerCase()),
             );
             setSuggestions(filtered);
             setShowSuggestions(true);
@@ -251,14 +203,55 @@ const SuppliersPage: React.FC = () => {
     );
 
     // Handle input changes and trigger suggestions
-    const handleInputChange = (
-        field: keyof typeof supplierForm,
-        value: string,
-    ) => {
+    const handleInputChange = (field: keyof SupplierForm, value: string) => {
         setSupplierForm((prev) => ({ ...prev, [field]: value }));
         if (field === "nom" || field === "email" || field === "telephone") {
             searchSuppliers(value);
         }
+    };
+
+    // Handle document field changes
+    const handleDocumentChange = (
+        index: number,
+        field: keyof DocumentField,
+        value: string | File | null,
+    ) => {
+        setSupplierForm((prev) => {
+            const newDocuments = [...prev.documents];
+            newDocuments[index] = { ...newDocuments[index], [field]: value };
+            if (field === "file" && value) {
+                showToast({
+                    type: "success",
+                    title: "Document chargé",
+                    message: `Document ${
+                        newDocuments[index].name || `n°${index + 1}`
+                    } chargé avec succès`,
+                });
+            }
+            return { ...prev, documents: newDocuments };
+        });
+    };
+
+    // Add new document field
+    const addDocumentField = () => {
+        setSupplierForm((prev) => ({
+            ...prev,
+            documents: [...prev.documents, { name: "", file: null }],
+        }));
+    };
+
+    // Remove document field
+    const removeDocumentField = (index: number) => {
+        setSupplierForm((prev) => {
+            const documentName = prev.documents[index].name || `n°${index + 1}`;
+            const newDocuments = prev.documents.filter((_, i) => i !== index);
+            showToast({
+                type: "info",
+                title: "Document retiré",
+                message: `Document ${documentName} retiré`,
+            });
+            return { ...prev, documents: newDocuments };
+        });
     };
 
     // Handle suggestion selection with validation
@@ -278,6 +271,7 @@ const SuppliersPage: React.FC = () => {
             adresse: supplier.adresse || "",
             categorie: supplier.categorie as "1" | "2",
             delaiLivraison: supplier.delaiLivraison || "",
+            documents: [],
         });
         setSuggestions([]);
         setShowSuggestions(false);
@@ -291,6 +285,7 @@ const SuppliersPage: React.FC = () => {
             adresse: "",
             categorie: "1",
             delaiLivraison: "",
+            documents: [],
         });
         setProductForm({
             nom: "",
@@ -315,40 +310,7 @@ const SuppliersPage: React.FC = () => {
             if (!fournisseurDetail || !fournisseurDetail.categorie) {
                 throw new Error("Données du fournisseur invalides");
             }
-            setEditingSupplier({
-                ...fournisseurDetail,
-                category:
-                    fournisseurDetail.categorie === "1"
-                        ? "principal"
-                        : "secondaire",
-                evaluation: fournisseurDetail.evaluationId
-                    ? {
-                          id: fournisseurDetail.evaluationId,
-                          note: supplier.evaluation?.note || 0,
-                          done: supplier.evaluation?.done || false,
-                          commentaire: supplier.evaluation?.commentaire || "",
-                          creeLe: supplier.evaluation?.creeLe || new Date(),
-                      }
-                    : null,
-                produits: fournisseurDetail.produits.map(
-                    (produit: Produit) => ({
-                        ...produit,
-                        priceHistory: [
-                            {
-                                id: `PH-${produit.id}-${Date.now()}`,
-                                price: parseFloat(produit.prix) || 0,
-                                date: produit.creeLe
-                                    ? new Date(produit.creeLe)
-                                          .toISOString()
-                                          .split("T")[0]
-                                    : new Date().toISOString().split("T")[0],
-                                negotiatedBy: "Système",
-                                notes: "Prix initial",
-                            },
-                        ],
-                    }),
-                ),
-            });
+            setEditingSupplier(fournisseurDetail);
             setSupplierForm({
                 nom: supplier.nom || "",
                 email: supplier.email || "",
@@ -356,6 +318,7 @@ const SuppliersPage: React.FC = () => {
                 adresse: supplier.adresse || "",
                 categorie: supplier.categorie as "1" | "2",
                 delaiLivraison: supplier.delaiLivraison || "",
+                documents: [],
             });
             setShowSupplierModal(true);
         } catch (err: any) {
@@ -416,54 +379,23 @@ const SuppliersPage: React.FC = () => {
                 adresse: supplierForm.adresse,
                 categorie: supplierForm.categorie,
                 delaiLivraison: supplierForm.delaiLivraison,
+                doc1Name: supplierForm.documents[0]?.name || "",
+                doc2Name: supplierForm.documents[1]?.name || "",
+                doc3Name: supplierForm.documents[2]?.name || "",
+                doc4Name: supplierForm.documents[3]?.name || "",
+                doc5Name: supplierForm.documents[4]?.name || "",
+            };
+
+            const files = {
+                doc1: supplierForm.documents[0]?.file || null,
+                doc2: supplierForm.documents[1]?.file || null,
+                doc3: supplierForm.documents[2]?.file || null,
+                doc4: supplierForm.documents[3]?.file || null,
+                doc5: supplierForm.documents[4]?.file || null,
             };
 
             if (editingSupplier) {
                 await updateFournisseur(editingSupplier.id, fournisseurData);
-                const data = await getFournisseurs();
-                const mappedSuppliers = data
-                    .filter(
-                        (fournisseur): fournisseur is Fournisseur =>
-                            fournisseur &&
-                            typeof fournisseur.nom === "string" &&
-                            typeof fournisseur.email === "string" &&
-                            typeof fournisseur.categorie === "string" &&
-                            ["1", "2"].includes(fournisseur.categorie),
-                    )
-                    .map((fournisseur) => ({
-                        ...fournisseur,
-                        category:
-                            fournisseur.categorie === "1"
-                                ? "principal"
-                                : "secondaire",
-                        produits: fournisseur.produits.map(
-                            (produit: Produit) => ({
-                                ...produit,
-                                priceHistory: [
-                                    {
-                                        id: `PH-${produit.id}-${Date.now()}`,
-                                        price: parseFloat(produit.prix) || 0,
-                                        date: produit.creeLe
-                                            ? new Date(produit.creeLe)
-                                                  .toISOString()
-                                                  .split("T")[0]
-                                            : new Date()
-                                                  .toISOString()
-                                                  .split("T")[0],
-                                        negotiatedBy: "Système",
-                                        notes: "Prix initial",
-                                    },
-                                ],
-                            }),
-                        ),
-                    }));
-                setSuppliers(mappedSuppliers);
-                logActivity({
-                    type: "update",
-                    module: "Fournisseurs",
-                    description: `Fournisseur modifié: ${supplierForm.nom}`,
-                    metadata: { supplierId: editingSupplier.id },
-                });
                 showToast({
                     type: "success",
                     title: "Fournisseur modifié",
@@ -471,65 +403,41 @@ const SuppliersPage: React.FC = () => {
                         "Les informations du fournisseur ont été mises à jour",
                 });
             } else {
-                await addFournisseur(fournisseurData);
-                const data = await getFournisseurs();
-                const mappedSuppliers = data
-                    .filter(
-                        (fournisseur): fournisseur is Fournisseur =>
-                            fournisseur &&
-                            typeof fournisseur.nom === "string" &&
-                            typeof fournisseur.email === "string" &&
-                            typeof fournisseur.categorie === "string" &&
-                            ["1", "2"].includes(fournisseur.categorie),
-                    )
-                    .map((fournisseur) => ({
-                        ...fournisseur,
-                        category:
-                            fournisseur.categorie === "1"
-                                ? "principal"
-                                : "secondaire",
-                        produits: fournisseur.produits.map(
-                            (produit: Produit) => ({
-                                ...produit,
-                                priceHistory: [
-                                    {
-                                        id: `PH-${produit.id}-${Date.now()}`,
-                                        price: parseFloat(produit.prix) || 0,
-                                        date: produit.creeLe
-                                            ? new Date(produit.creeLe)
-                                                  .toISOString()
-                                                  .split("T")[0]
-                                            : new Date()
-                                                  .toISOString()
-                                                  .split("T")[0],
-                                        negotiatedBy: "Système",
-                                        notes: "Prix initial",
-                                    },
-                                ],
-                            }),
-                        ),
-                    }));
-                setSuppliers(mappedSuppliers);
+                const response = await addFournisseur(fournisseurData, files);
+                console.log("addFournisseur response:", response); // For debugging
+                if (!response.success) {
+                    throw new Error(
+                        response.message ||
+                            "Erreur lors de la création du fournisseur",
+                    );
+                }
                 logActivity({
                     type: "create",
                     module: "Fournisseurs",
                     description: `Nouveau fournisseur ajouté: ${supplierForm.nom}`,
-                    metadata: { supplierId: fournisseurData.nom },
+                    metadata: { supplierId: supplierForm.nom }, // Use nom as fallback
                 });
                 showToast({
                     type: "success",
                     title: "Fournisseur ajouté",
-                    message: "Le nouveau fournisseur a été créé avec succès",
+                    message:
+                        response.message ||
+                        "Le nouveau fournisseur a été créé avec succès",
                 });
             }
+
+            // Fetch updated supplier list without mapping
+            const data = await getFournisseurs();
+            setSuppliers(data);
             setShowSupplierModal(false);
             resetForms();
         } catch (err: any) {
+            console.error("Erreur dans handleSaveSupplier:", err);
             showToast({
                 type: "error",
                 title: "Erreur",
                 message:
-                    err.message || "Un fournisseur avec cet email existe déjà",
+                    err.message || "Erreur lors de la création du fournisseur",
             });
         }
     };
@@ -577,120 +485,26 @@ const SuppliersPage: React.FC = () => {
             };
 
             if (editingProduct) {
-                // Update existing product
                 await updateProduit(editingProduct.id, produitData);
-                const data = await getFournisseurs();
-                const mappedSuppliers = data
-                    .filter(
-                        (fournisseur): fournisseur is Fournisseur =>
-                            fournisseur &&
-                            typeof fournisseur.nom === "string" &&
-                            typeof fournisseur.email === "string" &&
-                            typeof fournisseur.categorie === "string" &&
-                            ["1", "2"].includes(fournisseur.categorie),
-                    )
-                    .map((fournisseur) => ({
-                        ...fournisseur,
-                        category:
-                            fournisseur.categorie === "1"
-                                ? "principal"
-                                : "secondaire",
-                        produits: fournisseur.produits.map(
-                            (produit: Produit) => ({
-                                ...produit,
-                                priceHistory: [
-                                    {
-                                        id: `PH-${produit.id}-${Date.now()}`,
-                                        price: parseFloat(produit.prix) || 0,
-                                        date: produit.creeLe
-                                            ? new Date(produit.creeLe)
-                                                  .toISOString()
-                                                  .split("T")[0]
-                                            : new Date()
-                                                  .toISOString()
-                                                  .split("T")[0],
-                                        negotiatedBy: "Système",
-                                        notes: "Prix initial",
-                                    },
-                                ],
-                            }),
-                        ),
-                    }));
-                setSuppliers(mappedSuppliers);
-                logActivity({
-                    type: "update",
-                    module: "Produits",
-                    description: `Produit modifié: ${productForm.nom} pour le fournisseur ${selectedSupplier.nom}`,
-                    metadata: {
-                        supplierId: selectedSupplier.id,
-                        productId: editingProduct.id,
-                        productName: productForm.nom,
-                    },
-                });
                 showToast({
                     type: "success",
                     title: "Produit modifié",
                     message: "Les informations du produit ont été mises à jour",
                 });
             } else {
-                // Add new product
                 await addProduitToFournisseur(
                     selectedSupplier.id,
                     produitData as CreateProduitDto,
                 );
-                const data = await getFournisseurs();
-                const mappedSuppliers = data
-                    .filter(
-                        (fournisseur): fournisseur is Fournisseur =>
-                            fournisseur &&
-                            typeof fournisseur.nom === "string" &&
-                            typeof fournisseur.email === "string" &&
-                            typeof fournisseur.categorie === "string" &&
-                            ["1", "2"].includes(fournisseur.categorie),
-                    )
-                    .map((fournisseur) => ({
-                        ...fournisseur,
-                        category:
-                            fournisseur.categorie === "1"
-                                ? "principal"
-                                : "secondaire",
-                        produits: fournisseur.produits.map(
-                            (produit: Produit) => ({
-                                ...produit,
-                                priceHistory: [
-                                    {
-                                        id: `PH-${produit.id}-${Date.now()}`,
-                                        price: parseFloat(produit.prix) || 0,
-                                        date: produit.creeLe
-                                            ? new Date(produit.creeLe)
-                                                  .toISOString()
-                                                  .split("T")[0]
-                                            : new Date()
-                                                  .toISOString()
-                                                  .split("T")[0],
-                                        negotiatedBy: "Système",
-                                        notes: "Prix initial",
-                                    },
-                                ],
-                            }),
-                        ),
-                    }));
-                setSuppliers(mappedSuppliers);
-                logActivity({
-                    type: "create",
-                    module: "Produits",
-                    description: `Nouveau produit ajouté: ${productForm.nom} pour le fournisseur ${selectedSupplier.nom}`,
-                    metadata: {
-                        supplierId: selectedSupplier.id,
-                        productName: productForm.nom,
-                    },
-                });
                 showToast({
                     type: "success",
                     title: "Produit ajouté",
                     message: "Le nouveau produit a été ajouté au catalogue",
                 });
             }
+
+            const data = await getFournisseurs();
+            setSuppliers(data);
             setShowProductModal(false);
             resetForms();
         } catch (err: any) {
@@ -713,6 +527,12 @@ const SuppliersPage: React.FC = () => {
         setNewRating(supplier.evaluation?.note || 0);
         setRatingComment(supplier.evaluation?.commentaire || "");
         setShowRatingModal(true);
+        setShowActionsMenu(null);
+    };
+
+    const handleViewDocuments = (supplier: Supplier) => {
+        setSelectedSupplier(supplier);
+        setShowDocumentsModal(true);
         setShowActionsMenu(null);
     };
 
@@ -774,8 +594,11 @@ const SuppliersPage: React.FC = () => {
         });
     };
 
-    const getCategoryColor = (category: string) => {
-        return category === "principal"
+    const getCategoryLabel = (categorie: string) =>
+        categorie === "1" ? "principal" : "secondaire";
+
+    const getCategoryColor = (categorie: string) => {
+        return categorie === "1"
             ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
             : "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400";
     };
@@ -829,7 +652,8 @@ const SuppliersPage: React.FC = () => {
             supplier.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
             supplier.email.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory =
-            categoryFilter === "all" || supplier.category === categoryFilter;
+            categoryFilter === "all" ||
+            getCategoryLabel(supplier.categorie) === categoryFilter;
         return matchesSearch && matchesCategory;
     });
 
@@ -1020,10 +844,12 @@ const SuppliersPage: React.FC = () => {
                                                 </h3>
                                                 <span
                                                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(
-                                                        supplier.category,
+                                                        supplier.categorie,
                                                     )}`}
                                                 >
-                                                    {supplier.category}
+                                                    {getCategoryLabel(
+                                                        supplier.categorie,
+                                                    )}
                                                 </span>
                                                 <span
                                                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
@@ -1214,7 +1040,7 @@ const SuppliersPage: React.FC = () => {
                                         </Button>
                                         {showActionsMenu ===
                                             supplier.id.toString() && (
-                                            <div className="absolute right-0 mt-2 w-48 bg-nexsaas-pure-white dark:bg-gray-800 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg shadow-lg z-10">
+                                            <div className="absolute right-0 lg:left-0 mt-2 w-48 bg-nexsaas-pure-white dark:bg-gray-800 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg shadow-lg z-10">
                                                 <button
                                                     onClick={() =>
                                                         handleRateSupplier(
@@ -1247,6 +1073,17 @@ const SuppliersPage: React.FC = () => {
                                                 >
                                                     <Edit className="w-4 h-4 mr-2" />
                                                     Modifier
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        handleViewDocuments(
+                                                            supplier,
+                                                        )
+                                                    }
+                                                    className="w-full flex items-center px-4 py-2 text-sm text-nexsaas-vanta-black dark:text-gray-300 hover:bg-nexsaas-light-gray dark:hover:bg-gray-700"
+                                                >
+                                                    <FileText className="w-4 h-4 mr-2" />
+                                                    Voir documents
                                                 </button>
                                                 <button
                                                     onClick={() =>
@@ -1508,6 +1345,90 @@ const SuppliersPage: React.FC = () => {
                                     />
                                 </div>
 
+                                {/* Document Inputs */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                            Documents (facultatifs)
+                                        </h3>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={addDocumentField}
+                                            disabled={
+                                                supplierForm.documents.length >=
+                                                5
+                                            }
+                                        >
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            Ajouter un document
+                                        </Button>
+                                    </div>
+                                    {supplierForm.documents.map(
+                                        (doc, index) => (
+                                            <div
+                                                key={index}
+                                                className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center"
+                                            >
+                                                <Input
+                                                    label={`Nom du document ${
+                                                        index + 1
+                                                    }`}
+                                                    value={doc.name}
+                                                    onChange={(value) =>
+                                                        handleDocumentChange(
+                                                            index,
+                                                            "name",
+                                                            value,
+                                                        )
+                                                    }
+                                                    placeholder={`ex: Contrat ${
+                                                        index + 1
+                                                    }`}
+                                                />
+                                                <div className="flex items-center space-x-2">
+                                                    <div className="flex-1">
+                                                        <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                            Fichier {index + 1}
+                                                        </label>
+                                                        <div className="relative">
+                                                            <input
+                                                                type="file"
+                                                                accept=".pdf,.doc,.docx,.jpg,.png"
+                                                                onChange={(e) =>
+                                                                    handleDocumentChange(
+                                                                        index,
+                                                                        "file",
+                                                                        e.target
+                                                                            .files?.[0] ||
+                                                                            null,
+                                                                    )
+                                                                }
+                                                                className="w-full px-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                                            />
+                                                            {doc.file && (
+                                                                <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-green-500" />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            removeDocumentField(
+                                                                index,
+                                                            )
+                                                        }
+                                                        className="text-red-500 hover:text-red-600"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ),
+                                    )}
+                                </div>
+
                                 <div className="flex justify-end space-x-4">
                                     <Button
                                         variant="outline"
@@ -1696,42 +1617,51 @@ const SuppliersPage: React.FC = () => {
                             </div>
 
                             <div className="space-y-4">
-                                {selectedProduct.priceHistory.map(
-                                    (history, index) => (
-                                        <div
-                                            key={history.id}
-                                            className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-4"
-                                        >
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center space-x-3">
-                                                    <span className="text-lg font-bold text-nexsaas-saas-green">
-                                                        {history.price}{" "}
-                                                        {selectedProduct.devise}
-                                                    </span>
-                                                    {index === 0 && (
-                                                        <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 px-2 py-1 rounded-full">
-                                                            Prix actuel
+                                {selectedProduct.priceHistory &&
+                                selectedProduct.priceHistory.length > 0 ? (
+                                    selectedProduct.priceHistory.map(
+                                        (history, index) => (
+                                            <div
+                                                key={history.id}
+                                                className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-4"
+                                            >
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center space-x-3">
+                                                        <span className="text-lg font-bold text-nexsaas-saas-green">
+                                                            {history.price}{" "}
+                                                            {
+                                                                selectedProduct.devise
+                                                            }
                                                         </span>
-                                                    )}
+                                                        {index === 0 && (
+                                                            <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 px-2 py-1 rounded-full">
+                                                                Prix actuel
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                                        {history.date}
+                                                    </span>
                                                 </div>
-                                                <span className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                    {history.date}
-                                                </span>
+                                                <div className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                                    <p>
+                                                        <strong>
+                                                            Négocié par:
+                                                        </strong>{" "}
+                                                        {history.negotiatedBy}
+                                                    </p>
+                                                    <p>
+                                                        <strong>Notes:</strong>{" "}
+                                                        {history.notes}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                <p>
-                                                    <strong>
-                                                        Négocié par:
-                                                    </strong>{" "}
-                                                    {history.negotiatedBy}
-                                                </p>
-                                                <p>
-                                                    <strong>Notes:</strong>{" "}
-                                                    {history.notes}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ),
+                                        ),
+                                    )
+                                ) : (
+                                    <p className="text-center text-gray-500">
+                                        Aucun historique de prix disponible.
+                                    </p>
                                 )}
                             </div>
                         </motion.div>
@@ -1817,6 +1747,61 @@ const SuppliersPage: React.FC = () => {
                                         Enregistrer
                                     </Button>
                                 </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+
+                {/* Documents Modal */}
+                {showDocumentsModal && selectedSupplier && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+                        onClick={() => setShowDocumentsModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    Documents de {selectedSupplier.nom}
+                                </h2>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowDocumentsModal(false)}
+                                >
+                                    <X className="w-6 h-6" />
+                                </Button>
+                            </div>
+
+                            <div className="space-y-4">
+                                {selectedSupplier.documents.length > 0 ? (
+                                    selectedSupplier.documents.map((doc) => (
+                                        <a
+                                            key={doc.id}
+                                            href={doc.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block p-4 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        >
+                                            <div className="flex items-center space-x-2">
+                                                <FileText className="w-5 h-5" />
+                                                <span>{doc.nom}</span>
+                                            </div>
+                                        </a>
+                                    ))
+                                ) : (
+                                    <p className="text-center text-gray-500">
+                                        Aucun document disponible.
+                                    </p>
+                                )}
                             </div>
                         </motion.div>
                     </motion.div>
