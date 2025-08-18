@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+// src/pages/modules/SalesPage.tsx
+
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { 
@@ -14,11 +16,15 @@ import {
   Calendar,
   User,
   Percent,
-  Gift
+  Gift,
+  Loader,
+  AlertTriangle
 } from 'lucide-react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import Input from '../../components/UI/Input';
+import { useVentes } from '../../hooks/useVentes';
+import { useToast } from '../../contexts/ToastContext';
 
 const SalesPage: React.FC = () => {
   const [showPromoForm, setShowPromoForm] = useState(false);
@@ -33,35 +39,57 @@ const SalesPage: React.FC = () => {
     description: '',
   });
 
-  const sales = [
-    {
-      id: 'VTE-001',
-      customer: 'Marie Dubois',
-      products: 'MacBook Pro 14", AirPods Pro',
-      amount: 2799,
-      status: 'completed',
-      date: '2024-01-15',
-      paymentMethod: 'Carte bancaire',
-    },
-    {
-      id: 'VTE-002',
-      customer: 'Jean Martin',
-      products: 'iPhone 15 Pro',
-      amount: 1199,
-      status: 'pending',
-      date: '2024-01-15',
-      paymentMethod: 'Mobile Money',
-    },
-    {
-      id: 'VTE-003',
-      customer: 'Sophie Laurent',
-      products: 'Samsung Galaxy S24, Écouteurs',
-      amount: 999,
-      status: 'shipped',
-      date: '2024-01-14',
-      paymentMethod: 'Stripe',
-    },
-  ];
+  const { ventes, loading, stats, error } = useVentes();
+  const { showToast } = useToast();
+
+  // const sales = [
+  //   {
+  //     id: 'VTE-001',
+  //     customer: 'Marie Dubois',
+  //     products: 'MacBook Pro 14", AirPods Pro',
+  //     amount: 2799,
+  //     status: 'completed',
+  //     date: '2024-01-15',
+  //     paymentMethod: 'Carte bancaire',
+  //   },
+  //   {
+  //     id: 'VTE-002',
+  //     customer: 'Jean Martin',
+  //     products: 'iPhone 15 Pro',
+  //     amount: 1199,
+  //     status: 'pending',
+  //     date: '2024-01-15',
+  //     paymentMethod: 'Mobile Money',
+  //   },
+  //   {
+  //     id: 'VTE-003',
+  //     customer: 'Sophie Laurent',
+  //     products: 'Samsung Galaxy S24, Écouteurs',
+  //     amount: 999,
+  //     status: 'shipped',
+  //     date: '2024-01-14',
+  //     paymentMethod: 'Stripe',
+  //   },
+  // ];
+
+  // Utilisez plutôt les données de l'API
+  const formattedSales = ventes.map(vente => ({
+    id: `VTE-${vente.id.toString().padStart(3, '0')}`,
+    customer: vente.client ? `${vente.client.prenom} ${vente.client.nom}` : 'Client non enregistré',
+    products: vente.produits.map(p => p.nom).join(', '),
+    amount: vente.total,
+    status: 'completed',
+    date: new Date(vente.dateVente).toLocaleDateString('fr-FR'),
+    paymentMethod: vente.moyenPaiement === 'AUTRE' 
+      ? vente.autreMoyenPaiement || 'Autre' 
+      : vente.moyenPaiement || 'Non spécifié',
+  }));
+
+  const filteredSales = formattedSales.filter(sale =>
+    sale.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    sale.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    sale.products.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const promotions = [
     {
@@ -85,6 +113,7 @@ const SalesPage: React.FC = () => {
       used: 123,
     },
   ];
+
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -110,6 +139,16 @@ const SalesPage: React.FC = () => {
       description: '',
     });
   };
+
+  useEffect(() => {
+    if (error) {
+      showToast({
+        type: 'error',
+        message: error,
+        title: 'Erreur',
+      });
+    }
+  }, [error, showToast]);
 
   return (
     <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
@@ -154,7 +193,7 @@ const SalesPage: React.FC = () => {
               <TrendingUp className="w-6 h-6 text-green-500" />
             </div>
             <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-              €45,230
+              {stats ? `€${stats.ventesCeMois.toLocaleString('fr-FR')}` : '€0'}
             </h3>
             <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
               Ventes ce mois
@@ -166,7 +205,7 @@ const SalesPage: React.FC = () => {
               <ShoppingBag className="w-6 h-6 text-blue-500" />
             </div>
             <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-              156
+              {stats?.nombreCommandes || '0'}
             </h3>
             <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
               Commandes
@@ -178,7 +217,7 @@ const SalesPage: React.FC = () => {
               <Percent className="w-6 h-6 text-purple-500" />
             </div>
             <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-              3.2%
+              {stats?.tauxConversion?.toFixed(1) || '0'}%
             </h3>
             <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
               Taux conversion
@@ -190,7 +229,7 @@ const SalesPage: React.FC = () => {
               <Gift className="w-6 h-6 text-orange-500" />
             </div>
             <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-              12
+              {promotions.length}
             </h3>
             <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
               Promotions actives
@@ -242,72 +281,96 @@ const SalesPage: React.FC = () => {
               </Button>
             </div>
 
-            <div className="space-y-4">
-              {sales.map((sale, index) => (
-                <motion.div
-                  key={sale.id}
-                  initial={{ opacity: 0, x: -30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.6, delay: index * 0.1 }}
-                  className="border border-nexsaas-light-gray dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center mb-2">
-                        <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mr-3">
-                          {sale.id}
-                        </h3>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(sale.status)}`}>
-                          {sale.status}
-                        </span>
+            {loading ? (
+              <div className="flex justify-center items-center h-32">
+                <Loader className="w-8 h-8 animate-spin text-nexsaas-deep-blue" />
+                <span className="ml-3 text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                  Chargement des ventes...
+                </span>
+              </div>
+            ) : error ? (
+              <div className="bg-red-100 text-red-800 p-4 rounded-lg">
+                <AlertTriangle className="w-5 h-5 inline mr-2" />
+                {error}
+              </div>
+            ) : filteredSales.length === 0 ? (
+              <div className="text-center py-8">
+                <ShoppingBag className="w-12 h-12 mx-auto text-gray-400" />
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-gray-100">
+                  Aucune vente trouvée
+                </h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {searchTerm ? 'Aucun résultat pour votre recherche' : 'Aucune vente récente'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredSales.map((sale, index) => (
+                  <motion.div
+                    key={sale.id}
+                    initial={{ opacity: 0, x: -30 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.6, delay: index * 0.1 }}
+                    className="border border-nexsaas-light-gray dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center mb-2">
+                          <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mr-3">
+                            {sale.id}
+                          </h3>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(sale.status)}`}>
+                            {sale.status}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                          <div className="flex items-center">
+                            <User className="w-4 h-4 text-gray-400 mr-2" />
+                            <span className="text-nexsaas-vanta-black dark:text-gray-300">
+                              {sale.customer}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            <ShoppingBag className="w-4 h-4 text-gray-400 mr-2" />
+                            <span className="text-nexsaas-vanta-black dark:text-gray-300">
+                              {sale.products}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            <CreditCard className="w-4 h-4 text-gray-400 mr-2" />
+                            <span className="text-nexsaas-vanta-black dark:text-gray-300">
+                              {sale.paymentMethod}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                            <span className="text-nexsaas-vanta-black dark:text-gray-300">
+                              {sale.date}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-3">
+                          <span className="text-lg font-bold text-nexsaas-saas-green">
+                            €{sale.amount.toLocaleString('fr-FR')}
+                          </span>
+                        </div>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                        <div className="flex items-center">
-                          <User className="w-4 h-4 text-gray-400 mr-2" />
-                          <span className="text-nexsaas-vanta-black dark:text-gray-300">
-                            {sale.customer}
-                          </span>
-                        </div>
-                        <div className="flex items-center">
-                          <ShoppingBag className="w-4 h-4 text-gray-400 mr-2" />
-                          <span className="text-nexsaas-vanta-black dark:text-gray-300">
-                            {sale.products}
-                          </span>
-                        </div>
-                        <div className="flex items-center">
-                          <CreditCard className="w-4 h-4 text-gray-400 mr-2" />
-                          <span className="text-nexsaas-vanta-black dark:text-gray-300">
-                            {sale.paymentMethod}
-                          </span>
-                        </div>
-                        <div className="flex items-center">
-                          <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                          <span className="text-nexsaas-vanta-black dark:text-gray-300">
-                            {sale.date}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-3">
-                        <span className="text-lg font-bold text-nexsaas-saas-green">
-                          €{sale.amount.toLocaleString()}
-                        </span>
+                      <div className="flex items-center space-x-2 mt-4 lg:mt-0">
+                        <Button variant="ghost" size="sm">
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm">
+                          <Edit className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center space-x-2 mt-4 lg:mt-0">
-                      <Button variant="ghost" size="sm">
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </Card>
         </motion.div>
 

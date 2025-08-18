@@ -1,8 +1,10 @@
-// hooks/useDocuments.ts - Version simplifiée et fonctionnelle
+// hooks/useDocuments.ts
 import { useState, useEffect, useCallback } from 'react';
 import { documentService } from '../api/documentApi';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
+import icon from 'lucide-react'; // Assurez-vous d'avoir installé lucide-react pour les icônes
+
 
 type DocumentStatus = 'missing' | 'uploading' | 'uploaded' | 'validated' | 'rejected' | 'not_required' | 'pending';
 
@@ -16,6 +18,7 @@ interface DocumentItem {
   file?: File;
   previewUrl?: string;
   uploadedAt?: Date;
+  isRejected?: boolean; // Ajout pour gérer les documents rejetés
 }
 
 interface UploadProgress {
@@ -33,7 +36,7 @@ function mapApiStatusToLocal(apiStatus: string): DocumentStatus {
     'EN_ATTENTE': 'pending',
     'VALIDE': 'validated', 
     'REFUSE': 'rejected',
-    'EXPIRE': 'rejected',
+    // 'EXPIRE': 'rejected',
     'UPLOADED': 'uploaded'
   };
   return statusMapping[apiStatus] || 'missing';
@@ -43,7 +46,8 @@ function mapApiStatusToLocal(apiStatus: string): DocumentStatus {
  * Génère les documents par défaut selon le type d'utilisateur
  */
 function getDefaultDocuments(userType?: string): DocumentItem[] {
-  const { FileText, Shield } = require('lucide-react');
+  
+  const { FileText, Shield } = icon;
   
   return [
     {
@@ -53,6 +57,7 @@ function getDefaultDocuments(userType?: string): DocumentItem[] {
       status: 'missing',
       icon: FileText,
       isRequired: true,
+      isRejected: false, // Ajout pour gérer les documents rejetés
     },
     {
       id: 'cniBack', 
@@ -61,6 +66,7 @@ function getDefaultDocuments(userType?: string): DocumentItem[] {
       status: 'missing',
       icon: FileText,
       isRequired: true,
+      isRejected: false,
     },
     {
       id: 'rccm',
@@ -69,6 +75,7 @@ function getDefaultDocuments(userType?: string): DocumentItem[] {
       status: 'missing',
       icon: Shield,
       isRequired: true, // Toujours requis selon le backend
+      isRejected: false,
     },
     {
       id: 'dfe',
@@ -77,6 +84,7 @@ function getDefaultDocuments(userType?: string): DocumentItem[] {
       status: 'missing',
       icon: FileText,
       isRequired: true,
+      isRejected: false,
     },
   ];
 }
@@ -144,6 +152,53 @@ export const useDocuments = () => {
       setIsLoading(false);
     }
   }, [user?.type]);
+
+
+  const loadUserDocuments = async () => {
+    try {
+      setIsLoading(true);
+      const response = await documentService.getUserDocuments();
+      
+      if (response && response.success && response.data) {
+        setDocuments(prev => prev.map(doc => {
+          const apiDoc = response.data.find((d: any) => {
+            const docTypeMap: Record<string, string> = {
+              'cniFront': 'CNI',
+              'cniBack': 'CNI', 
+              'rccm': 'RCCM',
+              'dfe': 'DFE'
+            };
+            return d.type === docTypeMap[doc.id];
+          });
+
+          if (apiDoc) {
+            return {
+              ...doc,
+              status: apiDoc.statut === 'REFUSE' ? 'rejected' : 
+                    apiDoc.statut === 'VALIDE' ? 'validated' : 'uploaded',
+              isRejected: apiDoc.statut === 'REFUSE',
+              previewUrl: apiDoc.fichierUrl
+            };
+          }
+          return doc;
+        }));
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des documents:', error);
+      showToast({
+        type: 'error',
+        title: 'Erreur',
+        message: 'Impossible de charger les documents existants'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Charger les documents à l'initialisation
+  useEffect(() => {
+    loadUserDocuments();
+  }, []);
 
   // Upload individuel (pour prévisualisation uniquement)
   const uploadDocument = useCallback(async (documentId: string, file: File) => {

@@ -30,6 +30,7 @@ interface DocumentItem {
   isRequired?: boolean;
   file?: File;
   previewUrl?: string;
+  isRejected?: boolean;
 }
 
 interface UploadProgress {
@@ -423,6 +424,7 @@ const DocumentsRequiredPage: React.FC = () => {
             const progress = uploadProgress[document.id];
             const hasFile = !!tempFiles[document.id];
             const DocumentIcon = document.icon;
+            const isEditable = document.isRejected || document.status === 'missing';
             
             return (
               <Card key={document.id} className="hover:shadow-md transition-shadow">
@@ -472,44 +474,49 @@ const DocumentsRequiredPage: React.FC = () => {
                   
                   {/* Actions */}
                   <div className="flex items-center space-x-2">
-                    {hasFile && (
-                      <>
-                        {document.previewUrl && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(document.previewUrl, '_blank')}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeDocument(document.id)}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </>
-                    )}
-                    
-                    {!hasFile && !progress?.isUploading && (
-                      <>
-                        {/* <Button variant="outline" size="sm" onClick={() => handleTakePhoto(document.id)}>
-                          <Camera className="w-4 h-4 mr-2" />
-                          Photo
-                        </Button> */}
-                        <Button size="sm" onClick={() => handleUpload(document.id)}>
-                          <Upload className="w-4 h-4 mr-2" />
-                          Fichier
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
+          {hasFile ? (
+            <>
+              {document.previewUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(document.previewUrl, '_blank')}
+                >
+                  <Eye className="w-4 h-4" />
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => removeDocument(document.id)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              {isEditable && (
+                <Button 
+                  size="sm" 
+                  onClick={() => handleUpload(document.id)}
+                  disabled={!isEditable}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {document.isRejected ? 'Re-télécharger' : 'Télécharger'}
+                </Button>
+              )}
+              {!isEditable && (
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  En attente de validation
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      </Card>
+    );
+  })}
         </div>
 
         

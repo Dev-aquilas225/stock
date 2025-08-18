@@ -1,4 +1,4 @@
-// services/documentService.ts - Version simplifiée et fonctionnelle
+// services/documentService.ts
 import axios from 'axios';
 
 interface DocumentUploadResponse {
@@ -142,6 +142,61 @@ export class DocumentService {
       };
     }
   }
+
+  /**
+   * Mise à jour des documents rejetés
+   */
+  async updateRejectedDocuments(
+  files: Record<string, File>, 
+  expiryDates: {
+    cniExpiry?: string;
+    rccmExpiry?: string;
+    dfeExpiry?: string;
+  } = {}
+): Promise<DocumentUploadResponse> {
+  try {
+    const token = this.getAuthToken();
+    if (!token) {
+      throw new Error('Token d\'authentification manquant');
+    }
+
+    const formData = new FormData();
+
+    // Ajouter seulement les fichiers fournis
+    Object.entries(files).forEach(([id, file]) => {
+      formData.append(id, file);
+    });
+
+    // Ajouter les dates d'expiration
+    if (expiryDates.cniExpiry) formData.append('cniExpiry', expiryDates.cniExpiry);
+    if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
+    if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
+
+    const response = await axios.put(
+      `${this.baseUrl}/documents-user/rejected`,
+      formData,
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        }
+      }
+    );
+
+    return {
+      success: true,
+      message: response.data.message || "Documents rejetés mis à jour avec succès",
+      data: response.data,
+    };
+  } catch (error: any) {
+    console.error('Erreur mise à jour documents rejetés:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || error.message || "Erreur de mise à jour",
+      data: undefined,
+    };
+  }
+}
 
   /**
    * Récupération des documents de l'utilisateur
