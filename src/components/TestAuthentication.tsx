@@ -1,6 +1,6 @@
 // Test simple pour vérifier l'authentification et les appels API
 import React, { useEffect } from 'react';
-import { documentService } from '../api/documentService';
+import { documentService } from '../api/documentApi';
 
 const TestAuthentication: React.FC = () => {
   useEffect(() => {

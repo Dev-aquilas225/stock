@@ -1,6 +1,6 @@
 // hooks/useDocuments.ts - Version simplifiée et fonctionnelle
 import { useState, useEffect, useCallback } from 'react';
-import { documentService } from '../api/documentService';
+import { documentService } from '../api/documentApi';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 

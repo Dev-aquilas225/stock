@@ -17,7 +17,7 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { documentService } from '../api/documentService';
+import { documentService } from '../api/documentApi';
 
 type DocumentStatus = 'missing' | 'uploading' | 'uploaded' | 'validated' | 'rejected' | 'not_required';
 
