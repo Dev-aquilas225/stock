@@ -16,7 +16,8 @@ import {
   ChevronRight,
   Scan,
   Activity,
-  Building2
+  Building2,
+  RotateCcw
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -37,6 +38,14 @@ const DashboardPage: React.FC = () => {
       color: 'bg-blue-500',
       stats: '12 commandes en cours',
       link: '/approvisionnements',
+    },
+    {
+      icon: RotateCcw,
+      title: 'Retours Approvisionnements',
+      description: 'Gérer les retours de commandes',
+      color: 'bg-yellow-500',
+      stats: '3 retours en attente',
+      link: '/returns',
     },
     {
       icon: Building2,
@@ -203,7 +212,7 @@ const DashboardPage: React.FC = () => {
             </div>
             <div>
               <h1 className="text-3xl md:text-4xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                Bonjour, {(user || displayUser)?.nom} {(user || displayUser)?.prenom} 👋
+                Bonjour, {(user || displayUser)?.nom || 'Utilisateur'} {(user || displayUser)?.prenom || ''} 👋
               </h1>
               <p className="text-lg text-nexsaas-vanta-black dark:text-gray-300">
                 Voici un aperçu de votre activité aujourd'hui
@@ -317,6 +326,11 @@ const DashboardPage: React.FC = () => {
                 <Link to="/approvisionnements">
                   <Button variant="outline" size="sm">
                     Créer une commande
+                  </Button>
+                </Link>
+                <Link to="/returns">
+                  <Button variant="outline" size="sm">
+                    Gérer un retour
                   </Button>
                 </Link>
                 <Link to="/analytics">
