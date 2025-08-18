@@ -33,6 +33,13 @@ const HomePage: React.FC = () => {
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [errorPlans, setErrorPlans] = useState<string | null>(null);
 
+  const scrollToSubscriptions = () => {
+    const subscriptionsSection = document.getElementById('subscriptions');
+    if (subscriptionsSection) {
+      subscriptionsSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const modules = [
     {
       icon: Package,
@@ -226,9 +233,18 @@ const HomePage: React.FC = () => {
               <Link to="/inscription">
                 <Button size="lg" className="w-full sm:w-auto text-lg px-8 py-4 bg-nexsaas-saas-green hover:bg-green-600 text-white">
                   <Zap className="w-5 h-5 mr-2" />
-                  Essai gratuit 14 jours
+                  Commencer gratuitement
                 </Button>
               </Link>
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full sm:w-auto text-lg px-8 py-4 border-nexsaas-saas-green text-nexsaas-saas-green hover:bg-nexsaas-saas-green hover:text-white"
+                onClick={scrollToSubscriptions}
+              >
+                Voir les abonnements
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
             </div>
           </motion.div>
 
@@ -419,7 +435,7 @@ const HomePage: React.FC = () => {
       </section>
 
       {/* Subscriptions Section */}
-      <section className="py-16 px-4">
+      <section id="subscriptions" className="py-16 px-4">
         <div className="container mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -447,19 +463,20 @@ const HomePage: React.FC = () => {
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <div className="flex flex-row overflow-x-auto snap-x snap-mandatory gap-4 px-4">
               {plans.map((plan, index) => (
                 <motion.div
                   key={plan.id}
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: index * 0.2 }}
-                  className="relative"
+                  whileHover={{ scaleX: 1.1, zIndex: 10 }}
+                  className="relative min-w-[250px] snap-center"
                 >
                   {plan.nom === 'starter' && (
-                    <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                      <div className="bg-nexsaas-saas-green text-nexsaas-pure-white px-4 py-1 rounded-full text-sm font-medium flex items-center">
-                        <Star className="w-4 h-4 mr-1" />
+                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2">
+                      <div className="bg-green-600 text-nexsaas-pure-white px-6 py-2 rounded-full text-base font-semibold flex items-center shadow-md border border-nexsaas-saas-green hover:scale-105 transition-transform duration-200">
+                        <Star className="w-5 h-5 mr-2" />
                         Populaire
                       </div>
                     </div>
@@ -481,13 +498,13 @@ const HomePage: React.FC = () => {
                           plan.nom === 'starter' ? 'débuter' :
                             plan.nom === 'pro' ? 'les entreprises en croissance' :
                               plan.nom === 'manager' ? 'les équipes structurées' :
-                                'les grandes entreprises'}
+                                'les solutions personnalisées'}
                       </p>
                       <div className="mb-6">
                         <span className="text-4xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                          {plan.prix === 0 ? 'Gratuit' : `${plan.prix} FCFA`}
+                          {plan.nom === 'entreprise' ? 'Personnalisée' : plan.prix === 0 ? 'Gratuit' : `${plan.prix} FCFA`}
                         </span>
-                        {plan.prix !== 0 && (
+                        {plan.prix !== 0 && plan.nom !== 'entreprise' && (
                           <span className="text-nexsaas-vanta-black dark:text-gray-300">/mois</span>
                         )}
                       </div>
@@ -532,20 +549,20 @@ const HomePage: React.FC = () => {
               Transformez votre gestion dès aujourd'hui
             </h2>
             <p className="text-lg text-nexsaas-pure-white/90 mb-8 max-w-2xl mx-auto">
-              Rejoignez les milliers d'entreprises qui optimisent leurs processus avec NexSaaS. Essayez gratuitement pendant 14 jours.
+              Rejoignez les milliers d'entreprises qui optimisent leurs processus avec NexSaaS. Commencez gratuitement dès maintenant.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/inscription">
                 <Button size="lg" className="w-full sm:w-auto bg-nexsaas-pure-white text-nexsaas-deep-blue hover:bg-gray-100">
                   <Zap className="w-5 h-5 mr-2" />
-                  Commencer l'essai gratuit
+                  Commencer gratuitement
                 </Button>
               </Link>
             </div>
             <div className="mt-6 flex items-center justify-center space-x-6 text-nexsaas-pure-white/80 text-sm">
               <div className="flex items-center">
                 <Check className="w-4 h-4 mr-2" />
-                Essai gratuit 14 jours
+                Commencer gratuitement
               </div>
               <div className="flex items-center">
                 <Check className="w-4 h-4 mr-2" />
