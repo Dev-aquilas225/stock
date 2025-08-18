@@ -1,27 +1,25 @@
-// services/documentService.ts - Version corrigée pour s'aligner avec le backend
-import { DocumentUploadResponse } from '../types/document.type';
+// services/documentService.ts - Version simplifiée et fonctionnelle
 import axios from 'axios';
+
+interface DocumentUploadResponse {
+  success: boolean;
+  message: string;
+  data?: any;
+}
 
 export class DocumentService {
   private baseUrl: string;
-  private authToken: string | null;
-  
 
   constructor(baseUrl: string = 'http://localhost:8000') {
     this.baseUrl = baseUrl;
-    this.authToken = localStorage.getItem('token');
   }
 
-  private getHeaders(): HeadersInit {
-    const headers: HeadersInit = {};
-    if (this.authToken) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
-    }
-    return headers;
+  private getAuthToken(): string | null {
+    return localStorage.getItem('token');
   }
 
   /**
-   * NOUVEAU: Upload de tous les documents requis d'un coup (comme attendu par le backend)
+   * Upload de tous les documents requis d'un coup (compatible avec le backend)
    */
   async uploadAllDocuments(files: {
     cniFront?: File;
@@ -32,9 +30,14 @@ export class DocumentService {
     cniExpiry?: string;
     rccmExpiry?: string;
     dfeExpiry?: string;
-  }): Promise<DocumentUploadResponse> {
+  } = {}): Promise<DocumentUploadResponse> {
     try {
-      const token = localStorage.getItem("token");
+      const token = this.getAuthToken();
+      
+      if (!token) {
+        throw new Error('Token d\'authentification manquant');
+      }
+
       const formData = new FormData();
 
       // Validation: tous les documents sont requis selon le backend
@@ -53,6 +56,8 @@ export class DocumentService {
       if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
       if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
 
+      console.log('Envoi des documents vers:', `${this.baseUrl}/documents-user`);
+
       const response = await axios.post(
         `${this.baseUrl}/documents-user`,
         formData,
@@ -70,6 +75,7 @@ export class DocumentService {
         data: response.data,
       };
     } catch (error: any) {
+      console.error('Erreur upload documents:', error);
       return {
         success: false,
         message: error.response?.data?.message || error.message || "Erreur d'upload",
@@ -79,7 +85,7 @@ export class DocumentService {
   }
 
   /**
-   * NOUVEAU: Mise à jour des documents (pour les documents rejetés)
+   * Mise à jour des documents (pour les documents rejetés)
    */
   async updateAllDocuments(files: {
     cniFront?: File;
@@ -90,9 +96,14 @@ export class DocumentService {
     cniExpiry?: string;
     rccmExpiry?: string;
     dfeExpiry?: string;
-  }): Promise<DocumentUploadResponse> {
+  } = {}): Promise<DocumentUploadResponse> {
     try {
-      const token = localStorage.getItem("token");
+      const token = this.getAuthToken();
+      
+      if (!token) {
+        throw new Error('Token d\'authentification manquant');
+      }
+
       const formData = new FormData();
 
       // Ajout des fichiers (optionnels pour la mise à jour)
@@ -123,6 +134,7 @@ export class DocumentService {
         data: response.data,
       };
     } catch (error: any) {
+      console.error('Erreur mise à jour documents:', error);
       return {
         success: false,
         message: error.response?.data?.message || error.message || "Erreur de mise à jour",
@@ -132,51 +144,16 @@ export class DocumentService {
   }
 
   /**
-   * ANCIEN: Upload d'un document individuel - NE SAUVEGARDE PAS EN BASE
-   * Utilisé uniquement pour la prévisualisation locale
-   */
-  async uploadDocument(
-    file: File, 
-    documentId: string,
-    onProgress?: (progress: number) => void
-  ): Promise<DocumentUploadResponse> {
-    // Cette méthode simule un upload pour la prévisualisation
-    // Elle ne fait PAS appel au backend car l'endpoint /upload ne sauvegarde pas
-    
-    return new Promise((resolve) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        if (onProgress) {
-          onProgress(progress);
-        }
-        
-        if (progress >= 100) {
-          clearInterval(interval);
-          resolve({
-            success: true,
-            message: "Fichier prêt pour l'envoi final",
-            data: { 
-              documentId,
-              filePath: `uploads/${file.name}`, // Simule un chemin de fichier
-              originalName: file.name,
-              uploadedAt: new Date().toISOString(),
-              // size: file.size,
-              // type: file.type,
-              preview: true // Indique que c'est juste une prévisualisation
-            },
-          });
-        }
-      }, 100);
-    });
-  }
-
-  /**
    * Récupération des documents de l'utilisateur
    */
   async getUserDocuments(): Promise<any> {
     try {
-      const token = localStorage.getItem("token");
+      const token = this.getAuthToken();
+      
+      if (!token) {
+        throw new Error('Token d\'authentification manquant');
+      }
+
       const response = await axios.get(`${this.baseUrl}/documents-user`, {
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -188,6 +165,7 @@ export class DocumentService {
         data: response.data
       };
     } catch (error: any) {
+      console.error('Erreur récupération documents:', error);
       throw new Error(error.response?.data?.message || error.message || 'Erreur lors de la récupération des documents');
     }
   }
@@ -239,6 +217,28 @@ export class DocumentService {
   }
 
   /**
+   * Vérifier si tous les documents requis sont présents
+   */
+  validateAllRequiredDocuments(files: {
+    cniFront?: File;
+    cniBack?: File;
+    rccm?: File;
+    dfe?: File;
+  }): { isValid: boolean; missingDocuments: string[] } {
+    const missing: string[] = [];
+    
+    if (!files.cniFront) missing.push('CNI Recto');
+    if (!files.cniBack) missing.push('CNI Verso');
+    if (!files.rccm) missing.push('RCCM');
+    if (!files.dfe) missing.push('DFE');
+    
+    return {
+      isValid: missing.length === 0,
+      missingDocuments: missing
+    };
+  }
+
+  /**
    * Génération d'une URL de prévisualisation pour un fichier
    */
   generatePreviewUrl(file: File): string | null {
@@ -267,32 +267,9 @@ export class DocumentService {
   }
 
   /**
-   * Vérifier si tous les documents requis sont présents
-   */
-  validateAllRequiredDocuments(files: {
-    cniFront?: File;
-    cniBack?: File;
-    rccm?: File;
-    dfe?: File;
-  }): { isValid: boolean; missingDocuments: string[] } {
-    const missing: string[] = [];
-    
-    if (!files.cniFront) missing.push('CNI Recto');
-    if (!files.cniBack) missing.push('CNI Verso');
-    if (!files.rccm) missing.push('RCCM');
-    if (!files.dfe) missing.push('DFE');
-    
-    return {
-      isValid: missing.length === 0,
-      missingDocuments: missing
-    };
-  }
-
-  /**
    * Mettre à jour le token d'authentification
    */
   setAuthToken(token: string): void {
-    this.authToken = token;
     localStorage.setItem('token', token);
   }
 
@@ -300,7 +277,6 @@ export class DocumentService {
    * Supprimer le token d'authentification
    */
   clearAuthToken(): void {
-    this.authToken = null;
     localStorage.removeItem('token');
   }
 }

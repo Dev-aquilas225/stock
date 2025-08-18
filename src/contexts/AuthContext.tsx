@@ -2,17 +2,13 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { User } from "../hooks/useProfile";
 import { useToast } from "./ToastContext";
 import { useActivity } from "./ActivityContext";
-<<<<<<< HEAD
 import {
     RegisterClientDto,
     LoginClientDto,
     registerClient,
     loginClient,
 } from "../api/authApi"; // Import the API functions and types
-=======
-import { RegisterClientDto, LoginClientDto, registerClient, loginClient, AuthResponse } from "../api/authApi";
 import { getProfile } from "../api/profileApi";
->>>>>>> 3569d2a4643364fdda5b23cd0cd873b40931c7c0
 
 interface AuthContextType {
     user: User | null;

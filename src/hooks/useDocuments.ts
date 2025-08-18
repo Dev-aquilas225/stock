@@ -1,10 +1,29 @@
-// hooks/useDocuments.ts - Version corrigée pour s'aligner avec le backend
-import React from 'react';
+// hooks/useDocuments.ts - Version simplifiée et fonctionnelle
 import { useState, useEffect, useCallback } from 'react';
 import { documentService } from '../api/documentService';
-import { Document, DocumentStatus, UploadProgress } from '../types/document.type';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
+
+type DocumentStatus = 'missing' | 'uploading' | 'uploaded' | 'validated' | 'rejected' | 'not_required' | 'pending';
+
+interface DocumentItem {
+  id: string;
+  name: string;
+  description: string;
+  status: DocumentStatus;
+  icon: React.ComponentType<any>;
+  isRequired: boolean;
+  file?: File;
+  previewUrl?: string;
+  uploadedAt?: Date;
+}
+
+interface UploadProgress {
+  documentId: string;
+  progress: number;
+  isUploading: boolean;
+  error?: string;
+}
 
 /**
  * Mapping des statuts API vers les statuts locaux
@@ -14,7 +33,7 @@ function mapApiStatusToLocal(apiStatus: string): DocumentStatus {
     'EN_ATTENTE': 'pending',
     'VALIDE': 'validated', 
     'REFUSE': 'rejected',
-    'EXPIRE': 'expired',
+    'EXPIRE': 'rejected',
     'UPLOADED': 'uploaded'
   };
   return statusMapping[apiStatus] || 'missing';
@@ -23,14 +42,16 @@ function mapApiStatusToLocal(apiStatus: string): DocumentStatus {
 /**
  * Génère les documents par défaut selon le type d'utilisateur
  */
-function getDefaultDocuments(userType?: string): Document[] {
+function getDefaultDocuments(userType?: string): DocumentItem[] {
+  const { FileText, Shield } = require('lucide-react');
+  
   return [
     {
       id: 'cniFront',
       name: 'CNI Recto',
       description: 'Recto de la carte nationale d\'identité',
       status: 'missing',
-      icon: React.Component<React.SVGProps<SVGSVGElement>>,
+      icon: FileText,
       isRequired: true,
     },
     {
@@ -38,23 +59,23 @@ function getDefaultDocuments(userType?: string): Document[] {
       name: 'CNI Verso',
       description: 'Verso de la carte nationale d\'identité',
       status: 'missing',
-      icon: React.Component<React.SVGProps<SVGSVGElement>>,
+      icon: FileText,
       isRequired: true,
     },
     {
       id: 'rccm',
       name: 'Registre de commerce (RCCM)',
       description: 'Document d\'enregistrement de votre entreprise',
-      status: userType === 'entreprise' ? 'missing' : 'not_required',
-      icon: React.Component<React.SVGProps<SVGSVGElement>>,
-      isRequired: userType === 'entreprise',
+      status: 'missing',
+      icon: Shield,
+      isRequired: true, // Toujours requis selon le backend
     },
     {
       id: 'dfe',
       name: 'DFE', 
       description: 'Document fiscal d\'entreprise',
       status: 'missing',
-      icon: React.Component<React.SVGProps<SVGSVGElement>>,
+      icon: FileText,
       isRequired: true,
     },
   ];
@@ -62,7 +83,7 @@ function getDefaultDocuments(userType?: string): Document[] {
 
 export const useDocuments = () => {
   const { user } = useAuth();
-  const [documents, setDocuments] = useState<Document[]>(() => 
+  const [documents, setDocuments] = useState<DocumentItem[]>(() => 
     getDefaultDocuments(user?.type)
   );
   
@@ -147,43 +168,54 @@ export const useDocuments = () => {
     ));
 
     try {
-      // Upload simulé pour prévisualisation
-      const response = await documentService.uploadDocument(
-        file,
-        documentId,
-        (progress) => {
-          setUploadProgress(prev => new Map(prev).set(documentId, {
-            documentId,
-            progress,
-            isUploading: true
-          }));
+      // Simulation d'upload avec progression pour prévisualisation
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += 10;
+        setUploadProgress(prev => new Map(prev).set(documentId, {
+          documentId,
+          progress,
+          isUploading: true
+        }));
+
+        if (progress >= 100) {
+          clearInterval(interval);
+          
+          // Stocker le fichier temporairement
+          setTempFiles(prev => new Map(prev).set(documentId, file));
+
+          // Génération de l'URL de prévisualisation
+          const previewUrl = documentService.generatePreviewUrl(file);
+
+          // Mise à jour avec "prêt pour envoi"
+          setDocuments(prev => prev.map(doc =>
+            doc.id === documentId 
+              ? { 
+                  ...doc, 
+                  status: 'uploaded' as DocumentStatus, // Status local pour l'UI
+                  uploadedAt: new Date(),
+                  previewUrl: previewUrl || undefined,
+                  file
+                }
+              : doc
+          ));
+
+          showToast({
+            type: 'success',
+            title: 'Fichier prêt',
+            message: 'Fichier ajouté avec succès. Cliquez sur "Valider" pour envoyer tous les documents.'
+          });
+
+          // Nettoyage du progress après un délai
+          setTimeout(() => {
+            setUploadProgress(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(documentId);
+              return newMap;
+            });
+          }, 3000);
         }
-      );
-
-      // Stocker le fichier temporairement
-      setTempFiles(prev => new Map(prev).set(documentId, file));
-
-      // Génération de l'URL de prévisualisation
-      const previewUrl = documentService.generatePreviewUrl(file);
-
-      // Mise à jour avec "prêt pour envoi"
-      setDocuments(prev => prev.map(doc =>
-        doc.id === documentId 
-          ? { 
-              ...doc, 
-              status: 'uploaded' as DocumentStatus, // Status local pour l'UI
-              uploadedAt: new Date(),
-              previewUrl: previewUrl || undefined,
-              file
-            }
-          : doc
-      ));
-
-      showToast({
-        type: 'success',
-        title: 'Fichier prêt',
-        message: 'Fichier ajouté avec succès. Cliquez sur "Valider" pour envoyer tous les documents.'
-      });
+      }, 100);
 
       return true;
 
@@ -222,15 +254,6 @@ export const useDocuments = () => {
         newSet.delete(documentId);
         return newSet;
       });
-
-      // Nettoyage du progress après un délai
-      setTimeout(() => {
-        setUploadProgress(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(documentId);
-          return newMap;
-        });
-      }, 3000);
     }
   }, [showToast]);
 
