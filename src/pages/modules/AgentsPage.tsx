@@ -30,6 +30,9 @@ import {
     TypePiece,
 } from "../../api/agentApi";
 
+// Define base API URL for constructing full image URLs
+const BASE_API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
 interface FormData {
     nom: string;
     prenom: string;
@@ -61,7 +64,10 @@ const AgentsPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<"all" | "gestionnaire" | "vendeur">("all");
     const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-    const [imageError, setImageError] = useState(false); // New state for image error
+    const [imageError, setImageError] = useState(false);
+
+    // Utility function to normalize photoPiece URL
+
 
     // Validation en temps réel
     const validateField = (field: keyof FormData, value: string | File | null) => {
@@ -355,12 +361,12 @@ const AgentsPage: React.FC = () => {
 
     const handleViewDetails = (agent: Agent) => {
         setSelectedAgent(agent);
-        setImageError(false); // Reset image error when opening modal
+        setImageError(false);
     };
 
     const closeModal = () => {
         setSelectedAgent(null);
-        setImageError(false); // Reset image error when closing modal
+        setImageError(false);
     };
 
     // Filter agents based on active tab
@@ -787,7 +793,7 @@ const AgentsPage: React.FC = () => {
                                     {selectedAgent.photoPiece ? (
                                         <>
                                             <img
-                                                src={selectedAgent.photoPiece}
+                                                src={BASE_API_URL + selectedAgent.photoPiece}
                                                 alt="Document de l'agent"
                                                 className="mt-2 w-32 h-32 object-cover rounded border border-nexsaas-light-gray dark:border-gray-600"
                                                 onError={() => setImageError(true)}
