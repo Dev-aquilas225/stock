@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { 
-  CreditCard, 
-  AlertTriangle, 
-  Crown, 
+import {
+  CreditCard,
+  AlertTriangle,
+  Crown,
   Check,
+  X,
   ArrowRight,
   Star,
   Zap,
@@ -19,79 +20,15 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { getFormules, Formule } from '../api/formuleApi';
 
 const SubscriptionInactivePage: React.FC = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [selectedPlan, setSelectedPlan] = useState('professional');
-
-  const subscriptions = [
-    {
-      id: 'starter',
-      name: 'Starter',
-      price: 29,
-      originalPrice: 39,
-      discount: '25% OFF',
-      period: 'mois',
-      description: 'Parfait pour débuter',
-      color: 'from-blue-500 to-blue-600',
-      features: [
-        'Jusqu\'à 100 produits',
-        'Gestion de base des stocks',
-        'Facturation simple',
-        'Support par email',
-        '1 utilisateur',
-      ],
-      limitations: [
-        'Pas de commissions multi-niveaux',
-        'Pas d\'agent IA',
-        'Rapports limités',
-      ]
-    },
-    {
-      id: 'professional',
-      name: 'Professional',
-      price: 99,
-      originalPrice: 129,
-      discount: '23% OFF',
-      period: 'mois',
-      description: 'Le plus populaire',
-      color: 'from-nexsaas-saas-green to-green-600',
-      isPopular: true,
-      features: [
-        'Produits illimités',
-        'Tous les modules ERP',
-        'Commissions multi-niveaux',
-        'Agent IA inclus',
-        'Support prioritaire',
-        'Rapports avancés',
-        'Point de vente (POS)',
-        'Jusqu\'à 5 utilisateurs',
-      ],
-      limitations: []
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise',
-      price: 299,
-      originalPrice: 399,
-      discount: '25% OFF',
-      period: 'mois',
-      description: 'Pour les grandes entreprises',
-      color: 'from-purple-500 to-purple-600',
-      features: [
-        'Tout du Professional',
-        'API personnalisée',
-        'Intégrations sur mesure',
-        'Support dédié 24/7',
-        'Formation équipe',
-        'SLA garanti',
-        'Utilisateurs illimités',
-        'Serveur dédié',
-      ],
-      limitations: []
-    },
-  ];
+  const [selectedPlan, setSelectedPlan] = useState('starter');
+  const [plans, setPlans] = useState<Formule[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [errorPlans, setErrorPlans] = useState<string | null>(null);
 
   const restrictedFeatures = [
     {
@@ -116,13 +53,47 @@ const SubscriptionInactivePage: React.FC = () => {
     },
   ];
 
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        setLoadingPlans(true);
+        const response = await getFormules();
+        if (response.success) {
+          setPlans(response.data);
+        } else {
+          setErrorPlans(response.message);
+        }
+      } catch (err) {
+        setErrorPlans('Erreur lors du chargement des formules');
+      } finally {
+        setLoadingPlans(false);
+      }
+    };
+    fetchPlans();
+  }, []);
+
+  const getFeatures = (plan: Formule) => {
+    return [
+      { description: `Jusqu'à ${plan.maxClients} clients`, isAvailable: plan.maxClients > 0 },
+      { description: `${plan.niveauxParrainage} niveau${plan.niveauxParrainage !== 1 ? 'x' : ''} de parrainage`, isAvailable: plan.niveauxParrainage > 0 },
+      { description: `${plan.managersAutorises} manager${plan.managersAutorises !== 1 ? 's' : ''} autorisé${plan.managersAutorises !== 1 ? 's' : ''}`, isAvailable: plan.managersAutorises > 0 },
+      { description: 'Gestion des stocks', isAvailable: plan.gestionStock },
+      { description: 'Rapports de ventes', isAvailable: plan.rapportsVentes },
+      { description: 'Facturation PDF', isAvailable: plan.facturationPDF },
+      { description: 'Classement d\'équipe', isAvailable: plan.classementEquipe },
+      { description: 'Notifications d\'objectifs', isAvailable: plan.notificationObjectifs },
+      { description: 'Intégration ERP', isAvailable: plan.integrationERP },
+      { description: 'Support prioritaire', isAvailable: plan.supportPrioritaire },
+    ];
+  };
+
   const handleSubscribe = (planId: string) => {
     showToast({
       type: 'info',
       title: 'Redirection vers le paiement',
       message: `Redirection vers la page de paiement pour le plan ${planId}...`
     });
-    
+
     // Simulate payment process
     setTimeout(() => {
       showToast({
@@ -152,20 +123,20 @@ const SubscriptionInactivePage: React.FC = () => {
           className="text-center mb-8"
         >
           <motion.div
-            animate={{ 
+            animate={{
               scale: [1, 1.1, 1],
               rotate: [0, 5, -5, 0]
             }}
-            transition={{ 
-              duration: 3, 
-              repeat: Infinity, 
-              ease: 'easeInOut' 
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              ease: 'easeInOut'
             }}
             className="p-4 bg-red-500/10 rounded-full inline-block mb-6"
           >
             <AlertTriangle className="w-16 h-16 text-red-500" />
           </motion.div>
-          
+
           <h1 className="text-3xl md:text-4xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
             Abonnement Inactif
           </h1>
@@ -213,7 +184,7 @@ const SubscriptionInactivePage: React.FC = () => {
             <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
               Fonctionnalités Restreintes
             </h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {restrictedFeatures.map((feature, index) => (
                 <motion.div
@@ -257,106 +228,105 @@ const SubscriptionInactivePage: React.FC = () => {
               Choisissez votre abonnement
             </h2>
             <p className="text-lg text-nexsaas-vanta-black dark:text-gray-300">
-              Offre spéciale de réactivation - Économisez jusqu'à 25%
+              Réactivez votre plan pour retrouver l'accès complet à NexSaaS
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {subscriptions.map((plan, index) => (
-              <motion.div
-                key={plan.id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.7 + index * 0.2 }}
-                className="relative"
-              >
-                {plan.isPopular && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
-                    <div className="bg-nexsaas-saas-green text-nexsaas-pure-white px-4 py-1 rounded-full text-sm font-medium flex items-center">
-                      <Star className="w-4 h-4 mr-1" />
-                      Le plus populaire
-                    </div>
-                  </div>
-                )}
-                
-                <Card className={`h-full relative overflow-hidden ${
-                  plan.isPopular ? 'ring-2 ring-nexsaas-saas-green shadow-xl' : ''
-                } ${selectedPlan === plan.id ? 'ring-2 ring-nexsaas-deep-blue' : ''}`}>
-                  {/* Background Gradient */}
-                  <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${plan.color}`} />
-                  
-                  {/* Discount Badge */}
-                  {plan.discount && (
-                    <div className="absolute top-4 right-4">
-                      <span className="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                        {plan.discount}
-                      </span>
+          {loadingPlans ? (
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-nexsaas-saas-green"></div>
+            </div>
+          ) : errorPlans ? (
+            <div className="text-center text-nexsaas-vanta-black dark:text-gray-300">
+              <p className="text-lg">{errorPlans}</p>
+              <Link to="/" className="text-nexsaas-saas-green hover:underline mt-4 inline-block">
+                Retour à l'accueil
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+              {plans.map((plan, index) => (
+                <motion.div
+                  key={plan.id}
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.7 + index * 0.2 }}
+                  className="relative"
+                >
+                  {plan.nom === 'starter' && (
+                    <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
+                      <div className="bg-nexsaas-saas-green text-nexsaas-pure-white px-4 py-1 rounded-full text-sm font-medium flex items-center">
+                        <Star className="w-4 h-4 mr-1" />
+                        Populaire
+                      </div>
                     </div>
                   )}
 
-                  <div className="pt-6">
-                    <div className="text-center mb-6">
-                      <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                        {plan.name}
-                      </h3>
-                      <p className="text-nexsaas-vanta-black dark:text-gray-300 mb-4">
-                        {plan.description}
-                      </p>
-                      
-                      <div className="mb-4">
-                        {plan.originalPrice && (
-                          <span className="text-lg text-gray-500 line-through mr-2">
-                            {plan.originalPrice}€
+                  <Card className={`h-full relative overflow-hidden ${plan.nom === 'starter' ? 'ring-2 ring-nexsaas-saas-green shadow-xl' : ''
+                    } ${selectedPlan === plan.id ? 'ring-2 ring-nexsaas-deep-blue' : ''}`}>
+                    {/* Background Gradient */}
+                    <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${plan.nom === 'gratuit' ? 'from-gray-500 to-gray-600' :
+                        plan.nom === 'starter' ? 'from-blue-500 to-blue-600' :
+                          plan.nom === 'pro' ? 'from-nexsaas-saas-green to-green-600' :
+                            plan.nom === 'manager' ? 'from-teal-500 to-teal-600' :
+                              'from-purple-500 to-purple-600'
+                      }`} />
+
+                    <div className="pt-6">
+                      <div className="text-center mb-6">
+                        <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                          {plan.nom.charAt(0).toUpperCase() + plan.nom.slice(1)}
+                        </h3>
+                        <p className="text-nexsaas-vanta-black dark:text-gray-300 mb-4">
+                          Parfait pour {plan.nom === 'gratuit' ? 'essayer gratuitement' :
+                            plan.nom === 'starter' ? 'débuter' :
+                              plan.nom === 'pro' ? 'les entreprises en croissance' :
+                                plan.nom === 'manager' ? 'les équipes structurées' :
+                                  'les solutions personnalisées'}
+                        </p>
+
+                        <div className="mb-4">
+                          <span className="text-4xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                            {plan.nom === 'entreprise' ? '' : plan.prix === 0 ? 'Gratuit' : `${plan.prix} FCFA`}
                           </span>
-                        )}
-                        <span className="text-4xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                          {plan.price}€
-                        </span>
-                        <span className="text-nexsaas-vanta-black dark:text-gray-300">
-                          /{plan.period}
-                        </span>
+                          {plan.prix !== 0 && plan.nom !== 'entreprise' && (
+                            <span className="text-nexsaas-vanta-black dark:text-gray-300">/mois</span>
+                          )}
+                        </div>
                       </div>
+
+                      <ul className="space-y-3 mb-8">
+                        {getFeatures(plan).map((feature, featureIndex) => (
+                          <li key={featureIndex} className={`flex items-center ${!feature.isAvailable ? 'opacity-60' : ''}`}>
+                            {feature.isAvailable ? (
+                              <Check className="w-5 h-5 text-nexsaas-saas-green mr-3 flex-shrink-0" />
+                            ) : (
+                              <X className="w-5 h-5 text-red-600 mr-3 flex-shrink-0" />
+                            )}
+                            <span className="text-nexsaas-vanta-black dark:text-gray-300 text-sm">
+                              {feature.description}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <Button
+                        onClick={() => handleSubscribe(plan.id)}
+                        className={`w-full ${plan.nom === 'starter'
+                            ? 'bg-nexsaas-saas-green hover:bg-green-600'
+                            : 'bg-nexsaas-deep-blue hover:bg-blue-700'
+                          }`}
+                        size="lg"
+                      >
+                        {plan.nom === 'entreprise' ? 'Faire un devis personnalisé' : 'Réactiver maintenant'}
+                        <ArrowRight className="w-5 h-5 ml-2" />
+                      </Button>
                     </div>
-                    
-                    <ul className="space-y-3 mb-8">
-                      {plan.features.map((feature, featureIndex) => (
-                        <li key={featureIndex} className="flex items-center">
-                          <Check className="w-5 h-5 text-nexsaas-saas-green mr-3 flex-shrink-0" />
-                          <span className="text-nexsaas-vanta-black dark:text-gray-300 text-sm">
-                            {feature}
-                          </span>
-                        </li>
-                      ))}
-                      
-                      {plan.limitations.map((limitation, limitIndex) => (
-                        <li key={limitIndex} className="flex items-center opacity-60">
-                          <div className="w-5 h-5 mr-3 flex-shrink-0 flex items-center justify-center">
-                            <div className="w-3 h-3 bg-gray-400 rounded-full" />
-                          </div>
-                          <span className="text-nexsaas-vanta-black dark:text-gray-300 text-sm line-through">
-                            {limitation}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                    
-                    <Button 
-                      onClick={() => handleSubscribe(plan.id)}
-                      className={`w-full ${
-                        plan.isPopular 
-                          ? 'bg-nexsaas-saas-green hover:bg-green-600' 
-                          : 'bg-nexsaas-deep-blue hover:bg-blue-700'
-                      }`}
-                      size="lg"
-                    >
-                      {plan.id === 'enterprise' ? 'Contacter les ventes' : 'Réactiver maintenant'}
-                      <ArrowRight className="w-5 h-5 ml-2" />
-                    </Button>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </motion.div>
 
         {/* Benefits Section */}
@@ -372,7 +342,7 @@ const SubscriptionInactivePage: React.FC = () => {
                 Pourquoi réactiver maintenant ?
               </h2>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center">
                 <div className="p-4 bg-nexsaas-saas-green/10 rounded-full inline-block mb-4">
@@ -385,7 +355,7 @@ const SubscriptionInactivePage: React.FC = () => {
                   Offre spéciale de réactivation valable 48h seulement
                 </p>
               </div>
-              
+
               <div className="text-center">
                 <div className="p-4 bg-blue-500/10 rounded-full inline-block mb-4">
                   <Shield className="w-8 h-8 text-blue-500" />
@@ -397,7 +367,7 @@ const SubscriptionInactivePage: React.FC = () => {
                   Toutes vos données sont sauvegardées et prêtes à être restaurées
                 </p>
               </div>
-              
+
               <div className="text-center">
                 <div className="p-4 bg-purple-500/10 rounded-full inline-block mb-4">
                   <Headphones className="w-8 h-8 text-purple-500" />

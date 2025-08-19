@@ -12,6 +12,7 @@ import {
   MessageCircle,
   RotateCcw,
   Check,
+  X, // Added X icon
   Star,
   ArrowRight,
   Play,
@@ -190,18 +191,18 @@ const HomePage: React.FC = () => {
   }, []);
 
   const getFeatures = (plan: Formule) => {
-    const features: string[] = [];
-    if (plan.maxClients > 0) features.push(`Jusqu'à ${plan.maxClients} clients`);
-    if (plan.gestionStock) features.push('Gestion des stocks');
-    if (plan.facturationPDF) features.push('Facturation PDF');
-    if (plan.rapportsVentes) features.push('Rapports de ventes');
-    if (plan.niveauxParrainage > 0) features.push(`${plan.niveauxParrainage} niveaux de parrainage`);
-    if (plan.classementEquipe) features.push('Classement d\'équipe');
-    if (plan.notificationObjectifs) features.push('Notifications d\'objectifs');
-    if (plan.integrationERP) features.push('Intégration ERP');
-    if (plan.supportPrioritaire) features.push('Support prioritaire');
-    if (plan.managersAutorises > 0) features.push(`${plan.managersAutorises} managers autorisés`);
-    return features;
+    return [
+      { description: `Jusqu'à ${plan.maxClients} clients`, isAvailable: plan.maxClients > 0 },
+      { description: `${plan.niveauxParrainage} niveau${plan.niveauxParrainage !== 1 ? 'x' : ''} de parrainage`, isAvailable: plan.niveauxParrainage > 0 },
+      { description: `${plan.managersAutorises} manager${plan.managersAutorises !== 1 ? 's' : ''} autorisé${plan.managersAutorises !== 1 ? 's' : ''}`, isAvailable: plan.managersAutorises > 0 },
+      { description: 'Gestion des stocks', isAvailable: plan.gestionStock },
+      { description: 'Rapports de ventes', isAvailable: plan.rapportsVentes },
+      { description: 'Facturation PDF', isAvailable: plan.facturationPDF },
+      { description: 'Classement d\'équipe', isAvailable: plan.classementEquipe },
+      { description: 'Notifications d\'objectifs', isAvailable: plan.notificationObjectifs },
+      { description: 'Intégration ERP', isAvailable: plan.integrationERP },
+      { description: 'Support prioritaire', isAvailable: plan.supportPrioritaire },
+    ];
   };
 
   return (
@@ -481,8 +482,7 @@ const HomePage: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  <Card className={`h-full text-center relative overflow-hidden ${plan.nom === 'starter' ? 'ring-2 ring-nexsaas-saas-green shadow-xl scale-105' : ''
-                    }`}>
+                  <Card className={`h-full text-center relative overflow-hidden ${plan.nom === 'starter' ? 'ring-2 ring-nexsaas-saas-green shadow-xl scale-105' : ''}`}>
                     <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${plan.nom === 'gratuit' ? 'from-gray-500 to-gray-600' :
                       plan.nom === 'starter' ? 'from-blue-500 to-blue-600' :
                         plan.nom === 'pro' ? 'from-nexsaas-saas-green to-green-600' :
@@ -502,7 +502,7 @@ const HomePage: React.FC = () => {
                       </p>
                       <div className="mb-6">
                         <span className="text-4xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                          {plan.nom === 'entreprise' ? 'Personnalisée' : plan.prix === 0 ? 'Gratuit' : `${plan.prix} FCFA`}
+                          {plan.nom === 'entreprise' ? '' : plan.prix === 0 ? 'Gratuit' : `${plan.prix} FCFA`}
                         </span>
                         {plan.prix !== 0 && plan.nom !== 'entreprise' && (
                           <span className="text-nexsaas-vanta-black dark:text-gray-300">/mois</span>
@@ -511,9 +511,13 @@ const HomePage: React.FC = () => {
                       <ul className="space-y-3 mb-8">
                         {getFeatures(plan).map((feature, featureIndex) => (
                           <li key={featureIndex} className="flex items-center">
-                            <Check className="w-5 h-5 text-nexsaas-saas-green mr-3 flex-shrink-0" />
+                            {feature.isAvailable ? (
+                              <Check className="w-5 h-5 text-nexsaas-saas-green mr-3 flex-shrink-0" />
+                            ) : (
+                              <X className="w-5 h-5 text-red-600 mr-3 flex-shrink-0" />
+                            )}
                             <span className="text-nexsaas-vanta-black dark:text-gray-300 text-left text-sm">
-                              {feature}
+                              {feature.description}
                             </span>
                           </li>
                         ))}
@@ -524,7 +528,7 @@ const HomePage: React.FC = () => {
                           className="w-full"
                           size="lg"
                         >
-                          Commencer maintenant
+                          {plan.nom === 'entreprise' ? 'Faire un devis personnalisé' : 'Commencer maintenant'}
                           <ArrowRight className="w-4 h-4 ml-2" />
                         </Button>
                       </Link>

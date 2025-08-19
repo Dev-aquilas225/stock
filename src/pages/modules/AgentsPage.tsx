@@ -61,6 +61,7 @@ const AgentsPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<"all" | "gestionnaire" | "vendeur">("all");
     const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+    const [imageError, setImageError] = useState(false); // New state for image error
 
     // Validation en temps réel
     const validateField = (field: keyof FormData, value: string | File | null) => {
@@ -354,10 +355,12 @@ const AgentsPage: React.FC = () => {
 
     const handleViewDetails = (agent: Agent) => {
         setSelectedAgent(agent);
+        setImageError(false); // Reset image error when opening modal
     };
 
     const closeModal = () => {
         setSelectedAgent(null);
+        setImageError(false); // Reset image error when closing modal
     };
 
     // Filter agents based on active tab
@@ -709,39 +712,39 @@ const AgentsPage: React.FC = () => {
                             className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full m-4"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                            <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
                                 Détails de l'agent
                             </h3>
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
                                         Nom
                                     </label>
-                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                        {selectedAgent.nom}
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
+                                        {selectedAgent.nom || "Non spécifié"}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
                                         Prénom
                                     </label>
-                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                        {selectedAgent.prenom}
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
+                                        {selectedAgent.prenom || "Non spécifié"}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
                                         Email
                                     </label>
-                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                        {selectedAgent.email}
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
+                                        {selectedAgent.email || "Non spécifié"}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
                                         Contact
                                     </label>
-                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
                                         {selectedAgent.contact || "Non spécifié"}
                                     </p>
                                 </div>
@@ -749,56 +752,64 @@ const AgentsPage: React.FC = () => {
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
                                         Type de pièce
                                     </label>
-                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                        {selectedAgent.typePiece}
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
+                                        {selectedAgent.typePiece || "Non spécifié"}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
                                         Numéro de pièce
                                     </label>
-                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                        {selectedAgent.numeroPiece}
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
+                                        {selectedAgent.numeroPiece || "Non spécifié"}
                                     </p>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
-                                        Photo
-                                    </label>
-                                    {selectedAgent.photoPiece ? (
-                                        <img
-                                            src={selectedAgent.photoPiece}
-                                            alt="Document"
-                                            className="mt-2 w-24 h-24 object-cover rounded"
-                                        />
-                                    ) : (
-                                        <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                            Aucune photo
-                                        </p>
-                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
                                         Rôle
                                     </label>
-                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                        {selectedAgent.role}
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
+                                        {selectedAgent.role || "Non spécifié"}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
                                         Statut
                                     </label>
-                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
                                         {selectedAgent.actif ? "Actif" : "Inactif"}
                                     </p>
                                 </div>
-                                <div>
+                                <div className="sm:col-span-2">
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Photo de la pièce
+                                    </label>
+                                    {selectedAgent.photoPiece ? (
+                                        <>
+                                            <img
+                                                src={selectedAgent.photoPiece}
+                                                alt="Document de l'agent"
+                                                className="mt-2 w-32 h-32 object-cover rounded border border-nexsaas-light-gray dark:border-gray-600"
+                                                onError={() => setImageError(true)}
+                                            />
+                                            {imageError && (
+                                                <p className="mt-1 text-sm text-red-600">
+                                                    Erreur de chargement de l'image
+                                                </p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
+                                            Aucune photo disponible
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
                                         Créé le
                                     </label>
-                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                        {new Date(selectedAgent.creeLe).toLocaleDateString()}
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
+                                        {selectedAgent.creeLe ? new Date(selectedAgent.creeLe).toLocaleDateString() : "Non spécifié"}
                                     </p>
                                 </div>
                             </div>
