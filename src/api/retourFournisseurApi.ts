@@ -69,3 +69,45 @@ export const deleteRetourFournisseur = async (id: number): Promise<void> => {
         throw new Error("Impossible de supprimer le retour fournisseur");
     }
 };
+
+// Approuver un retour fournisseur
+export const approveRetourFournisseur = async (id: string): Promise<RetourFournisseur> => {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("Token manquant");
+
+    try {
+        const response = await axiosClient.patch(`/retours/${id}/approve`, {}, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data.data;
+    } catch (err: any) {
+        const status = err.response?.status;
+        let message =
+            err.response?.data?.message ||
+            "Erreur lors de l'approbation du retour fournisseur";
+
+        if (status === 404) message = `Retour avec ID ${id} non trouvé`;
+        else if (status === 403)
+            message = "Accès non autorisé pour approuver le retour";
+
+        throw new Error(message);
+    }
+};
+
+// Récupérer tous les retours fournisseurs (optional, if needed)
+export const getRetoursFournisseur = async (): Promise<RetourFournisseur[]> => {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("Token manquant");
+
+    try {
+        const response = await axiosClient.get("/retours", {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data.data;
+    } catch (err: any) {
+        throw new Error(
+            err.response?.data?.message ||
+                "Erreur lors de la récupération des retours fournisseurs",
+        );
+    }
+};

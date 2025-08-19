@@ -12,6 +12,7 @@ import {
     ToggleRight,
     Phone,
     FileText,
+    Eye,
 } from "lucide-react";
 import Card from "../../components/UI/Card";
 import Input from "../../components/UI/Input";
@@ -34,9 +35,9 @@ interface FormData {
     prenom: string;
     email: string;
     contact: string;
-    typePiece: TypePiece;
-    numeroPiece: string;
-    photoPiece?: File | null;
+    documentType: TypePiece;
+    documentNumber: string;
+    document: File | null;
     role: UserRole;
 }
 
@@ -51,14 +52,139 @@ const AgentsPage: React.FC = () => {
         prenom: "",
         email: "",
         contact: "",
-        typePiece: TypePiece.CNI,
-        numeroPiece: "",
-        photoPiece: null,
+        documentType: TypePiece.CNI,
+        documentNumber: "",
+        document: null,
         role: UserRole.VENDEUR,
     });
     const [errors, setErrors] = useState<Record<string, string | undefined>>({});
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<"all" | "gestionnaire" | "vendeur">("all");
+    const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+
+    // Validation en temps réel
+    const validateField = (field: keyof FormData, value: string | File | null) => {
+        const newErrors: Record<string, string | undefined> = { ...errors };
+
+        if (field === "nom") {
+            if (!value || (typeof value === "string" && value.trim() === "")) {
+                newErrors.nom = "Nom requis";
+            } else {
+                delete newErrors.nom;
+            }
+        }
+        if (field === "prenom") {
+            if (!value || (typeof value === "string" && value.trim() === "")) {
+                newErrors.prenom = "Prénom requis";
+            } else {
+                delete newErrors.prenom;
+            }
+        }
+        if (field === "email") {
+            if (!value || (typeof value === "string" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()))) {
+                newErrors.email = "Email invalide";
+            } else {
+                delete newErrors.email;
+            }
+        }
+        if (field === "contact") {
+            if (!value || (typeof value === "string" && !/^\+?[0-9\s-]{7,15}$/.test(value.trim()))) {
+                newErrors.contact = "Numéro de contact invalide (7-15 chiffres)";
+            } else {
+                delete newErrors.contact;
+            }
+        }
+        if (field === "documentType") {
+            if (!Object.values(TypePiece).includes(value as TypePiece)) {
+                newErrors.documentType = "Type de document invalide (CNI, RCCM, DFE)";
+            } else {
+                delete newErrors.documentType;
+            }
+        }
+        if (field === "documentNumber") {
+            const trimmedValue = typeof value === "string" ? value.trim() : "";
+            if (!trimmedValue) {
+                newErrors.documentNumber = "Numéro de document requis";
+            } else if (formData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(trimmedValue)) {
+                newErrors.documentNumber = "Le numéro CNI doit commencer par 'CI' suivi de 9 chiffres";
+            } else {
+                delete newErrors.documentNumber;
+            }
+        }
+        if (field === "document") {
+            if (!value) {
+                newErrors.document = "Un document est requis";
+            } else if (value instanceof File) {
+                const validTypes = ["image/png", "image/jpeg"];
+                if (!validTypes.includes(value.type)) {
+                    newErrors.document = "Fichier invalide: PNG ou JPEG requis";
+                } else if (value.size > 5 * 1024 * 1024) {
+                    newErrors.document = "Fichier trop volumineux (max 5MB)";
+                } else {
+                    delete newErrors.document;
+                }
+            }
+        }
+        if (field === "role") {
+            if (!Object.values(UserRole).includes(value as UserRole)) {
+                newErrors.role = "Rôle invalide";
+            } else {
+                delete newErrors.role;
+            }
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleInputChange = (field: keyof FormData, value: string | File | null) => {
+        setFormData((prev) => ({
+            ...prev,
+            [field]: value,
+        }));
+        validateField(field, value);
+    };
+
+    const validateForm = () => {
+        const newErrors: Record<string, string | undefined> = {};
+
+        if (!formData.nom || formData.nom.trim() === "") {
+            newErrors.nom = "Nom requis";
+        }
+        if (!formData.prenom || formData.prenom.trim() === "") {
+            newErrors.prenom = "Prénom requis";
+        }
+        if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+            newErrors.email = "Email invalide";
+        }
+        if (!formData.contact || !/^\+?[0-9\s-]{7,15}$/.test(formData.contact.trim())) {
+            newErrors.contact = "Numéro de contact invalide (7-15 chiffres)";
+        }
+        if (!Object.values(TypePiece).includes(formData.documentType)) {
+            newErrors.documentType = "Type de document invalide (CNI, RCCM, DFE)";
+        }
+        if (!formData.documentNumber || formData.documentNumber.trim() === "") {
+            newErrors.documentNumber = "Numéro de document requis";
+        } else if (formData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(formData.documentNumber.trim())) {
+            newErrors.documentNumber = "Le numéro CNI doit commencer par 'CI' suivi de 9 chiffres";
+        }
+        if (!formData.document) {
+            newErrors.document = "Un document est requis";
+        } else {
+            const validTypes = ["image/png", "image/jpeg"];
+            if (!validTypes.includes(formData.document.type)) {
+                newErrors.document = "Fichier invalide: PNG ou JPEG requis";
+            } else if (formData.document.size > 5 * 1024 * 1024) {
+                newErrors.document = "Fichier trop volumineux (max 5MB)";
+            }
+        }
+        if (!Object.values(UserRole).includes(formData.role)) {
+            newErrors.role = "Rôle invalide";
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
 
     // Fetch agents
     const fetchAgents = async () => {
@@ -67,6 +193,7 @@ const AgentsPage: React.FC = () => {
             const data = await getAgents();
             setAgents(data);
         } catch (err: any) {
+            console.error("Erreur dans fetchAgents:", err);
             showToast({
                 type: "error",
                 title: "Erreur",
@@ -83,77 +210,43 @@ const AgentsPage: React.FC = () => {
         fetchAgents();
     }, [showToast]);
 
-    const validateForm = () => {
-        const newErrors: Record<string, string | undefined> = {};
-
-        if (!formData.nom.trim()) newErrors.nom = "Nom requis";
-        if (!formData.prenom.trim()) newErrors.prenom = "Prénom requis";
-        if (!formData.email) {
-            newErrors.email = "Email requis";
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-            newErrors.email = "Email invalide";
-        }
-        if (!formData.contact.trim()) {
-            newErrors.contact = "Contact requis";
-        } else if (!/^\+?[0-9\s-]{7,15}$/.test(formData.contact)) {
-            newErrors.contact = "Numéro de contact invalide (7-15 chiffres)";
-        }
-        if (!Object.values(TypePiece).includes(formData.typePiece)) {
-            newErrors.typePiece = "Type de pièce invalide: choisissez Passeport ou CNI";
-        }
-        if (!formData.numeroPiece.trim()) {
-            newErrors.numeroPiece = "Numéro de pièce requis";
-        }
-        if (formData.photoPiece) {
-            const validTypes = ["image/png", "image/jpeg"];
-            if (!validTypes.includes(formData.photoPiece.type)) {
-                newErrors.photoPiece = "Fichier invalide: PNG ou JPEG requis";
-            } else if (formData.photoPiece.size > 5 * 1024 * 1024) {
-                newErrors.photoPiece = "Fichier trop volumineux (max 5MB)";
-            }
-        }
-        if (!Object.values(UserRole).includes(formData.role)) {
-            newErrors.role = "Rôle invalide: choisissez Vendeur ou Gestionnaire";
-        }
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
-    const handleInputChange = (field: keyof FormData, value: string | File | null) => {
-        setFormData((prev) => ({
-            ...prev,
-            [field]: value,
-        }));
-        if (errors[field]) {
-            setErrors((prev) => ({ ...prev, [field]: undefined }));
-        }
-    };
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!validateForm()) return;
+        if (!validateForm()) {
+            console.error("Validation échouée:", errors);
+            showToast({
+                type: "error",
+                title: "Erreur de validation",
+                message: "Veuillez corriger les erreurs dans le formulaire",
+                duration: 5000,
+            });
+            return;
+        }
 
         setLoading(true);
         try {
             const agentData: CreateAgentDto = {
                 nom: formData.nom.trim(),
                 prenom: formData.prenom.trim(),
-                email: formData.email,
-                contact: formData.contact.trim(),
-                typePiece: formData.typePiece,
-                numeroPiece: formData.numeroPiece.trim(),
-                photoPiece: formData.photoPiece || undefined,
+                email: formData.email.trim(),
+                documentType: formData.documentType,
+                documentNumber: formData.documentNumber.trim(),
                 role: formData.role,
+                document: formData.document!,
             };
+
+            console.log("Données envoyées à addAgent:", agentData);
 
             const tempAgent: Agent = {
                 ...agentData,
                 id: "temp-" + Date.now(),
                 actif: true,
                 creeLe: new Date().toISOString(),
-                photoPiece: formData.photoPiece ? URL.createObjectURL(formData.photoPiece) : undefined,
+                typePiece: formData.documentType,
+                numeroPiece: formData.documentNumber,
+                contact: formData.contact,
+                photoPiece: formData.document ? URL.createObjectURL(formData.document) : undefined,
             };
             setAgents((prev) => [...prev, tempAgent]);
 
@@ -169,9 +262,8 @@ const AgentsPage: React.FC = () => {
                 userId: user?.id ?? "unknown",
                 metadata: {
                     email: formData.email,
-                    contact: formData.contact,
-                    typePiece: formData.typePiece,
-                    numeroPiece: formData.numeroPiece,
+                    documentType: formData.documentType,
+                    documentNumber: formData.documentNumber,
                     role: formData.role,
                 },
             });
@@ -188,19 +280,28 @@ const AgentsPage: React.FC = () => {
                 prenom: "",
                 email: "",
                 contact: "",
-                typePiece: TypePiece.CNI,
-                numeroPiece: "",
-                photoPiece: null,
+                documentType: TypePiece.CNI,
+                documentNumber: "",
+                document: null,
                 role: UserRole.VENDEUR,
             });
             setErrors({});
         } catch (err: any) {
+            console.error("Erreur dans handleSubmit:", err);
             setAgents((prev) => prev.filter((agent) => !agent.id.startsWith("temp-")));
             await fetchAgents();
+            let errorMessage = err.message || "Une erreur est survenue lors de l'ajout de l'agent";
+            if (errorMessage.includes("documentType")) {
+                errorMessage = "Le type de document doit être CNI, RCCM ou DFE.";
+            } else if (errorMessage.includes("documentNumber")) {
+                errorMessage = "Le numéro de document est invalide.";
+            } else if (errorMessage.includes("document")) {
+                errorMessage = "Un document valide est requis (PNG ou JPEG, max 5MB).";
+            }
             showToast({
                 type: "error",
                 title: "Erreur",
-                message: err.message || "Une erreur est survenue lors de l'opération",
+                message: errorMessage,
                 duration: 5000,
             });
         } finally {
@@ -237,20 +338,26 @@ const AgentsPage: React.FC = () => {
 
             await fetchAgents();
         } catch (err: any) {
+            console.error("Erreur dans handleToggleStatus:", err);
             setAgents(previousAgents);
             await fetchAgents();
-            const status = err.response?.status;
-            if (status === 403 || status === 500) {
-                showToast({
-                    type: "error",
-                    title: "Erreur",
-                    message: err.message || "Une erreur est survenue lors du changement de statut",
-                    duration: 5000,
-                });
-            }
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: err.message || "Une erreur est survenue lors du changement de statut",
+                duration: 5000,
+            });
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleViewDetails = (agent: Agent) => {
+        setSelectedAgent(agent);
+    };
+
+    const closeModal = () => {
+        setSelectedAgent(null);
     };
 
     // Filter agents based on active tab
@@ -345,73 +452,77 @@ const AgentsPage: React.FC = () => {
                                 />
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                        Type de pièce d'identité
+                                        Type de document <span className="text-red-600">*</span>
                                     </label>
                                     <div className="relative">
                                         <select
-                                            value={formData.typePiece}
-                                            onChange={(e) => handleInputChange("typePiece", e.target.value)}
+                                            value={formData.documentType}
+                                            onChange={(e) => handleInputChange("documentType", e.target.value as TypePiece)}
                                             className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none appearance-none"
+                                            required
                                         >
                                             <option value={TypePiece.CNI}>CNI</option>
-                                            <option value={TypePiece.PASSEPORT}>Passeport</option>
+                                            <option value={TypePiece.RCCM}>RCCM</option>
+                                            <option value={TypePiece.DFE}>DFE</option>
                                         </select>
                                         <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                        {errors.typePiece && (
-                                            <p className="mt-1 text-sm text-red-600">{errors.typePiece}</p>
+                                        {errors.documentType && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.documentType}</p>
                                         )}
                                     </div>
                                 </div>
                                 <Input
-                                    label="Numéro de pièce"
-                                    value={formData.numeroPiece}
-                                    onChange={(value) => handleInputChange("numeroPiece", value)}
+                                    label="Numéro de document"
+                                    value={formData.documentNumber}
+                                    onChange={(value) => handleInputChange("documentNumber", value)}
                                     icon={FileText}
-                                    error={errors.numeroPiece}
+                                    error={errors.documentNumber}
                                     required
-                                    placeholder="123456789"
+                                    placeholder={formData.documentType === TypePiece.CNI ? "CI123456789" : "Numéro de document"}
                                 />
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                        Photo de la pièce
+                                        Document <span className="text-red-600">*</span>
                                     </label>
                                     <input
                                         type="file"
                                         accept="image/png,image/jpeg"
                                         onChange={(e) =>
-                                            handleInputChange("photoPiece", e.target.files ? e.target.files[0] : null)
+                                            handleInputChange("document", e.target.files ? e.target.files[0] : null)
                                         }
                                         className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                        required
                                     />
-                                    {errors.photoPiece && (
-                                        <p className="mt-1 text-sm text-red-600">{errors.photoPiece}</p>
+                                    {errors.document && (
+                                        <p className="mt-1 text-sm text-red-600">{errors.document}</p>
                                     )}
-                                    {formData.photoPiece && (
+                                    {formData.document && (
                                         <img
-                                            src={URL.createObjectURL(formData.photoPiece)}
+                                            src={URL.createObjectURL(formData.document)}
                                             alt="Preview"
                                             className="mt-2 w-24 h-24 object-cover rounded"
                                         />
                                     )}
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                    Rôle
-                                </label>
-                                <div className="relative">
-                                    <select
-                                        value={formData.role}
-                                        onChange={(e) => handleInputChange("role", e.target.value)}
-                                        className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none appearance-none"
-                                    >
-                                        <option value={UserRole.VENDEUR}>Vendeur</option>
-                                        <option value={UserRole.GESTIONNAIRE}>Gestionnaire</option>
-                                    </select>
-                                    <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                    {errors.role && (
-                                        <p className="mt-1 text-sm text-red-600">{errors.role}</p>
-                                    )}
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                        Rôle <span className="text-red-600">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={formData.role}
+                                            onChange={(e) => handleInputChange("role", e.target.value as UserRole)}
+                                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none appearance-none"
+                                            required
+                                        >
+                                            <option value={UserRole.VENDEUR}>Vendeur</option>
+                                            <option value={UserRole.GESTIONNAIRE}>Gestionnaire</option>
+                                        </select>
+                                        <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                        {errors.role && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.role}</p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex justify-end">
@@ -420,6 +531,7 @@ const AgentsPage: React.FC = () => {
                                     variant="primary"
                                     size="sm"
                                     loading={loading}
+                                    disabled={loading || Object.keys(errors).length > 0 || !formData.nom || !formData.prenom || !formData.email || !formData.contact || !formData.documentNumber || !formData.document}
                                 >
                                     <Save className="w-4 h-4 mr-2" />
                                     Ajouter l'agent
@@ -494,25 +606,7 @@ const AgentsPage: React.FC = () => {
                                     <thead className="bg-nexsaas-light-gray dark:bg-gray-700">
                                         <tr>
                                             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
-                                                Nom
-                                            </th>
-                                            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
-                                                Prénom
-                                            </th>
-                                            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
                                                 Email
-                                            </th>
-                                            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
-                                                Contact
-                                            </th>
-                                            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
-                                                Type de pièce
-                                            </th>
-                                            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
-                                                Numéro de pièce
-                                            </th>
-                                            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
-                                                Photo
                                             </th>
                                             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
                                                 Rôle
@@ -532,46 +626,11 @@ const AgentsPage: React.FC = () => {
                                                 whileHover={{ scaleX: 1.01, zIndex: 10 }}
                                                 transition={{ duration: 0.3 }}
                                             >
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                    <div className="flex items-center">
-                                                        <Users className="w-5 h-5 text-nexsaas-saas-green mr-2" />
-                                                        <span className="truncate">{agent.nom}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                    <span className="truncate">{agent.prenom}</span>
-                                                </td>
-                                                <td className="px-4 sm:px-6 py-4 text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                    <span className="truncate">{agent.email}</span>
-                                                </td>
                                                 <td className="px-4 sm:px-6 py-4 text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                                     <div className="flex items-center">
-                                                        <Phone className="w-5 h-5 text-nexsaas-saas-green mr-2" />
-                                                        <span className="truncate">{agent.contact}</span>
+                                                        <Mail className="w-5 h-5 text-nexsaas-saas-green mr-2" />
+                                                        <span className="truncate">{agent.email}</span>
                                                     </div>
-                                                </td>
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                    <div className="flex items-center">
-                                                        <FileText className="w-5 h-5 text-nexsaas-saas-green mr-2" />
-                                                        {agent.typePiece}
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                    <span className="truncate">{agent.numeroPiece}</span>
-                                                </td>
-                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                    {agent.photoPiece ? (
-                                                        <a
-                                                            href={agent.photoPiece}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="text-nexsaas-saas-green hover:underline"
-                                                        >
-                                                            Voir photo
-                                                        </a>
-                                                    ) : (
-                                                        "Aucune photo"
-                                                    )}
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                                     <div className="flex items-center">
@@ -590,29 +649,40 @@ const AgentsPage: React.FC = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            handleToggleStatus(
-                                                                agent.id,
-                                                                `${agent.nom} ${agent.prenom}`,
-                                                                agent.actif,
-                                                            )
-                                                        }
-                                                        className={
-                                                            agent.actif
-                                                                ? "text-yellow-600 hover:text-yellow-800"
-                                                                : "text-green-600 hover:text-green-800"
-                                                        }
-                                                        disabled={loading}
-                                                    >
-                                                        {agent.actif ? (
-                                                            <ToggleLeft className="w-4 h-4" />
-                                                        ) : (
-                                                            <ToggleRight className="w-4 h-4" />
-                                                        )}
-                                                    </Button>
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                handleToggleStatus(
+                                                                    agent.id,
+                                                                    `${agent.nom} ${agent.prenom}`,
+                                                                    agent.actif,
+                                                                )
+                                                            }
+                                                            className={
+                                                                agent.actif
+                                                                    ? "text-yellow-600 hover:text-yellow-800"
+                                                                    : "text-green-600 hover:text-green-800"
+                                                            }
+                                                            disabled={loading}
+                                                        >
+                                                            {agent.actif ? (
+                                                                <ToggleLeft className="w-4 h-4" />
+                                                            ) : (
+                                                                <ToggleRight className="w-4 h-4" />
+                                                            )}
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleViewDetails(agent)}
+                                                            className="text-blue-600 hover:text-blue-800"
+                                                            disabled={loading}
+                                                        >
+                                                            <Eye className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
                                                 </td>
                                             </motion.tr>
                                         ))}
@@ -622,6 +692,124 @@ const AgentsPage: React.FC = () => {
                         )}
                     </Card>
                 </motion.div>
+
+                {/* Floating Modal for Agent Details */}
+                {selectedAgent && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+                        onClick={closeModal}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.8, opacity: 0 }}
+                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full m-4"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                Détails de l'agent
+                            </h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Nom
+                                    </label>
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        {selectedAgent.nom}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Prénom
+                                    </label>
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        {selectedAgent.prenom}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Email
+                                    </label>
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        {selectedAgent.email}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Contact
+                                    </label>
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        {selectedAgent.contact || "Non spécifié"}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Type de pièce
+                                    </label>
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        {selectedAgent.typePiece}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Numéro de pièce
+                                    </label>
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        {selectedAgent.numeroPiece}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Photo
+                                    </label>
+                                    {selectedAgent.photoPiece ? (
+                                        <img
+                                            src={selectedAgent.photoPiece}
+                                            alt="Document"
+                                            className="mt-2 w-24 h-24 object-cover rounded"
+                                        />
+                                    ) : (
+                                        <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                            Aucune photo
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Rôle
+                                    </label>
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        {selectedAgent.role}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Statut
+                                    </label>
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        {selectedAgent.actif ? "Actif" : "Inactif"}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Créé le
+                                    </label>
+                                    <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        {new Date(selectedAgent.creeLe).toLocaleDateString()}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-6 flex justify-end">
+                                <Button variant="ghost" size="sm" onClick={closeModal}>
+                                    Fermer
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
             </div>
         </div>
     );
