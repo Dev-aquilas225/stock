@@ -12,7 +12,7 @@ import {
   MessageCircle,
   RotateCcw,
   Check,
-  X, // Added X icon
+  X,
   Star,
   ArrowRight,
   Play,
@@ -192,7 +192,10 @@ const HomePage: React.FC = () => {
 
   const getFeatures = (plan: Formule) => {
     return [
-      { description: `Jusqu'à ${plan.maxClients} clients`, isAvailable: plan.maxClients > 0 },
+      {
+        description: plan.nom === 'entreprise' ? 'Illimité' : `Jusqu'à ${plan.maxClients} clients`,
+        isAvailable: plan.maxClients > 0 || plan.nom === 'entreprise',
+      },
       { description: `${plan.niveauxParrainage} niveau${plan.niveauxParrainage !== 1 ? 'x' : ''} de parrainage`, isAvailable: plan.niveauxParrainage > 0 },
       { description: `${plan.managersAutorises} manager${plan.managersAutorises !== 1 ? 's' : ''} autorisé${plan.managersAutorises !== 1 ? 's' : ''}`, isAvailable: plan.managersAutorises > 0 },
       { description: 'Gestion des stocks', isAvailable: plan.gestionStock },
@@ -256,11 +259,8 @@ const HomePage: React.FC = () => {
             className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto mt-12"
           >
             {stats.map((stat, index) => (
-              <motion.div
+              <div
                 key={stat.label}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.6, delay: 0.4 + index * 0.1 }}
                 className="text-center"
               >
                 <div className="p-3 bg-nexsaas-deep-blue/10 rounded-full inline-block mb-3">
@@ -272,7 +272,7 @@ const HomePage: React.FC = () => {
                 <div className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                   {stat.label}
                 </div>
-              </motion.div>
+              </div>
             ))}
           </motion.div>
         </div>
@@ -302,9 +302,8 @@ const HomePage: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
-                whileHover={{ scale: 1.03 }}
               >
-                <Card className="h-full text-center p-6 hover:shadow-lg transition-all duration-300">
+                <Card className="h-full text-center p-6 hover:shadow-lg transition-all duration-300 border border-gray-200 dark:border-gray-700">
                   <div className="p-3 bg-nexsaas-saas-green/10 rounded-full inline-block mb-4">
                     <benefit.icon className="w-7 h-7 text-nexsaas-saas-green" />
                   </div>
@@ -345,10 +344,9 @@ const HomePage: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
-                whileHover={{ y: -8, scale: 1.02 }}
               >
                 <Link to={module.link}>
-                  <Card className="h-full p-6 hover:shadow-xl transition-all duration-300 group">
+                  <Card className="h-full p-6 hover:shadow-xl transition-all duration-300 border border-gray-200 dark:border-gray-700 group">
                     <div className={`p-4 bg-gradient-to-r ${module.color} rounded-lg inline-block mb-4 group-hover:scale-105 transition-transform`}>
                       <module.icon className="w-8 h-8 text-white" />
                     </div>
@@ -394,7 +392,7 @@ const HomePage: React.FC = () => {
             transition={{ duration: 0.6, ease: 'easeInOut' }}
             className="max-w-3xl mx-auto"
           >
-            <Card className="text-center p-8">
+            <Card className="text-center p-8 border border-gray-200 dark:border-gray-700">
               <Quote className="w-10 h-10 text-nexsaas-saas-green mx-auto mb-6" />
               <p className="text-lg text-nexsaas-vanta-black dark:text-gray-200 mb-6 italic">
                 "{testimonials[activeTestimonial].content}"
@@ -411,9 +409,9 @@ const HomePage: React.FC = () => {
                   className="w-12 h-12 rounded-full mr-4 object-cover"
                 />
                 <div>
-                  <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                  <h3 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                     {testimonials[activeTestimonial].name}
-                  </h4>
+                  </h3>
                   <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                     {testimonials[activeTestimonial].role}, {testimonials[activeTestimonial].company}
                   </p>
@@ -427,8 +425,7 @@ const HomePage: React.FC = () => {
               <button
                 key={index}
                 onClick={() => setActiveTestimonial(index)}
-                className={`w-3 h-3 rounded-full transition-colors ${index === activeTestimonial ? 'bg-nexsaas-saas-green' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
+                className={`w-3 h-3 rounded-full transition-colors ${index === activeTestimonial ? 'bg-nexsaas-saas-green' : 'bg-gray-300 dark:bg-gray-600'}`}
               />
             ))}
           </div>
@@ -438,19 +435,14 @@ const HomePage: React.FC = () => {
       {/* Subscriptions Section */}
       <section id="subscriptions" className="py-16 px-4">
         <div className="container mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-12"
-          >
+          <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
               Choisissez votre abonnement
             </h2>
             <p className="text-lg text-nexsaas-vanta-black dark:text-gray-300 max-w-2xl mx-auto">
               Des plans adaptés à chaque taille d'entreprise
             </p>
-          </motion.div>
+          </div>
 
           {loadingPlans ? (
             <div className="flex items-center justify-center">
@@ -464,77 +456,69 @@ const HomePage: React.FC = () => {
               </Link>
             </div>
           ) : (
-            <div className="flex flex-row overflow-x-auto snap-x snap-mandatory gap-4 px-4">
-              {plans.map((plan, index) => (
-                <motion.div
-                  key={plan.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: index * 0.2 }}
-                  whileHover={{ scaleX: 1.1, zIndex: 10 }}
-                  className="relative min-w-[250px] snap-center"
-                >
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+              {plans.map((plan) => (
+                <div key={plan.id} className="relative">
                   {plan.nom === 'starter' && (
-                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2">
-                      <div className="bg-green-600 text-nexsaas-pure-white px-6 py-2 rounded-full text-base font-semibold flex items-center shadow-md border border-nexsaas-saas-green hover:scale-105 transition-transform duration-200">
-                        <Star className="w-5 h-5 mr-2" />
+                    <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10">
+                      <div className="bg-nexsaas-saas-green text-white px-2 py-0.5 rounded-full text-xs font-semibold flex items-center shadow-sm">
+                        <Star className="w-3 h-3 mr-1" />
                         Populaire
                       </div>
                     </div>
                   )}
-                  <Card className={`h-full text-center relative overflow-hidden ${plan.nom === 'starter' ? 'ring-2 ring-nexsaas-saas-green shadow-xl scale-105' : ''}`}>
-                    <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${plan.nom === 'gratuit' ? 'from-gray-500 to-gray-600' :
-                      plan.nom === 'starter' ? 'from-blue-500 to-blue-600' :
-                        plan.nom === 'pro' ? 'from-nexsaas-saas-green to-green-600' :
-                          plan.nom === 'manager' ? 'from-teal-500 to-teal-600' :
-                            'from-purple-500 to-purple-600'
-                      }`} />
-                    <div className="pt-6">
-                      <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                  <Card
+                    className={`max-w-[200px] min-h-[400px] flex flex-col justify-between text-center p-3 border ${plan.nom === 'starter'
+                      ? 'border-nexsaas-saas-green bg-green-50 dark:bg-green-900/20 shadow-md'
+                      : 'border-gray-200 dark:border-gray-700'
+                      } rounded-lg mx-auto`}
+                  >
+                    <div>
+                      <h3 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                         {plan.nom.charAt(0).toUpperCase() + plan.nom.slice(1)}
                       </h3>
-                      <p className="text-nexsaas-vanta-black dark:text-gray-300 mb-4">
+                      <p className="text-nexsaas-vanta-black dark:text-gray-300 mb-2 text-xs">
                         Parfait pour {plan.nom === 'gratuit' ? 'essayer gratuitement' :
                           plan.nom === 'starter' ? 'débuter' :
                             plan.nom === 'pro' ? 'les entreprises en croissance' :
                               plan.nom === 'manager' ? 'les équipes structurées' :
                                 'les solutions personnalisées'}
                       </p>
-                      <div className="mb-6">
-                        <span className="text-4xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                      <div className="mb-2">
+                        <span className="text-3xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                           {plan.nom === 'entreprise' ? '' : plan.prix === 0 ? 'Gratuit' : `${plan.prix} FCFA`}
                         </span>
                         {plan.prix !== 0 && plan.nom !== 'entreprise' && (
-                          <span className="text-nexsaas-vanta-black dark:text-gray-300">/mois</span>
+                          <span className="text-nexsaas-vanta-black dark:text-gray-300 text-sm">/mois</span>
                         )}
                       </div>
-                      <ul className="space-y-3 mb-8">
+                      <ul className="space-y-1 mb-4 text-xs">
                         {getFeatures(plan).map((feature, featureIndex) => (
                           <li key={featureIndex} className="flex items-center">
                             {feature.isAvailable ? (
-                              <Check className="w-5 h-5 text-nexsaas-saas-green mr-3 flex-shrink-0" />
+                              <Check className="w-4 h-4 text-nexsaas-saas-green mr-2 flex-shrink-0" />
                             ) : (
-                              <X className="w-5 h-5 text-red-600 mr-3 flex-shrink-0" />
+                              <X className="w-4 h-4 text-red-600 mr-2 flex-shrink-0" />
                             )}
-                            <span className="text-nexsaas-vanta-black dark:text-gray-300 text-left text-sm">
+                            <span className="text-nexsaas-vanta-black dark:text-gray-300 text-left text-xs">
                               {feature.description}
                             </span>
                           </li>
                         ))}
                       </ul>
-                      <Link to="/inscription" className="block">
-                        <Button
-                          variant={plan.nom === 'starter' ? 'primary' : 'outline'}
-                          className="w-full"
-                          size="lg"
-                        >
-                          {plan.nom === 'entreprise' ? 'Faire un devis personnalisé' : 'Commencer maintenant'}
-                          <ArrowRight className="w-4 h-4 ml-2" />
-                        </Button>
-                      </Link>
                     </div>
+                    <Link to="/inscription" className="block">
+                      <Button
+                        variant={plan.nom === 'starter' ? 'primary' : 'outline'}
+                        className="w-full bg-nexsaas-saas-green text-white hover:bg-green-600 text-sm"
+                        size="md"
+                      >
+                        {plan.nom === 'entreprise' ? 'Faire un devis' : 'Commencer'}
+                        <ArrowRight className="w-3 h-3 ml-1" />
+                      </Button>
+                    </Link>
                   </Card>
-                </motion.div>
+                </div>
               ))}
             </div>
           )}

@@ -8,7 +8,12 @@ export enum UserRole {
 export enum TypePiece {
     CNI = "CNI",
     RCCM = "RCCM",
-    DFE = "DFE",
+    Autres = "Autres",
+}
+
+export interface DocumentAgent {
+    type: TypePiece;
+    fichierUrl: string;
 }
 
 export interface CreateAgentDto {
@@ -27,12 +32,11 @@ export interface Agent {
     prenom: string;
     email: string;
     contact?: string;
-    typePiece: TypePiece;
-    numeroPiece: string;
-    photoPiece?: string;
     role: UserRole;
     actif: boolean;
     creeLe: string;
+    documentAgent: DocumentAgent[];
+    documentNumber: string; // Added
 }
 
 // -----------------------------
@@ -52,7 +56,6 @@ const mapTypePieceToBackend = (typePiece: TypePiece): string => {
         console.error(`Type de pièce invalide: ${typePiece}`);
         throw new Error("Type de pièce invalide");
     }
-    // Forcer la casse pour correspondre exactement au backend
     return typePiece.toUpperCase();
 };
 
@@ -107,7 +110,7 @@ export const addAgent = async (agentData: CreateAgentDto): Promise<Agent> => {
     }
     if (!Object.values(TypePiece).includes(agentData.documentType)) {
         console.error("Erreur de validation: documentType invalide", agentData.documentType);
-        throw new Error("DocumentType doit être CNI, RCCM ou DFE");
+        throw new Error("DocumentType doit être CNI, RCCM ou Autres");
     }
     if (!agentData.documentNumber || agentData.documentNumber.trim() === "") {
         console.error("Erreur de validation: documentNumber requis", agentData.documentNumber);
@@ -159,10 +162,14 @@ export const addAgent = async (agentData: CreateAgentDto): Promise<Agent> => {
         return {
             ...response.data.data,
             role: mapRoleFromBackend(response.data.data.role),
-            typePiece: mapTypePieceFromBackend(response.data.data.documentType),
-            numeroPiece: response.data.data.documentNumber,
+            documentAgent: [
+                {
+                    type: mapTypePieceFromBackend(response.data.data.documentType),
+                    fichierUrl: response.data.data.fichierUrl || "",
+                },
+            ],
             contact: response.data.data.contact || "",
-            photoPiece: response.data.data.fichierUrl || undefined,
+            documentNumber: response.data.data.documentNumber || "", // Added
             creeLe: response.data.data.createdAt || new Date().toISOString(),
         };
     } catch (err: any) {
@@ -173,7 +180,7 @@ export const addAgent = async (agentData: CreateAgentDto): Promise<Agent> => {
                 ? errors.map((e: any) => e.message).join(", ")
                 : err.response?.data?.message || err.message || "Erreur lors de la création de l’agent";
         if (message.includes("documentType")) {
-            message = "Le type de document doit être CNI, RCCM ou DFE.";
+            message = "Le type de document doit être CNI, RCCM ou Autres.";
         }
         throw new Error(message);
     }
@@ -205,10 +212,14 @@ export const getAgents = async (): Promise<Agent[]> => {
             return {
                 ...agent,
                 role: mapRoleFromBackend(agent.role),
-                typePiece: mapTypePieceFromBackend(agent.documentType),
-                numeroPiece: agent.documentNumber,
+                documentAgent: [
+                    {
+                        type: mapTypePieceFromBackend(agent.documentType),
+                        fichierUrl: agent.fichierUrl || "",
+                    },
+                ],
                 contact: agent.contact || "",
-                photoPiece: agent.fichierUrl || undefined,
+                documentNumber: agent.documentNumber || "", // Added
                 creeLe: agent.createdAt || new Date().toISOString(),
             };
         }).filter((agent): agent is Agent => agent !== null);
@@ -241,10 +252,14 @@ export const toggleAgentActif = async (id: string): Promise<Agent> => {
         return {
             ...response.data.data,
             role: mapRoleFromBackend(response.data.data.role),
-            typePiece: mapTypePieceFromBackend(response.data.data.documentType),
-            numeroPiece: response.data.data.documentNumber,
+            documentAgent: [
+                {
+                    type: mapTypePieceFromBackend(response.data.data.documentType),
+                    fichierUrl: response.data.data.fichierUrl || "",
+                },
+            ],
             contact: response.data.data.contact || "",
-            photoPiece: response.data.data.fichierUrl || undefined,
+            documentNumber: response.data.data.documentNumber || "", // Added
             creeLe: response.data.data.createdAt || new Date().toISOString(),
         };
     } catch (err: any) {

@@ -28,10 +28,8 @@ import {
     CreateAgentDto,
     UserRole,
     TypePiece,
+    DocumentAgent,
 } from "../../api/agentApi";
-
-// Define base API URL for constructing full image URLs
-const BASE_API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 interface FormData {
     nom: string;
@@ -65,9 +63,6 @@ const AgentsPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<"all" | "gestionnaire" | "vendeur">("all");
     const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
     const [imageError, setImageError] = useState(false);
-
-    // Utility function to normalize photoPiece URL
-
 
     // Validation en temps réel
     const validateField = (field: keyof FormData, value: string | File | null) => {
@@ -103,7 +98,7 @@ const AgentsPage: React.FC = () => {
         }
         if (field === "documentType") {
             if (!Object.values(TypePiece).includes(value as TypePiece)) {
-                newErrors.documentType = "Type de document invalide (CNI, RCCM, DFE)";
+                newErrors.documentType = "Type de document invalide (CNI, RCCM, Autres)";
             } else {
                 delete newErrors.documentType;
             }
@@ -114,6 +109,8 @@ const AgentsPage: React.FC = () => {
                 newErrors.documentNumber = "Numéro de document requis";
             } else if (formData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(trimmedValue)) {
                 newErrors.documentNumber = "Le numéro CNI doit commencer par 'CI' suivi de 9 chiffres";
+            } else if (formData.documentType === TypePiece.RCCM && !/^RC\d{9}$/.test(trimmedValue)) {
+                newErrors.documentNumber = "Le numéro RCCM doit commencer par 'RC' suivi de 9 chiffres";
             } else {
                 delete newErrors.documentNumber;
             }
@@ -168,12 +165,14 @@ const AgentsPage: React.FC = () => {
             newErrors.contact = "Numéro de contact invalide (7-15 chiffres)";
         }
         if (!Object.values(TypePiece).includes(formData.documentType)) {
-            newErrors.documentType = "Type de document invalide (CNI, RCCM, DFE)";
+            newErrors.documentType = "Type de document invalide (CNI, RCCM, Autres)";
         }
         if (!formData.documentNumber || formData.documentNumber.trim() === "") {
             newErrors.documentNumber = "Numéro de document requis";
         } else if (formData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(formData.documentNumber.trim())) {
             newErrors.documentNumber = "Le numéro CNI doit commencer par 'CI' suivi de 9 chiffres";
+        } else if (formData.documentType === TypePiece.RCCM && !/^RC\d{9}$/.test(formData.documentNumber.trim())) {
+            newErrors.documentNumber = "Le numéro RCCM doit commencer par 'RC' suivi de 9 chiffres";
         }
         if (!formData.document) {
             newErrors.document = "Un document est requis";
@@ -193,12 +192,16 @@ const AgentsPage: React.FC = () => {
         return Object.keys(newErrors).length === 0;
     };
 
-    // Fetch agents
     const fetchAgents = async () => {
         try {
             setLoading(true);
-            const data = await getAgents();
-            setAgents(data);
+            const response = await getAgents();
+            console.log("Agents reçus dans fetchAgents:", response);
+            if (!response || !Array.isArray(response)) {
+                console.error("Réponse API invalide: response n'est pas un tableau", response);
+                throw new Error("Réponse API invalide");
+            }
+            setAgents(response);
         } catch (err: any) {
             console.error("Erreur dans fetchAgents:", err);
             showToast({
@@ -207,12 +210,12 @@ const AgentsPage: React.FC = () => {
                 message: err.message || "Erreur lors de la récupération des agents",
                 duration: 5000,
             });
+            setAgents([]);
         } finally {
             setLoading(false);
         }
     };
 
-    // Fetch agents on mount
     useEffect(() => {
         fetchAgents();
     }, [showToast]);
@@ -250,16 +253,24 @@ const AgentsPage: React.FC = () => {
                 id: "temp-" + Date.now(),
                 actif: true,
                 creeLe: new Date().toISOString(),
-                typePiece: formData.documentType,
-                numeroPiece: formData.documentNumber,
-                contact: formData.contact,
-                photoPiece: formData.document ? URL.createObjectURL(formData.document) : undefined,
+                contact: formData.contact.trim(),
+                documentAgent: [
+                    {
+                        type: formData.documentType,
+                        fichierUrl: formData.document ? URL.createObjectURL(formData.document) : "",
+                    },
+                ],
+                documentNumber: formData.documentNumber.trim(), // Added
             };
             setAgents((prev) => [...prev, tempAgent]);
 
             const newAgent = await addAgent(agentData);
             setAgents((prev) =>
-                prev.map((agent) => (agent.id === tempAgent.id ? newAgent : agent)),
+                prev.map((agent) =>
+                    agent.id === tempAgent.id
+                        ? { ...newAgent, documentAgent: newAgent.documentAgent, documentNumber: newAgent.documentNumber } // Updated
+                        : agent,
+                ),
             );
 
             logActivity({
@@ -299,7 +310,7 @@ const AgentsPage: React.FC = () => {
             await fetchAgents();
             let errorMessage = err.message || "Une erreur est survenue lors de l'ajout de l'agent";
             if (errorMessage.includes("documentType")) {
-                errorMessage = "Le type de document doit être CNI, RCCM ou DFE.";
+                errorMessage = "Le type de document doit être CNI, RCCM ou Autres.";
             } else if (errorMessage.includes("documentNumber")) {
                 errorMessage = "Le numéro de document est invalide.";
             } else if (errorMessage.includes("document")) {
@@ -360,6 +371,7 @@ const AgentsPage: React.FC = () => {
     };
 
     const handleViewDetails = (agent: Agent) => {
+        console.log("Agent sélectionné pour détails:", agent);
         setSelectedAgent(agent);
         setImageError(false);
     };
@@ -369,7 +381,6 @@ const AgentsPage: React.FC = () => {
         setImageError(false);
     };
 
-    // Filter agents based on active tab
     const filteredAgents =
         activeTab === "all"
             ? agents
@@ -472,7 +483,7 @@ const AgentsPage: React.FC = () => {
                                         >
                                             <option value={TypePiece.CNI}>CNI</option>
                                             <option value={TypePiece.RCCM}>RCCM</option>
-                                            <option value={TypePiece.DFE}>DFE</option>
+                                            <option value={TypePiece.Autres}>Autres</option>
                                         </select>
                                         <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                                         {errors.documentType && (
@@ -487,7 +498,13 @@ const AgentsPage: React.FC = () => {
                                     icon={FileText}
                                     error={errors.documentNumber}
                                     required
-                                    placeholder={formData.documentType === TypePiece.CNI ? "CI123456789" : "Numéro de document"}
+                                    placeholder={
+                                        formData.documentType === TypePiece.CNI
+                                            ? "CI123456789"
+                                            : formData.documentType === TypePiece.RCCM
+                                                ? "RC123456789"
+                                                : "Numéro de document"
+                                    }
                                 />
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
@@ -510,7 +527,13 @@ const AgentsPage: React.FC = () => {
                                             src={URL.createObjectURL(formData.document)}
                                             alt="Preview"
                                             className="mt-2 w-24 h-24 object-cover rounded"
+                                            onError={() => setImageError(true)}
                                         />
+                                    )}
+                                    {imageError && formData.document && (
+                                        <p className="mt-1 text-sm text-red-600">
+                                            Erreur de prévisualisation de l'image
+                                        </p>
                                     )}
                                 </div>
                                 <div>
@@ -560,7 +583,6 @@ const AgentsPage: React.FC = () => {
                         <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
                             Liste des agents
                         </h2>
-                        {/* Tabs */}
                         <div className="flex border-b border-nexsaas-light-gray dark:border-gray-600 mb-6">
                             <button
                                 className={`px-4 py-2 text-sm font-medium ${activeTab === "all"
@@ -618,6 +640,9 @@ const AgentsPage: React.FC = () => {
                                                 Email
                                             </th>
                                             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
+                                                Type de document
+                                            </th>
+                                            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
                                                 Rôle
                                             </th>
                                             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-nexsaas-vanta-black dark:text-gray-300 uppercase tracking-wider">
@@ -639,6 +664,14 @@ const AgentsPage: React.FC = () => {
                                                     <div className="flex items-center">
                                                         <Mail className="w-5 h-5 text-nexsaas-saas-green mr-2" />
                                                         <span className="truncate">{agent.email}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                                    <div className="flex items-center">
+                                                        <FileText className="w-5 h-5 text-nexsaas-saas-green mr-2" />
+                                                        {agent.documentAgent && agent.documentAgent[0]?.type
+                                                            ? agent.documentAgent[0].type
+                                                            : "Non spécifié"}
                                                     </div>
                                                 </td>
                                                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
@@ -756,19 +789,52 @@ const AgentsPage: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
-                                        Type de pièce
+                                        Type de document
                                     </label>
                                     <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
-                                        {selectedAgent.typePiece || "Non spécifié"}
+                                        {selectedAgent.documentAgent && selectedAgent.documentAgent[0]?.type
+                                            ? selectedAgent.documentAgent[0].type
+                                            : "Non spécifié"}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
-                                        Numéro de pièce
+                                        Numéro de document
                                     </label>
                                     <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
-                                        {selectedAgent.numeroPiece || "Non spécifié"}
+                                        {selectedAgent.documentNumber || "Non spécifié"}
                                     </p>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
+                                        Document
+                                    </label>
+                                    {selectedAgent.documentAgent && selectedAgent.documentAgent[0]?.fichierUrl ? (
+                                        <>
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                URL de l'image: {selectedAgent.documentAgent[0].fichierUrl}
+                                            </p>
+                                            <img
+                                                src={selectedAgent.documentAgent[0].fichierUrl}
+                                                alt="Document de l'agent"
+                                                className="mt-2 w-24 h-24 object-cover rounded border border-nexsaas-light-gray dark:border-gray-600"
+                                                onError={() => {
+                                                    console.error("Erreur de chargement de l'image:", selectedAgent.documentAgent[0].fichierUrl);
+                                                    setImageError(true);
+                                                }}
+                                                onLoad={() => console.log("Image chargée avec succès:", selectedAgent.documentAgent[0].fichierUrl)}
+                                            />
+                                            {imageError && (
+                                                <p className="mt-1 text-sm text-red-600">
+                                                    Impossible de charger l'image. Vérifiez l'URL ou l'accessibilité du fichier.
+                                                </p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
+                                            Aucune photo disponible
+                                        </p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
@@ -785,30 +851,6 @@ const AgentsPage: React.FC = () => {
                                     <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
                                         {selectedAgent.actif ? "Actif" : "Inactif"}
                                     </p>
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
-                                        Photo de la pièce
-                                    </label>
-                                    {selectedAgent.photoPiece ? (
-                                        <>
-                                            <img
-                                                src={BASE_API_URL + selectedAgent.photoPiece}
-                                                alt="Document de l'agent"
-                                                className="mt-2 w-32 h-32 object-cover rounded border border-nexsaas-light-gray dark:border-gray-600"
-                                                onError={() => setImageError(true)}
-                                            />
-                                            {imageError && (
-                                                <p className="mt-1 text-sm text-red-600">
-                                                    Erreur de chargement de l'image
-                                                </p>
-                                            )}
-                                        </>
-                                    ) : (
-                                        <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
-                                            Aucune photo disponible
-                                        </p>
-                                    )}
                                 </div>
                                 <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">
