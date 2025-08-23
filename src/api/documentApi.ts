@@ -1,440 +1,403 @@
-// services/documentService.ts - Version mise à jour avec retéléchargement sélectif
-import axios from 'axios';
+import axiosClient from "./axiosClient";
 
-interface DocumentUploadResponse {
-  success: boolean;
-  message: string;
-  data?: any;
+export interface DocumentUploadResponse {
+    success: boolean;
+    message: string;
+    data?: any;
 }
 
-export class DocumentService {
-  private baseUrl: string;
-  private useSimulation: boolean;
-
-  constructor(baseUrl: string = 'http://localhost:8000', useSimulation: boolean = true) {
-    this.baseUrl = baseUrl;
-    this.useSimulation = useSimulation && process.env.NODE_ENV === 'development';
-  }
-
-  private getAuthToken(): string | null {
-    return localStorage.getItem('token');
-  }
-
-  /**
-   * Upload de tous les documents requis d'un coup (compatible avec le backend)
-   * Maintenant inclut le RCCM comme document requis
-   */
-  async uploadAllDocuments(files: {
+export interface DocumentFiles {
     cniFront?: File;
     cniBack?: File;
     rccm?: File;
     dfe?: File;
-  }, expiryDates: {
+}
+
+export interface ExpiryDates {
     cniExpiry?: string;
     rccmExpiry?: string;
     dfeExpiry?: string;
-  } = {}): Promise<DocumentUploadResponse> {
-    
-    // // Mode simulation pour le développement
-    // if (this.useSimulation) {
-    //   return this.simulateUpload(files, expiryDates);
-    // }
-
-    // Mode production
-    try {
-      const token = this.getAuthToken();
-      
-      if (!token) {
-        throw new Error('Token d\'authentification manquant');
-      }
-
-      const formData = new FormData();
-
-      // Validation: tous les documents sont requis
-      if (!files.cniFront || !files.cniBack || !files.rccm || !files.dfe) {
-        throw new Error('Tous les documents (CNI recto/verso, RCCM, DFE) sont requis');
-      }
-
-      // Ajout des fichiers
-      formData.append('cniFront', files.cniFront);
-      formData.append('cniBack', files.cniBack);
-      formData.append('rccm', files.rccm);
-      formData.append('dfe', files.dfe);
-
-      // Ajout des dates d'expiration
-      if (expiryDates.cniExpiry) formData.append('cniExpiry', expiryDates.cniExpiry);
-      if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
-      if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
-
-      const response = await axios.post(
-        `${this.baseUrl}/documents-user`,
-        formData,
-        {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
-          timeout: 30000 // 30 secondes timeout
-        }
-      );
-
-      return {
-        success: true,
-        message: response.data.message || "Documents uploadés avec succès",
-        data: response.data,
-      };
-    } catch (error: any) {
-      console.error('Erreur upload documents:', error);
-
-      let errorMessage = "Erreur d'upload";
-      
-      if (error.code === 'ERR_NETWORK') {
-        errorMessage = "Impossible de se connecter au serveur. Vérifiez votre connexion.";
-      } else if (error.response?.status === 401) {
-        errorMessage = "Session expirée. Veuillez vous reconnecter.";
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      return {
-        success: false,
-        message: error.response?.data?.message || error.message || "Erreur d'upload",
-        data: undefined,
-      };
-    }
-  }
-
-
-  /**
-   * Mise à jour sélective des documents rejetés uniquement
-   * Cette méthode permet de retélécharger seulement les documents qui ont été rejetés par l'admin
-   */
-  async updateRejectedDocuments(
-    files: Record<string, File>, 
-    expiryDates: {
-      cniExpiry?: string;
-      rccmExpiry?: string;
-      dfeExpiry?: string;
-    } = {}
-  ): Promise<DocumentUploadResponse> {
-    try {
-      const token = this.getAuthToken();
-      if (!token) {
-        throw new Error('Token d\'authentification manquant');
-      }
-
-      const formData = new FormData();
-
-      // Ajouter seulement les fichiers fournis (documents rejetés)
-      Object.entries(files).forEach(([id, file]) => {
-        // Mapping des IDs frontend vers les noms attendus par le backend
-        const backendFieldMap: Record<string, string> = {
-          'cniFront': 'cniFront',
-          'cniBack': 'cniBack',
-          'rccm': 'rccm',
-          'dfe': 'dfe'
-        };
-        
-        const backendFieldName = backendFieldMap[id] || id;
-        formData.append(backendFieldName, file);
-        
-        console.log(`Ajout du fichier rejeté: ${backendFieldName} (${file.name})`);
-      });
-
-      // Ajouter les dates d'expiration si fournies
-      if (expiryDates.cniExpiry) formData.append('cniExpiry', expiryDates.cniExpiry);
-      if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
-      if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
-
-      // Ajouter un flag pour indiquer que c'est un retéléchargement sélectif
-      formData.append('selective_update', 'true');
-
-      console.log('Retéléchargement sélectif des documents rejetés vers:', `${this.baseUrl}/documents-user/rejected`);
-
-      const response = await axios.put(
-        `${this.baseUrl}/documents-user/rejected`,
-        formData,
-        {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          }
-        }
-      );
-
-      return {
-        success: true,
-        message: response.data.message || "Documents rejetés mis à jour avec succès",
-        data: response.data,
-      };
-    } catch (error: any) {
-      console.error('Erreur mise à jour documents rejetés:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || error.message || "Erreur de mise à jour des documents rejetés",
-        data: undefined,
-      };
-    }
-  }
-
-  /**
-   * Récupération des documents de l'utilisateur avec information sur les rejets
-   */
-  async getUserDocuments(): Promise<any> {
-    try {
-      const token = this.getAuthToken();
-      
-      if (!token) {
-        throw new Error('Token d\'authentification manquant');
-      }
-
-      const response = await axios.get(`${this.baseUrl}/documents-user`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        }
-      });
-
-      return {
-        success: true,
-        data: response.data
-      };
-    } catch (error: any) {
-      console.error('Erreur récupération documents:', error);
-      throw new Error(error.response?.data?.message || error.message || 'Erreur lors de la récupération des documents');
-    }
-  }
-
-  /**
-   * Récupération des documents rejetés seulement
-   */
-  async getRejectedDocuments(): Promise<any> {
-    try {
-      const token = this.getAuthToken();
-      
-      if (!token) {
-        throw new Error('Token d\'authentification manquant');
-      }
-
-      const response = await axios.get(`${this.baseUrl}/documents-user/rejected`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        }
-      });
-
-      return {
-        success: true,
-        data: response.data
-      };
-    } catch (error: any) {
-      console.error('Erreur récupération documents rejetés:', error);
-      throw new Error(error.response?.data?.message || error.message || 'Erreur lors de la récupération des documents rejetés');
-    }
-  }
-
-  /**
-   * Création d'un PDF vide pour le RCCM temporaire
-   */
-  createEmptyRccmPDF(): File {
-    const pdfContent = `%PDF-1.4
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 4 0 R /Contents 5 0 R >>
-endobj
-4 0 obj
-<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>
-endobj
-5 0 obj
-<< /Length 88 >>
-stream
-BT
-/F1 12 Tf
-72 720 Td
-(RCCM - Document temporaire) Tj
-0 -20 Td
-(A remplacer par le document officiel) Tj
-ET
-endstream
-endobj
-xref
-0 6
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000246 00000 n 
-0000000365 00000 n 
-trailer
-<< /Size 6 /Root 1 0 R >>
-startxref
-503
-%%EOF`;
-
-    const blob = new Blob([pdfContent], { type: 'application/pdf' });
-    return new File([blob], 'rccm-temporaire.pdf', { 
-      type: 'application/pdf',
-      lastModified: Date.now()
-    });
-  }
-
-  /**
-   * Validation d'un fichier avant upload
-   */
-  validateFile(file: File, maxSize: number = 10, acceptedTypes: string[] = []): {
-    isValid: boolean;
-    error?: string;
-  } {
-    // Vérification de la taille
-    if (file.size > maxSize * 1024 * 1024) {
-      return {
-        isValid: false,
-        error: `Le fichier est trop volumineux. Taille maximum : ${maxSize} MB`
-      };
-    }
-
-    // Vérification du type MIME
-    if (acceptedTypes.length > 0) {
-      const fileType = file.type.toLowerCase();
-      const fileName = file.name.toLowerCase();
-      
-      const isValidType = acceptedTypes.some(type => {
-        if (type.startsWith('.')) {
-          return fileName.endsWith(type);
-        }
-        return fileType.includes(type);
-      });
-
-      if (!isValidType) {
-        return {
-          isValid: false,
-          error: `Type de fichier non supporté. Types acceptés : ${acceptedTypes.join(', ')}`
-        };
-      }
-    }
-
-    // Vérification du nom de fichier
-    if (file.name.length > 255) {
-      return {
-        isValid: false,
-        error: 'Le nom du fichier est trop long (255 caractères maximum)'
-      };
-    }
-
-    return { isValid: true };
-  }
-
-  /**
-   * Vérifier si tous les documents requis sont présents (RCCM inclus)
-   */
-  validateAllRequiredDocuments(files: {
-    cniFront?: File;
-    cniBack?: File;
-    rccm?: File;
-    dfe?: File;
-  }): { isValid: boolean; missingDocuments: string[] } {
-    const missing: string[] = [];
-    
-    if (!files.cniFront) missing.push('CNI Recto');
-    if (!files.cniBack) missing.push('CNI Verso');
-    if (!files.rccm) missing.push('RCCM'); // Maintenant requis
-    if (!files.dfe) missing.push('DFE');
-    
-    return {
-      isValid: missing.length === 0,
-      missingDocuments: missing
-    };
-  }
-
-  /**
-   * NOUVELLE MÉTHODE: Validation spécifique pour les documents rejetés
-   */
-  validateRejectedDocuments(
-    files: Record<string, File>, 
-    rejectedDocIds: string[]
-  ): { isValid: boolean; missingDocuments: string[]; extraDocuments: string[] } {
-    const missing: string[] = [];
-    const extra: string[] = [];
-    
-    // Vérifier que tous les documents rejetés sont fournis
-    rejectedDocIds.forEach(docId => {
-      if (!files[docId]) {
-        const docNames: Record<string, string> = {
-          'cniFront': 'CNI Recto',
-          'cniBack': 'CNI Verso',
-          'rccm': 'RCCM',
-          'dfe': 'DFE'
-        };
-        missing.push(docNames[docId] || docId);
-      }
-    });
-
-    // Vérifier qu'on n'envoie pas de documents non rejetés
-    Object.keys(files).forEach(fileId => {
-      if (!rejectedDocIds.includes(fileId)) {
-        const docNames: Record<string, string> = {
-          'cniFront': 'CNI Recto',
-          'cniBack': 'CNI Verso',
-          'rccm': 'RCCM',
-          'dfe': 'DFE'
-        };
-        extra.push(docNames[fileId] || fileId);
-      }
-    });
-    
-    return {
-      isValid: missing.length === 0 && extra.length === 0,
-      missingDocuments: missing,
-      extraDocuments: extra
-    };
-  }
-
-  /**
-   * Génération d'une URL de prévisualisation pour un fichier
-   */
-  generatePreviewUrl(file: File): string | null {
-    const fileType = file.type.toLowerCase();
-    
-    // Pour les images, créer un blob URL
-    if (fileType.startsWith('image/')) {
-      return URL.createObjectURL(file);
-    }
-    
-    // Pour les PDF, on peut aussi créer un blob URL
-    if (fileType === 'application/pdf') {
-      return URL.createObjectURL(file);
-    }
-    
-    return null;
-  }
-
-  /**
-   * Nettoyage des URLs de prévisualisation
-   */
-  revokePreviewUrl(url: string): void {
-    if (url.startsWith('blob:')) {
-      URL.revokeObjectURL(url);
-    }
-  }
-
-  /**
-   * Mettre à jour le token d'authentification
-   */
-  setAuthToken(token: string): void {
-    localStorage.setItem('token', token);
-  }
-
-  /**
-   * Supprimer le token d'authentification
-   */
-  clearAuthToken(): void {
-    localStorage.removeItem('token');
-  }
 }
 
-// Instance singleton du service
-export const documentService = new DocumentService();
+// Nouvelle interface pour associer IDs et fichiers
+export interface DocumentUpdate {
+    id: string;
+    type: "CNI" | "RCCM" | "DFE";
+    file?: File; // Fichier optionnel pour RCCM
+    fileBack?: File; // Pour CNI verso
+}
+
+export interface UploadDocumentsResponseData {
+    id: number;
+    type: "CNI" | "RCCM" | "DFE";
+    statut: "en_attente" | string;
+    fichierRectoUrl: string;
+    fichierVersoUrl: string;
+    commentaire: string | null;
+    creeLe: string;
+    majLe: string;
+}
+
+export enum StatutDocument {
+    EN_ATTENTE = "en_attente",
+    VALIDE = "valide",
+    REFUSE = "refusé",
+    NONFOURNI = "non_fourni",
+}
+
+// 📥 Téléverser tous les documents requis
+export const uploadAllDocuments = async (
+    files: DocumentFiles,
+    expiryDates: ExpiryDates = {},
+): Promise<
+    DocumentUploadResponse & { data?: UploadDocumentsResponseData[] }
+> => {
+    const token = localStorage.getItem("token");
+
+    try {
+        if (!token) {
+            throw new Error("Token d'authentification manquant");
+        }
+
+        // Validation : seuls cniFront, cniBack et dfe sont requis
+        if (!files.cniFront || !files.cniBack || !files.dfe) {
+            throw new Error("Les documents CNI recto/verso et DFE sont requis");
+        }
+
+        const formData = new FormData();
+        if (files.cniFront) formData.append("cniFront", files.cniFront);
+        if (files.cniBack) formData.append("cniBack", files.cniBack);
+        if (files.rccm) formData.append("rccm", files.rccm); // Ajouter seulement si présent
+        if (files.dfe) formData.append("dfe", files.dfe);
+
+        if (expiryDates.cniExpiry)
+            formData.append("cniExpiry", expiryDates.cniExpiry);
+        if (expiryDates.rccmExpiry)
+            formData.append("rccmExpiry", expiryDates.rccmExpiry);
+        if (expiryDates.dfeExpiry)
+            formData.append("dfeExpiry", expiryDates.dfeExpiry);
+
+        const response = await axiosClient.post("/documents-user", formData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "multipart/form-data",
+            },
+            timeout: 30000, // 30 secondes timeout
+        });
+
+        return {
+            success: true,
+            message: response.data.message || "Documents uploadés avec succès",
+            data: response.data.data || [], // Retourne un tableau vide si data est undefined
+        };
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            err.message ||
+            "Erreur lors de l'upload des documents";
+        throw new Error(errorMessage);
+    }
+};
+
+// 📥 Mettre à jour les documents rejetés
+export const updateRejectedDocuments = async (
+    documents: DocumentUpdate[],
+    expiryDates: ExpiryDates = {},
+): Promise<
+    DocumentUploadResponse & { data?: UploadDocumentsResponseData[] }
+> => {
+    const token = localStorage.getItem("token");
+
+    try {
+        if (!token) {
+            throw new Error("Token d'authentification manquant");
+        }
+
+        // Vérifier si au moins un document est fourni
+        if (!documents.length) {
+            throw new Error(
+                "Au moins un document doit être fourni pour la mise à jour",
+            );
+        }
+
+        // Récupérer les documents existants pour vérifier les statuts
+        const { data: existingDocs } = await getUserDocuments();
+        const validStatuses = [StatutDocument.REFUSE, StatutDocument.NONFOURNI];
+
+        // Valider que chaque document fourni a un ID valide et un statut modifiable
+        const invalidDocs: string[] = [];
+        documents.forEach((doc) => {
+            const existingDoc = existingDocs.find(
+                (d: UploadDocumentsResponseData) => d.id.toString() === doc.id,
+            );
+            if (!existingDoc) {
+                invalidDocs.push(`Document avec ID ${doc.id} non trouvé`);
+            } else if (!validStatuses.includes(existingDoc.statut)) {
+                invalidDocs.push(
+                    `Document avec ID ${doc.id} n'est pas modifiable (statut: ${existingDoc.statut})`,
+                );
+            } else if (doc.type === "CNI" && (!doc.file || !doc.fileBack)) {
+                invalidDocs.push(
+                    `CNI avec ID ${doc.id} nécessite recto et verso`,
+                );
+            } else if (doc.type === "DFE" && !doc.file) {
+                invalidDocs.push(`DFE avec ID ${doc.id} nécessite un fichier`);
+            }
+        });
+
+        if (invalidDocs.length > 0) {
+            throw new Error(`Erreurs de validation: ${invalidDocs.join(", ")}`);
+        }
+
+        const formData = new FormData();
+        documents.forEach((doc, index) => {
+            if (doc.file) {
+                formData.append(`documents[${index}][id]`, doc.id);
+                formData.append(`documents[${index}][type]`, doc.type);
+                formData.append(`documents[${index}][file]`, doc.file);
+                if (doc.fileBack) {
+                    formData.append(
+                        `documents[${index}][fileBack]`,
+                        doc.fileBack,
+                    );
+                }
+            }
+        });
+
+        // Ajouter les dates d'expiration si fournies
+        if (expiryDates.cniExpiry)
+            formData.append("cniExpiry", expiryDates.cniExpiry);
+        if (expiryDates.rccmExpiry)
+            formData.append("rccmExpiry", expiryDates.rccmExpiry);
+        if (expiryDates.dfeExpiry)
+            formData.append("dfeExpiry", expiryDates.dfeExpiry);
+
+        const response = await axiosClient.put("/documents-user", formData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "multipart/form-data",
+            },
+        });
+
+        return {
+            success: true,
+            message:
+                response.data.message || "Documents mis à jour avec succès",
+            data: response.data.data || [],
+        };
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            err.message ||
+            "Erreur lors de la mise à jour des documents";
+        throw new Error(errorMessage);
+    }
+};
+
+// 📥 Récupérer les documents de l'utilisateur
+export const getUserDocuments = async (): Promise<any> => {
+    const token = localStorage.getItem("token");
+
+    try {
+        if (!token) {
+            throw new Error("Token d'authentification manquant");
+        }
+
+        const response = await axiosClient.get("/documents-user", {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+
+        return {
+            success: true,
+            data: response.data.data,
+        };
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            err.message ||
+            "Erreur lors de la récupération des documents";
+        throw new Error(errorMessage);
+    }
+};
+
+// 📥 Récupérer les documents rejetés
+export const getRejectedDocuments = async (): Promise<any> => {
+    const token = localStorage.getItem("token");
+
+    try {
+        if (!token) {
+            throw new Error("Token d'authentification manquant");
+        }
+
+        const response = await axiosClient.get("/documents-user/rejected", {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        });
+
+        return {
+            success: true,
+            data: response.data,
+        };
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            err.message ||
+            "Erreur lors de la récupération des documents rejetés";
+        throw new Error(errorMessage);
+    }
+};
+
+// 📥 Valider un fichier avant upload
+export const validateFile = (
+    file: File,
+    maxSize: number = 10,
+    acceptedTypes: string[] = [],
+): Promise<{ isValid: boolean; error?: string }> => {
+    if (file.size > maxSize * 1024 * 1024) {
+        return Promise.resolve({
+            isValid: false,
+            error: `Le fichier est trop volumineux. Taille maximum : ${maxSize} MB`,
+        });
+    }
+
+    if (acceptedTypes.length > 0) {
+        const fileType = file.type.toLowerCase();
+        const fileName = file.name.toLowerCase();
+
+        const isValidType = acceptedTypes.some((type) => {
+            if (type.startsWith(".")) {
+                return fileName.endsWith(type);
+            }
+            return fileType.includes(type);
+        });
+
+        if (!isValidType) {
+            return Promise.resolve({
+                isValid: false,
+                error: `Type de fichier non supporté. Types acceptés : ${acceptedTypes.join(
+                    ", ",
+                )}`,
+            });
+        }
+    }
+
+    if (file.name.length > 255) {
+        return Promise.resolve({
+            isValid: false,
+            error: "Le nom du fichier est trop long (255 caractères maximum)",
+        });
+    }
+
+    // Validation des dimensions pour les images
+    if (file.type.startsWith("image/")) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.src = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(img.src);
+                if (img.width < 300 || img.height < 200) {
+                    resolve({
+                        isValid: false,
+                        error: "L'image doit avoir une résolution minimale de 300x200 pixels",
+                    });
+                } else {
+                    resolve({ isValid: true });
+                }
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(img.src);
+                resolve({
+                    isValid: false,
+                    error: "Impossible de charger l'image pour validation",
+                });
+            };
+        });
+    }
+
+    return Promise.resolve({ isValid: true });
+};
+
+// 📥 Vérifier si tous les documents requis sont présents
+export const validateAllRequiredDocuments = (
+    files: DocumentFiles,
+): { isValid: boolean; missingDocuments: string[] } => {
+    const missing: string[] = [];
+
+    if (!files.cniFront) missing.push("CNI Recto");
+    if (!files.cniBack) missing.push("CNI Verso");
+    if (!files.dfe) missing.push("DFE");
+
+    return {
+        isValid: missing.length === 0,
+        missingDocuments: missing,
+    };
+};
+
+// 📥 Valider les documents rejetés
+export const validateRejectedDocuments = (
+    files: Record<string, File>,
+    rejectedDocIds: string[],
+): {
+    isValid: boolean;
+    missingDocuments: string[];
+    extraDocuments: string[];
+} => {
+    const missing: string[] = [];
+    const extra: string[] = [];
+
+    const docNames: Record<string, string> = {
+        cniFront: "CNI Recto",
+        cniBack: "CNI Verso",
+        rccm: "RCCM",
+        dfe: "DFE",
+    };
+
+    rejectedDocIds.forEach((docId) => {
+        if (!files[docId]) {
+            missing.push(docNames[docId] || docId);
+        }
+    });
+
+    Object.keys(files).forEach((fileId) => {
+        if (!rejectedDocIds.includes(fileId)) {
+            extra.push(docNames[fileId] || fileId);
+        }
+    });
+
+    return {
+        isValid: missing.length === 0 && extra.length === 0,
+        missingDocuments: missing,
+        extraDocuments: extra,
+    };
+};
+
+// 📥 Générer une URL de prévisualisation pour un fichier
+export const generatePreviewUrl = (file: File): string | null => {
+    const fileType = file.type.toLowerCase();
+
+    if (fileType.startsWith("image/") || fileType === "application/pdf") {
+        return URL.createObjectURL(file);
+    }
+
+    return null;
+};
+
+// 📥 Nettoyer les URLs de prévisualisation
+export const revokePreviewUrl = (url: string): void => {
+    if (url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
+    }
+};
+
+// 📥 Mettre à jour le token d'authentification
+export const setAuthToken = (token: string): void => {
+    localStorage.setItem("token", token);
+};
+
+// 📥 Supprimer le token d'authentification
+export const clearAuthToken = (): void => {
+    localStorage.removeItem("token");
+};
