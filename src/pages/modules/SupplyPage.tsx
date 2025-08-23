@@ -197,7 +197,7 @@ const SupplyPage: React.FC = () => {
     const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
 
     // Available currencies
-    const availableCurrencies: Devise[] = ["EUR", "USD", "GBP", "JPY"];
+    const availableCurrencies: Devise[] = ["EUR", "USD", "GBP", "JPY", "XOF"];
 
     const getLocalToday = () => {
         const today = new Date();

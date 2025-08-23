@@ -28,6 +28,7 @@ const LoginPage: React.FC = () => {
       navigate('/dashboard');
     } catch (err) {
       setError('Email ou mot de passe incorrect');
+      console.error('Login error:', err);
     }
   };
 

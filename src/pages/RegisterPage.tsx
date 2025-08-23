@@ -22,7 +22,7 @@ const RegisterPage: React.FC = () => {
         nif: "",
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
-    const { register, loading, user } = useAuth(); // Removed 'error' since AuthContext doesn't provide it
+    const { register, loading } = useAuth(); // Removed 'error' since AuthContext doesn't provide it
 
     const validateForm = () => {
         const newErrors: Record<string, string> = {};

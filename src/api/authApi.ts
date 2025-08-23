@@ -6,7 +6,7 @@ export interface RegisterClientDto {
     email: string;
     password: string;
     description: string;
-    type: "particulier" | "entreprise";
+    type: string | "particulier" | "entreprise";
     companyName?: string;
     nif?: string;
 }
