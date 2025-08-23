@@ -2,7 +2,12 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { User } from "../hooks/useProfile";
 import { useToast } from "./ToastContext";
 import { useActivity } from "./ActivityContext";
-import { RegisterClientDto, LoginClientDto, registerClient, loginClient, AuthResponse } from "../api/authApi";
+import {
+    RegisterClientDto,
+    LoginClientDto,
+    registerClient,
+    loginClient,
+} from "../api/authApi"; // Import the API functions and types
 import { getProfile } from "../api/profileApi";
 
 interface AuthContextType {

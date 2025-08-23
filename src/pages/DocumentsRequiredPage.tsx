@@ -1,85 +1,437 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { 
-  FileText, 
-  Upload, 
-  AlertTriangle, 
+// src/pages/DocumentsRequiredPage.tsx
+import React, { useRef, useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  FileText,
+  Upload,
+  AlertTriangle,
   CheckCircle,
   ArrowLeft,
-  Camera,
-  Shield
+  Shield,
+  Loader,
+  X,
+  Eye,
 } from 'lucide-react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { documentService } from '../api/documentApi';
+
+type DocumentStatus = 'missing' | 'uploading' | 'uploaded' | 'validated' | 'rejected' | 'not_required';
+
+interface DocumentItem {
+  id: string;
+  name: string;
+  description: string;
+  status: DocumentStatus;
+  icon: React.ComponentType<any>;
+  isRequired?: boolean;
+  file?: File;
+  uploadedAt?: Date;
+  previewUrl?: string;
+  isRejected?: boolean;
+}
+
+interface UploadProgress {
+  [key: string]: {
+    progress: number;
+    isUploading: boolean;
+    error?: string;
+  };
+}
 
 const DocumentsRequiredPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
 
-  const requiredDocuments = [
+  // Documents par défaut
+  const [documents, setDocuments] = useState<DocumentItem[]>([
     {
-      id: 'identity',
-      name: 'Pièce d\'identité',
-      description: 'Carte d\'identité, passeport ou permis de conduire',
+      id: 'cniFront',
+      name: 'CNI Recto',
+      description: 'Recto de la carte nationale d\'identité',
       status: 'missing',
       icon: FileText,
+      isRequired: true,
     },
     {
-      id: 'proof_address',
-      name: 'Justificatif de domicile',
-      description: 'Facture d\'électricité, gaz ou téléphone (moins de 3 mois)',
+      id: 'cniBack',
+      name: 'CNI Verso',
+      description: 'Verso de la carte nationale d\'identité',
       status: 'missing',
       icon: FileText,
+      isRequired: true,
     },
     {
-      id: 'business_registration',
-      name: 'Registre de commerce',
+      id: 'rccm',
+      name: 'Registre de commerce (RCCM)',
       description: 'Document d\'enregistrement de votre entreprise',
-      status: user?.type === 'entreprise' ? 'missing' : 'not_required',
+      status: 'missing',
       icon: Shield,
+      isRequired: true,
     },
-  ];
+    {
+      id: 'dfe',
+      name: 'DFE',
+      description: 'Document fiscal d\'entreprise',
+      status: 'missing',
+      icon: FileText,
+      isRequired: true,
+    },
+  ]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'uploaded': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
-      case 'missing': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
-      case 'pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
-      case 'not_required': return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFirstUpload, setIsFirstUpload] = useState(true);
+
+  // États locaux pour les dates d'expiration
+  const [expiryDates, setExpiryDates] = useState({
+    cniExpiry: '',
+    rccmExpiry: '',
+    dfeExpiry: ''
+  });
+
+  // Stockage temporaire des fichiers
+  const [tempFiles, setTempFiles] = useState<{ [key: string]: File }>({});
+
+  // Références pour les inputs fichiers
+  const fileInputs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+
+  // Fonction pour générer un PDF vide pour le RCCM
+  const generateEmptyRccmPDF = (): File => {
+    const pdfContent = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 4 0 R /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>
+endobj
+5 0 obj
+<< /Length 88 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(RCCM - Document temporaire) Tj
+0 -20 Td
+(A remplacer par le document officiel) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000246 00000 n 
+0000000365 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+503
+%%EOF`;
+
+    const blob = new Blob([pdfContent], { type: 'application/pdf' });
+    return new File([blob], 'rccm-temporaire.pdf', { 
+      type: 'application/pdf',
+      lastModified: Date.now()
+    });
+  };
+
+  // Upload de fichier (stockage temporaire)
+  const handleUpload = (id: string) => {
+    const input = fileInputs.current[id];
+    if (!input) return;
+    
+    input.accept = '.pdf,.jpg,.jpeg,.png';
+    input.removeAttribute('capture');
+    input.click();
+  };
+
+  const handleFileChange = async (id: string, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validation basique
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      showToast({
+        type: 'error',
+        title: 'Fichier trop volumineux',
+        message: 'Le fichier ne doit pas dépasser 10 MB'
+      });
+      return;
+    }
+
+    // Simulation d'upload avec progression
+    setUploadProgress(prev => ({
+      ...prev,
+      [id]: { progress: 0, isUploading: true }
+    }));
+
+    // Mise à jour du document
+    setDocuments(prev => prev.map(doc => 
+      doc.id === id ? { 
+        ...doc, 
+        status: 'uploading',
+        file
+      } : doc
+    ));
+
+    // Simulation de progression
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setUploadProgress(prev => ({
+        ...prev,
+        [id]: { progress, isUploading: true }
+      }));
+
+      if (progress >= 100) {
+        clearInterval(interval);
+        
+        // Stockage du fichier temporairement
+        setTempFiles(prev => ({
+          ...prev,
+          [id]: file
+        }));
+
+        // Génération URL de prévisualisation
+        const previewUrl = URL.createObjectURL(file);
+
+        // Mise à jour du document
+        setDocuments(prev => prev.map(doc => 
+          doc.id === id ? { 
+            ...doc, 
+            status: 'uploaded',
+            previewUrl
+          } : doc
+        ));
+
+        showToast({
+          type: 'success',
+          title: 'Fichier prêt',
+          message: 'Fichier ajouté avec succès. Cliquez sur "Valider" pour envoyer tous les documents.'
+        });
+
+        // Nettoyage du progress
+        setTimeout(() => {
+          setUploadProgress(prev => {
+            const newProgress = { ...prev };
+            delete newProgress[id];
+            return newProgress;
+          });
+        }, 2000);
+      }
+    }, 100);
+
+    // Reset input
+    event.target.value = '';
+  };
+
+  // Supprimer un fichier
+  const removeDocument = (id: string) => {
+    // Supprimer du stockage temporaire
+    setTempFiles(prev => {
+      const newFiles = { ...prev };
+      delete newFiles[id];
+      return newFiles;
+    });
+
+    // Remettre le document à l'état "missing"
+    setDocuments(prev => prev.map(doc =>
+      doc.id === id 
+        ? { 
+            ...doc, 
+            status: 'missing',
+            file: undefined,
+            previewUrl: undefined
+          }
+        : doc
+    ));
+
+    showToast({
+      type: 'info',
+      title: 'Document supprimé',
+      message: 'Le document a été retiré de la liste d\'envoi'
+    });
+  };
+
+  // Soumission finale de tous les documents
+  const handleSubmit = async () => {
+    // Préparer les fichiers pour l'envoi
+    const filesToSend = {
+      cniFront: tempFiles.cniFront,
+      cniBack: tempFiles.cniBack,
+      rccm: tempFiles.rccm,
+      dfe: tempFiles.dfe,
+    };
+    
+    // Si c'est le premier upload et RCCM manquant, générer un PDF vide
+    if (isFirstUpload && !filesToSend.rccm) {
+      filesToSend.rccm = generateEmptyRccmPDF();
+      showToast({
+        type: 'info',
+        title: 'RCCM temporaire',
+        message: 'Un document RCCM temporaire a été généré pour compléter votre dossier'
+      });
+    }
+    
+    // Vérification des documents requis
+    const requiredFiles = ['cniFront', 'cniBack', 'dfe', 'rccm'];
+    const missingFiles = requiredFiles.filter(id => !filesToSend[id as keyof typeof filesToSend]);
+    
+    if (missingFiles.length > 0) {
+      showToast({
+        type: 'error',
+        title: 'Documents manquants',
+        message: `Documents requis manquants: ${missingFiles.join(', ')}`
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await documentService.uploadAllDocuments(filesToSend, expiryDates);
+
+      if (response.success) {
+        showToast({
+          type: 'success',
+          title: 'Documents envoyés',
+          message: response.message || 'Vos documents ont été envoyés pour validation'
+        });
+        
+        // Marquer que ce n'est plus le premier upload
+        setIsFirstUpload(false);
+        
+        navigate('/compte-en-attente');
+      } else {
+        throw new Error(response.message);
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi:', error);
+      showToast({
+        type: 'error',
+        title: 'Erreur d\'envoi',
+        message: error instanceof Error ? error.message : 'Erreur lors de l\'envoi des documents'
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  // Utilitaires UI
+  const getStatusColor = (status: DocumentStatus, hasFile: boolean) => {
+    if (hasFile) {
+      return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
+    }
+    
     switch (status) {
-      case 'uploaded': return <CheckCircle className="w-4 h-4" />;
-      case 'missing': return <AlertTriangle className="w-4 h-4" />;
-      case 'pending': return <Upload className="w-4 h-4" />;
-      default: return <FileText className="w-4 h-4" />;
+      case 'uploaded': 
+      case 'validated': 
+        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
+      case 'missing': 
+        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+      case 'uploading': 
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
+      case 'rejected': 
+        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+      default: 
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
     }
   };
 
-  const getStatusText = (status: string) => {
+  const getStatusIcon = (status: DocumentStatus, id: string, hasFile: boolean) => {
+    const progress = uploadProgress[id];
+    
+    if (progress?.isUploading) {
+      return <Loader className="w-4 h-4 animate-spin" />;
+    }
+
+    if (hasFile) {
+      return <CheckCircle className="w-4 h-4" />;
+    }
+
+    switch (status) {
+      case 'uploaded':
+      case 'validated':
+        return <CheckCircle className="w-4 h-4" />;
+      case 'missing':
+      case 'rejected':
+        return <AlertTriangle className="w-4 h-4" />;
+      case 'uploading':
+        return <Upload className="w-4 h-4" />;
+      default:
+        return <FileText className="w-4 h-4" />;
+    }
+  };
+
+  const getStatusText = (status: DocumentStatus, id: string, hasFile: boolean) => {
+    const progress = uploadProgress[id];
+    
+    if (progress?.isUploading) {
+      return `Upload... ${progress.progress}%`;
+    }
+
+    if (hasFile) {
+      return 'Prêt à envoyer';
+    }
+
     switch (status) {
       case 'uploaded': return 'Téléchargé';
+      case 'validated': return 'Validé';
       case 'missing': return 'Manquant';
-      case 'pending': return 'En attente';
-      case 'not_required': return 'Non requis';
+      case 'uploading': return 'Envoi...';
+      case 'rejected': return 'Rejeté';
       default: return 'Inconnu';
     }
   };
+
+  // Filtrage des documents requis
+  const requiredDocs = documents.filter(doc => doc.isRequired);
+  
+  // Compter les documents téléchargés (RCCM est toujours considéré comme prêt)
+  const uploadedCount = documents.filter(doc => {
+    if (doc.id === 'rccm') {
+      // Le RCCM est toujours considéré comme prêt (soit téléchargé, soit généré automatiquement)
+      return true;
+    }
+    return doc.isRequired && tempFiles[doc.id];
+  }).length;
+
+  const hasRequiredFiles = uploadedCount === requiredDocs.length;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
+          <div className="flex justify-center items-center h-64">
+            <Loader className="w-8 h-8 animate-spin text-nexsaas-deep-blue" />
+            <span className="ml-3 text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+              Chargement...
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-8"
-        >
+        <div className="text-center mb-8">
           <div className="p-4 bg-red-500/10 rounded-full inline-block mb-6">
             <AlertTriangle className="w-16 h-16 text-red-500" />
           </div>
@@ -87,149 +439,183 @@ const DocumentsRequiredPage: React.FC = () => {
             Documents Requis
           </h1>
           <p className="text-lg text-nexsaas-vanta-black dark:text-gray-300 max-w-2xl mx-auto">
-            Pour accéder à toutes les fonctionnalités de NexSaaS, veuillez télécharger les documents suivants
+            Pour accéder à toutes les fonctionnalités, veuillez télécharger tous les documents requis.
+            Ils seront envoyés ensemble pour validation.
           </p>
-        </motion.div>
+        </div>
 
-        {/* Alert Banner */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="mb-8"
-        >
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <div className="flex items-center">
-              <AlertTriangle className="w-5 h-5 text-red-500 mr-3" />
+        {/* Progression */}
+        <div className="mb-8">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-medium text-red-800 dark:text-red-400">
-                  Accès limité
+                <h3 className="text-sm font-medium text-blue-800 dark:text-blue-400">
+                  Progression
                 </h3>
-                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-                  Certaines fonctionnalités sont restreintes jusqu'à la validation de vos documents.
+                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                  {uploadedCount} / {requiredDocs.length} documents prêts
                 </p>
               </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-blue-600">
+                  {Math.round((uploadedCount / requiredDocs.length) * 100)}%
+                </div>
+              </div>
             </div>
+            <div className="mt-3 w-full bg-blue-200 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
+                style={{ width: `${(uploadedCount / requiredDocs.length) * 100}%` }}
+              />
+            </div>
+            {hasRequiredFiles && (
+              <div className="mt-2 text-sm text-green-700 dark:text-green-400">
+                ✓ Tous les documents sont prêts pour l'envoi
+              </div>
+            )}
           </div>
-        </motion.div>
+        </div>
 
         {/* Documents List */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="space-y-6 mb-8"
-        >
-          {requiredDocuments.map((document, index) => (
-            <motion.div
-              key={document.id}
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.5 + index * 0.1 }}
-            >
-              <Card className="hover:shadow-md transition-shadow">
+        <div className="space-y-6 mb-8">
+          {documents
+            .filter(doc => doc.isRequired)
+            .map((document) => {
+            const progress = uploadProgress[document.id];
+            const hasFile = !!tempFiles[document.id];
+            const DocumentIcon = document.icon;
+            const isEditable = document.isRejected || document.status === 'missing';
+            
+            return (
+              <Card key={document.id} className="hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
                     <div className="p-3 bg-nexsaas-deep-blue/10 rounded-lg">
-                      <document.icon className="w-6 h-6 text-nexsaas-deep-blue" />
+                      <DocumentIcon className="w-6 h-6 text-nexsaas-deep-blue" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                         {document.name}
                       </h3>
                       <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                         {document.description}
                       </p>
+                      {document.id === 'rccm' && !hasFile && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          Document temporaire généré pour le RCCM.
+                          Aucun téléchargement requis pour le moment.
+                        </p>
+                      )}
                       <div className="flex items-center mt-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(document.status)}`}>
-                          {getStatusIcon(document.status)}
-                          <span className="ml-1">{getStatusText(document.status)}</span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(document.status, hasFile)}`}>
+                          {getStatusIcon(document.status, document.id, hasFile)}
+                          <span className="ml-1">{getStatusText(document.status, document.id, hasFile)}</span>
                         </span>
                       </div>
+                      {/* Barre de progression */}
+                      {progress?.isUploading && (
+                        <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                            style={{ width: `${progress.progress}%` }}
+                          />
+                        </div>
+                      )}
+                      {/* Nom du fichier sélectionné */}
+                      {hasFile && tempFiles[document.id] && (
+                        <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                          📎 {tempFiles[document.id].name} ({(tempFiles[document.id].size / (1024 * 1024)).toFixed(2)} MB)
+                        </div>
+                      )}
                     </div>
                   </div>
                   
-                  {document.status === 'missing' && (
-                    <div className="flex items-center space-x-2">
-                      <Button variant="outline" size="sm">
-                        <Camera className="w-4 h-4 mr-2" />
-                        Prendre photo
+                  {/* Input caché */}
+                  <input
+                    type="file"
+                    style={{ display: 'none' }}
+                    ref={el => (fileInputs.current[document.id] = el)}
+                    onChange={e => handleFileChange(document.id, e)}
+                  />
+                  
+                  {/* Actions */}
+                  <div className="flex items-center space-x-2">
+                  {hasFile ? (
+                    <>
+                      {document.previewUrl && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(document.previewUrl, '_blank')}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeDocument(document.id)}
+                      >
+                        <X className="w-4 h-4" />
                       </Button>
-                      <Button size="sm">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Télécharger
-                      </Button>
-                    </div>
+                    </>
+                  ) : (
+                    <>
+                      {isEditable && (
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleUpload(document.id)}
+                          disabled={!isEditable}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          {document.isRejected ? 'Re-télécharger' : 'Télécharger'}
+                        </Button>
+                      )}
+                    </>
                   )}
                 </div>
+              </div>
               </Card>
-            </motion.div>
-          ))}
-        </motion.div>
-
-        {/* Upload Instructions */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.8 }}
-          className="mb-8"
-        >
-          <Card>
-            <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
-              Instructions de téléchargement
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                  Formats acceptés
-                </h3>
-                <ul className="text-sm text-nexsaas-vanta-black dark:text-gray-300 space-y-1">
-                  <li>• PDF (recommandé)</li>
-                  <li>• JPEG, JPG, PNG</li>
-                  <li>• Taille max : 10 MB</li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                  Conseils qualité
-                </h3>
-                <ul className="text-sm text-nexsaas-vanta-black dark:text-gray-300 space-y-1">
-                  <li>• Document entièrement visible</li>
-                  <li>• Bonne luminosité</li>
-                  <li>• Texte lisible</li>
-                  <li>• Pas de reflets</li>
-                </ul>
-              </div>
-            </div>
-          </Card>
-        </motion.div>
+            );
+          })}
+        </div>
 
         {/* Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 1.0 }}
-          className="flex flex-col sm:flex-row gap-4 justify-center"
-        >
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link to="/dashboard">
             <Button variant="outline" size="lg">
               <ArrowLeft className="w-5 h-5 mr-2" />
               Retour au tableau de bord
             </Button>
           </Link>
-          <Button size="lg" disabled>
-            <CheckCircle className="w-5 h-5 mr-2" />
-            Valider les documents
+          <Button 
+            size="lg" 
+            disabled={!hasRequiredFiles || isSubmitting} 
+            onClick={handleSubmit}
+          >
+            {isSubmitting ? (
+              <Loader className="w-5 h-5 mr-2 animate-spin" />
+            ) : (
+              <CheckCircle className="w-5 h-5 mr-2" />
+            )}
+            {isSubmitting ? 'Envoi en cours...' : `Valider les documents (${uploadedCount}/${requiredDocs.length})`}
           </Button>
-        </motion.div>
+        </div>
+
+        {/* Message d'aide */}
+        {!hasRequiredFiles && (
+          <div className="mt-6">
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-center">
+              <AlertTriangle className="w-5 h-5 text-yellow-600 inline mr-2" />
+              <span className="text-yellow-800 dark:text-yellow-400">
+                Veuillez sélectionner tous les documents requis avant de valider
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Help Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 1.2 }}
-          className="mt-12 text-center"
-        >
+        <div className="mt-12 text-center">
           <Card className="bg-nexsaas-light-gray dark:bg-gray-800">
             <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
               Besoin d'aide ?
@@ -241,7 +627,7 @@ const DocumentsRequiredPage: React.FC = () => {
               Contacter le support
             </Button>
           </Card>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

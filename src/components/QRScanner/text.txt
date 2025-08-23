@@ -13,7 +13,7 @@ interface QRScannerProps {
 const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  // const [manualCode, setManualCode] = useState('');
+  const [manualCode, setManualCode] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
 
   const simulateScan = () => {
     setIsScanning(true);
-    // Simuler la détection d'un code QR après 3 secondes
+    // Simulate QR code detection after 3 seconds
     setTimeout(() => {
       const mockQRCodes = ['PRD-001', 'PRD-002', 'PRD-003'];
       const randomCode = mockQRCodes[Math.floor(Math.random() * mockQRCodes.length)];
@@ -57,13 +57,13 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
     }, 3000);
   };
 
-  // const handleManualSubmit = (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   if (manualCode.trim()) {
-  //     onScan(manualCode.trim());
-  //     setManualCode('');
-  //   }
-  // };
+  const handleManualSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (manualCode.trim()) {
+      onScan(manualCode.trim());
+      setManualCode('');
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -159,6 +159,22 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Manual Input */}
+      <div className="bg-black/80 p-4">
+        <form onSubmit={handleManualSubmit} className="flex gap-2">
+          <input
+            type="text"
+            value={manualCode}
+            onChange={(e) => setManualCode(e.target.value)}
+            placeholder="Saisir le code manuellement..."
+            className="flex-1 px-4 py-2 rounded-lg bg-white/10 text-white placeholder-gray-400 border border-gray-600 focus:border-nexsaas-saas-green focus:outline-none"
+          />
+          <Button type="submit" disabled={!manualCode.trim()}>
+            Valider
+          </Button>
+        </form>
       </div>
     </motion.div>
   );
