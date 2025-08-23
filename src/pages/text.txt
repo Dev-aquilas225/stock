@@ -1,0 +1,697 @@
+// src/pages/POSPage.tsx
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
+import { Link, useNavigate } from 'react-router-dom';
+import { 
+  ShoppingCart, 
+  Scan, 
+  Trash2, 
+  ArrowLeft,
+  User,
+  CreditCard,
+  Receipt,
+  RotateCcw,
+  Eye,
+  Plus,
+  AlertTriangle,
+  Keyboard,
+  Package,
+  CheckCircle
+} from 'lucide-react';
+import Card from '../components/UI/Card';
+import Button from '../components/UI/Button';
+import QRScanner from '../components/QRScanner/QRScanner';
+import { useToast } from '../contexts/ToastContext';
+import { useActivity } from '../contexts/ActivityContext';
+// Types pour le POS
+interface ProduitPOS {
+  id: string;
+  nom: string;
+  prix: number;
+  sku: string;
+  lot: string;
+  qrCode: string;
+  fournisseur: string;
+  statut: string;
+}
+
+interface ProduitPanier extends ProduitPOS {
+  dateAjout: Date;
+}
+
+interface InfosClient {
+  nom?: string;
+  prenom?: string;
+  contact?: string;
+}
+
+type MoyenPaiement = 'WAVE' | 'ORANGE_MONEY' | 'MTN_MONEY' | 'MOOV_MONEY' | 'AUTRE';
+
+const POSPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const { logActivity } = useActivity();
+
+  // États du POS
+  const [panier, setPanier] = useState<ProduitPanier[]>([]);
+  const [showScanner, setShowScanner] = useState(false);
+  const [showSaisieManuelle, setShowSaisieManuelle] = useState(false);
+  const [showModalPaiement, setShowModalPaiement] = useState(false);
+  const [codeQRManuel, setCodeQRManuel] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // États pour le paiement
+  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement>('WAVE');
+  const [infosClient, setInfosClient] = useState<InfosClient>({});
+  const [autreMoyenPaiement, setAutreMoyenPaiement] = useState('');
+
+  // API Endpoints
+  const API_BASE = 'http://localhost:8000';
+  const getAuthToken = () => localStorage.getItem('token');
+
+  // Fonction pour scanner/récupérer un produit
+  const scannerProduit = async (qrCode: string) => {
+    setIsLoading(true);
+    try {
+      const token = getAuthToken();
+      
+      // Essayer d'abord avec le code tel quel
+      let response = await fetch(`${API_URL}/produits-stock/scan`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: qrCode,
+          commentaire: 'Scan POS'
+        })
+      });
+
+      // Si le premier essai échoue, essayer avec l'ID numérique extrait du code
+      if (!response.ok && qrCode.startsWith('PRD-')) {
+        const numericId = qrCode.replace('PRD-', '');
+        response = await fetch(`${API_BASE}/produits-stock/scan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            id: numericId,
+            commentaire: 'Scan POS avec ID numérique'
+          })
+        });
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Produit non trouvé');
+      }
+
+      const produitStock = await response.json();
+      
+      // Vérifier que le produit est disponible
+      if (produitStock.statut !== 'DISPONIBLE') {
+        throw new Error(`Ce produit n'est pas disponible (statut: ${produitStock.statut})`);
+      }
+
+      // Vérifier que le produit n'est pas déjà dans le panier
+      const dejaEnPanier = panier.find(item => item.id === produitStock.id);
+      if (dejaEnPanier) {
+        throw new Error('Ce produit est déjà dans le panier');
+      }
+
+      // Transformer en format POS
+      const produitPOS: ProduitPOS = {
+        id: produitStock.id,
+        nom: produitStock.produitFournisseur?.nom || 'Produit sans nom',
+        prix: parseFloat(produitStock.prixVente || produitStock.prix),
+        sku: produitStock.sku,
+        lot: produitStock.lot || 'N/A',
+        qrCode: produitStock.qrCode,
+        fournisseur: produitStock.produitFournisseur?.fournisseur?.nom || 'N/A',
+        statut: produitStock.statut
+      };
+
+      // Ajouter au panier
+      ajouterAuPanier(produitPOS);
+
+      logActivity({
+        type: 'scan',
+        module: 'POS',
+        description: `Produit scanné: ${produitPOS.nom}`,
+        metadata: { 
+          productId: produitPOS.id, 
+          qrCode: qrCode,
+          sku: produitPOS.sku
+        }
+      });
+
+      showToast({
+        type: 'success',
+        title: 'Produit ajouté',
+        message: `${produitPOS.nom} ajouté au panier`
+      });
+
+      return produitPOS;
+
+    } catch (error: any) {
+      console.error('Erreur scan produit:', error);
+      showToast({
+        type: 'error',
+        title: 'Erreur de scan',
+        message: error.message || 'Impossible de scanner le produit'
+      });
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Ajouter un produit au panier
+  const ajouterAuPanier = (produit: ProduitPOS) => {
+    const produitPanier: ProduitPanier = {
+      ...produit,
+      dateAjout: new Date()
+    };
+    setPanier(prev => [...prev, produitPanier]);
+  };
+
+  // Gérer le scan QR
+  const handleScan = async (qrCode: string) => {
+    setShowScanner(false);
+    await scannerProduit(qrCode);
+  };
+
+  // Gérer la saisie manuelle
+  const handleSaisieManuelle = async () => {
+    if (!codeQRManuel.trim()) {
+      showToast({
+        type: 'error',
+        title: 'Code requis',
+        message: 'Veuillez saisir un code QR ou SKU'
+      });
+      return;
+    }
+
+    await scannerProduit(codeQRManuel.trim());
+    setCodeQRManuel('');
+    setShowSaisieManuelle(false);
+  };
+
+  // Supprimer un produit du panier
+  const retirerDuPanier = (productId: string) => {
+    setPanier(prev => prev.filter(item => item.id !== productId));
+    showToast({
+      type: 'info',
+      title: 'Produit retiré',
+      message: 'Produit retiré du panier'
+    });
+  };
+
+  // Vider le panier
+  const viderPanier = () => {
+    if (panier.length === 0) return;
+    
+    setPanier([]);
+    setInfosClient({});
+    showToast({
+      type: 'info',
+      title: 'Panier vidé',
+      message: 'Le panier a été vidé'
+    });
+  };
+
+  // Calculer le total
+  const calculerTotal = () => {
+    return panier.reduce((total, item) => total + item.prix, 0);
+  };
+
+  // Finaliser la vente
+  const finaliserVente = async () => {
+    if (panier.length === 0) {
+      showToast({
+        type: 'warning',
+        title: 'Panier vide',
+        message: 'Ajoutez des produits avant de finaliser la vente'
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const token = getAuthToken();
+      
+      // Préparer les données de vente
+      const venteData = {
+        modePaiement: moyenPaiement,
+        produits: panier.map(item => ({
+          produitStockId: parseInt(item.id)
+        })),
+        nomClient: infosClient.nom?.trim() || undefined,
+        prenomClient: infosClient.prenom?.trim() || undefined,
+        contactClient: infosClient.contact?.trim() || undefined,
+        ...(moyenPaiement === 'AUTRE' && autreMoyenPaiement.trim() && {
+          autreMoyenPaiement: autreMoyenPaiement.trim()
+        })
+      };
+
+      const response = await fetch(`${API_BASE}/ventes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(venteData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erreur lors de la vente');
+      }
+
+      const vente = await response.json();
+
+      logActivity({
+        type: 'sale',
+        module: 'POS',
+        description: `Vente effectuée - Total: €${calculerTotal().toFixed(2)}`,
+        metadata: {
+          venteId: vente.data?.id,
+          produits: panier.map(p => ({ id: p.id, nom: p.nom, prix: p.prix })),
+          total: calculerTotal(),
+          moyenPaiement,
+          client: infosClient
+        }
+      });
+
+      showToast({
+        type: 'success',
+        title: 'Vente effectuée',
+        message: `Total: €${calculerTotal().toFixed(2)} - Vente enregistrée`
+      });
+
+      // Réinitialiser
+      setPanier([]);
+      setInfosClient({});
+      setMoyenPaiement('WAVE');
+      setAutreMoyenPaiement('');
+      setShowModalPaiement(false);
+
+    } catch (error: any) {
+      console.error('Erreur finalisation vente:', error);
+      showToast({
+        type: 'error',
+        title: 'Erreur de vente',
+        message: error.message || 'Impossible de finaliser la vente'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="mb-8"
+        >
+          <div className="flex items-center mb-4">
+            <Link to="/dashboard" className="mr-4">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Retour
+              </Button>
+            </Link>
+            <div className="p-3 bg-nexsaas-saas-green rounded-lg mr-4">
+              <ShoppingCart className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                Point de Vente (POS)
+              </h1>
+              <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                Scanner les produits disponibles et finaliser les ventes
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Section Scanner & Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="lg:col-span-2"
+          >
+            <Card>
+              <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
+                Scanner ou Saisir un Produit
+              </h2>
+              
+              <div className="text-center mb-8">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowScanner(true)}
+                  disabled={isLoading}
+                  className="w-32 h-32 bg-nexsaas-saas-green hover:bg-green-600 disabled:bg-gray-400 rounded-full flex items-center justify-center text-white shadow-lg mx-auto mb-4"
+                >
+                  {isLoading ? (
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+                  ) : (
+                    <Scan className="w-12 h-12" />
+                  )}
+                </motion.button>
+                <p className="text-nexsaas-vanta-black dark:text-gray-300 mb-2">
+                  Appuyez pour scanner un code QR
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSaisieManuelle(true)}
+                  disabled={isLoading}
+                >
+                  <Keyboard className="w-4 h-4 mr-2" />
+                  Saisie manuelle
+                </Button>
+              </div>
+
+              <div className="flex gap-4 justify-center">
+                <Button variant="outline" onClick={viderPanier} disabled={panier.length === 0}>
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Vider panier ({panier.length})
+                </Button>
+                <Button 
+                  onClick={() => setShowModalPaiement(true)}
+                  disabled={panier.length === 0 || isLoading}
+                  className="bg-nexsaas-saas-green hover:bg-green-600"
+                >
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Encaisser (€{calculerTotal().toFixed(2)})
+                </Button>
+              </div>
+
+              {/* Instructions d'utilisation */}
+              <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-400 mb-2">
+                  💡 Comment utiliser le POS
+                </h3>
+                <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                  <li>• Vérifiez d'abord la disponibilité du produit dans la page Stock</li>
+                  <li>• Scannez le code QR du produit ou saisissez son code manuellement</li>
+                  <li>• Chaque produit scanné est unique (pas de quantité)</li>
+                  <li>• Ajoutez les informations client (optionnel)</li>
+                  <li>• Choisissez le moyen de paiement et finalisez</li>
+                </ul>
+              </div>
+            </Card>
+          </motion.div>
+
+          {/* Panier */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+          >
+            <Card>
+              <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
+                Panier ({panier.length})
+              </h2>
+
+              {panier.length === 0 ? (
+                <div className="text-center py-8">
+                  <ShoppingCart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                    Panier vide
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                    Scannez des produits pour les ajouter
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
+                    {panier.map((item, index) => (
+                      <motion.div
+                        key={`${item.id}-${item.dateAjout.getTime()}`}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="flex items-center justify-between p-3 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm truncate">
+                            {item.nom}
+                          </h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                            SKU: {item.sku} | Lot: {item.lot}
+                          </p>
+                          <p className="text-nexsaas-saas-green font-bold">
+                            €{item.prix.toFixed(2)}
+                          </p>
+                          {item.fournisseur !== 'N/A' && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {item.fournisseur}
+                            </p>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center space-x-2 ml-2">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                            <Package className="w-3 h-3 mr-1" />
+                            Unique
+                          </span>
+                          <button
+                            onClick={() => retirerDuPanier(item.id)}
+                            className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center hover:bg-red-200 dark:hover:bg-red-900/40 text-red-500"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  {/* Total */}
+                  <div className="space-y-2 p-4 bg-nexsaas-light-gray dark:bg-gray-700 rounded-lg">
+                    <div className="flex justify-between text-lg font-bold border-t border-nexsaas-vanta-black dark:border-gray-600 pt-2">
+                      <span className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">Total:</span>
+                      <span className="text-nexsaas-saas-green">
+                        €{calculerTotal().toFixed(2)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                      {panier.length} produit{panier.length > 1 ? 's' : ''} unique{panier.length > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </>
+              )}
+            </Card>
+          </motion.div>
+        </div>
+      </div>
+
+      {/* QR Scanner */}
+      <QRScanner
+        isOpen={showScanner}
+        onScan={handleScan}
+        onClose={() => setShowScanner(false)}
+      />
+
+      {/* Modal Saisie Manuelle */}
+      {showSaisieManuelle && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md"
+          >
+            <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+              Saisie Manuelle
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                  Code QR ou SKU
+                </label>
+                <input
+                  type="text"
+                  value={codeQRManuel}
+                  onChange={(e) => setCodeQRManuel(e.target.value)}
+                  placeholder="Saisissez le code..."
+                  className="w-full px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                  onKeyPress={(e) => e.key === 'Enter' && handleSaisieManuelle()}
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowSaisieManuelle(false);
+                    setCodeQRManuel('');
+                  }}
+                >
+                  Annuler
+                </Button>
+                <Button onClick={handleSaisieManuelle} disabled={!codeQRManuel.trim()}>
+                  Valider
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Modal Paiement */}
+      {showModalPaiement && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+          >
+            <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+              Finaliser la Vente
+            </h3>
+
+            {/* Résumé */}
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+              <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                Résumé de la commande
+              </h4>
+              <div className="space-y-1 text-sm">
+                {panier.map((item, index) => (
+                  <div key={index} className="flex justify-between">
+                    <span className="text-nexsaas-vanta-black dark:text-gray-300 truncate mr-2">
+                      {item.nom}
+                    </span>
+                    <span className="text-nexsaas-saas-green font-medium">
+                      €{item.prix.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+                <div className="border-t pt-2 mt-2 flex justify-between font-bold">
+                  <span className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white">Total:</span>
+                  <span className="text-nexsaas-saas-green">€{calculerTotal().toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Informations Client */}
+              <div>
+                <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3">
+                  <User className="w-4 h-4 inline mr-2" />
+                  Informations Client (Optionnel)
+                </h4>
+                <div className="grid grid-cols-1 gap-3">
+                  <input
+                    type="text"
+                    placeholder="Nom"
+                    value={infosClient.nom || ''}
+                    onChange={(e) => setInfosClient(prev => ({ ...prev, nom: e.target.value }))}
+                    className="px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Moyen de Paiement */}
+              <div>
+                <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3">
+                  <CreditCard className="w-4 h-4 inline mr-2" />
+                  Moyen de Paiement *
+                </h4>
+                <div className="space-y-2">
+                  {[
+                    { value: 'WAVE', label: '📱 Wave' },
+                    { value: 'ORANGE_MONEY', label: 'Orange Money' },
+                    { value: 'MTN_MONEY', label: 'MTN Money' },
+                    { value: 'MOOV_MONEY', label: 'Moov Money' },
+                    { value: 'AUTRE', label: '💳 Autre' }
+                  ].map((moyen) => (
+                    <label key={moyen.value} className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="moyenPaiement"
+                        value={moyen.value}
+                        checked={moyenPaiement === moyen.value}
+                        onChange={(e) => setMoyenPaiement(e.target.value as MoyenPaiement)}
+                        className="w-4 h-4 text-nexsaas-saas-green focus:ring-nexsaas-saas-green"
+                      />
+                      <span className="text-nexsaas-vanta-black dark:text-gray-300">
+                        {moyen.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                {/* Champ pour "Autre" moyen de paiement */}
+                {moyenPaiement === 'AUTRE' && (
+                  <div className="mt-3">
+                    <input
+                      type="text"
+                      placeholder="Précisez le moyen de paiement..."
+                      value={autreMoyenPaiement}
+                      onChange={(e) => setAutreMoyenPaiement(e.target.value)}
+                      className="w-full px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                      required
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => setShowModalPaiement(false)}
+                disabled={isLoading}
+              >
+                Annuler
+              </Button>
+              <Button 
+                onClick={finaliserVente}
+                disabled={isLoading || (moyenPaiement === 'AUTRE' && !autreMoyenPaiement.trim())}
+                className="bg-nexsaas-saas-green hover:bg-green-600"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Traitement...
+                  </>
+                ) : (
+                  <>
+                    <Receipt className="w-4 h-4 mr-2" />
+                    Finaliser (€{calculerTotal().toFixed(2)})
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Note */}
+            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+              <div className="flex items-start">
+                <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2 mt-0.5" />
+                <div className="text-sm text-yellow-700 dark:text-yellow-300">
+                  <p className="font-medium">Important :</p>
+                  <p>Une fois validée, cette vente sera enregistrée et visible dans la page "Ventes". Les produits seront marqués comme vendus et ne pourront plus être scannés.</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default POSPage;

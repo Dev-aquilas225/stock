@@ -99,6 +99,7 @@ export const useDocuments = () => {
   const [activeUploads, setActiveUploads] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFirstUpload, setIsFirstUpload] = useState(true);
   const { showToast } = useToast();
 
   // Stockage temporaire des fichiers avant envoi final
@@ -111,6 +112,10 @@ export const useDocuments = () => {
       const response = await documentService.getUserDocuments();
       
       if (response && response.success && response.data) {
+
+        // Si c'est le premier chargement, on initialise les documents
+        setIsFirstUpload(false);
+
         // Transformer les données API en format local
         const defaultDocs = getDefaultDocuments(user?.type);
         
@@ -329,6 +334,18 @@ export const useDocuments = () => {
         dfe: tempFiles.get('dfe'),
       };
 
+
+      // Si c'est le premier upload et RCCM manquant, on génère un PDF vide
+      if (isFirstUpload && !files.rccm) {
+        files.rccm = documentService.createEmptyRccmPDF();
+        
+        showToast({
+          type: 'info',
+          title: 'RCCM temporaire',
+          message: 'Un document RCCM temporaire a été généré pour compléter votre dossier'
+        });
+      }
+
       // Validation que tous les documents requis sont présents
       const validation = documentService.validateAllRequiredDocuments(files);
       if (!validation.isValid) {
@@ -352,6 +369,9 @@ export const useDocuments = () => {
         // Nettoyage des fichiers temporaires
         setTempFiles(new Map());
 
+        // Marquer que ce n'est plus le premier upload
+        setIsFirstUpload(false);
+
         showToast({
           type: 'success',
           title: 'Documents envoyés',
@@ -374,7 +394,80 @@ export const useDocuments = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [tempFiles, showToast]);
+  }, [tempFiles, isFirstUpload, showToast]);
+
+  // Fonction pour retélécharger uniquement les documents rejetés
+  const submitRejectedDocuments = useCallback(async (
+    rejectedDocumentIds: string[],
+    files: Record<string, File>,
+    expiryDates: {
+      cniExpiry?: string;
+      rccmExpiry?: string;
+      dfeExpiry?: string;
+    } = {}
+  ): Promise<boolean> => {
+    setIsSubmitting(true);
+
+    try {
+      // Validation des documents rejetés
+      const validation = documentService.validateRejectedDocuments(files, rejectedDocumentIds);
+      
+      if (!validation.isValid) {
+        if (validation.missingDocuments.length > 0) {
+          showToast({
+            type: 'error',
+            title: 'Documents manquants',
+            message: `Documents rejetés manquants: ${validation.missingDocuments.join(', ')}`
+          });
+        }
+        
+        if (validation.extraDocuments.length > 0) {
+          showToast({
+            type: 'warning',
+            title: 'Documents supplémentaires',
+            message: `Documents non rejetés fournis: ${validation.extraDocuments.join(', ')}`
+          });
+        }
+        
+        return false;
+      }
+
+      // Envoi sélectif des documents rejetés
+      const response = await documentService.updateRejectedDocuments(files, expiryDates);
+
+      if (response.success) {
+        // Recharger les documents pour mettre à jour les statuts
+        await loadDocuments();
+        
+        // Nettoyer les fichiers temporaires pour les documents rejetés
+        setTempFiles(prev => {
+          const newMap = new Map(prev);
+          rejectedDocumentIds.forEach(id => newMap.delete(id));
+          return newMap;
+        });
+
+        showToast({
+          type: 'success',
+          title: 'Documents mis à jour',
+          message: response.message || 'Vos documents rejetés ont été mis à jour avec succès'
+        });
+
+        return true;
+      } else {
+        throw new Error(response.message);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour des documents rejetés:', error);
+      showToast({
+        type: 'error',
+        title: 'Erreur de mise à jour',
+        message: error instanceof Error ? error.message : 'Erreur lors de la mise à jour des documents rejetés'
+      });
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [loadDocuments, showToast]);
 
   // Mise à jour des documents rejetés
   const updateRejectedDocuments = useCallback(async (
@@ -485,6 +578,7 @@ export const useDocuments = () => {
     uploadDocument,
     submitAllDocuments,
     updateRejectedDocuments,
+    submitRejectedDocuments,
     removeDocument,
     loadDocuments,
     
@@ -495,3 +589,5 @@ export const useDocuments = () => {
     canSubmit: hasRequiredFiles && !isSubmitting
   };
 };
+
+export default useDocuments;

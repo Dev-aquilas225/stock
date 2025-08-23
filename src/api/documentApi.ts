@@ -1,4 +1,4 @@
-// services/documentService.ts
+// services/documentService.ts - Version mise à jour avec retéléchargement sélectif
 import axios from 'axios';
 
 interface DocumentUploadResponse {
@@ -9,9 +9,11 @@ interface DocumentUploadResponse {
 
 export class DocumentService {
   private baseUrl: string;
+  private useSimulation: boolean;
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
+  constructor(baseUrl: string = 'http://localhost:8000', useSimulation: boolean = true) {
     this.baseUrl = baseUrl;
+    this.useSimulation = useSimulation && process.env.NODE_ENV === 'development';
   }
 
   private getAuthToken(): string | null {
@@ -20,6 +22,7 @@ export class DocumentService {
 
   /**
    * Upload de tous les documents requis d'un coup (compatible avec le backend)
+   * Maintenant inclut le RCCM comme document requis
    */
   async uploadAllDocuments(files: {
     cniFront?: File;
@@ -31,6 +34,13 @@ export class DocumentService {
     rccmExpiry?: string;
     dfeExpiry?: string;
   } = {}): Promise<DocumentUploadResponse> {
+    
+    // // Mode simulation pour le développement
+    // if (this.useSimulation) {
+    //   return this.simulateUpload(files, expiryDates);
+    // }
+
+    // Mode production
     try {
       const token = this.getAuthToken();
       
@@ -40,7 +50,7 @@ export class DocumentService {
 
       const formData = new FormData();
 
-      // Validation: tous les documents sont requis selon le backend
+      // Validation: tous les documents sont requis
       if (!files.cniFront || !files.cniBack || !files.rccm || !files.dfe) {
         throw new Error('Tous les documents (CNI recto/verso, RCCM, DFE) sont requis');
       }
@@ -56,8 +66,6 @@ export class DocumentService {
       if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
       if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
 
-      console.log('Envoi des documents vers:', `${this.baseUrl}/documents-user`);
-
       const response = await axios.post(
         `${this.baseUrl}/documents-user`,
         formData,
@@ -65,7 +73,8 @@ export class DocumentService {
           headers: {
             "Authorization": `Bearer ${token}`,
             "Content-Type": "multipart/form-data",
-          }
+          },
+          timeout: 30000 // 30 secondes timeout
         }
       );
 
@@ -76,6 +85,18 @@ export class DocumentService {
       };
     } catch (error: any) {
       console.error('Erreur upload documents:', error);
+
+      let errorMessage = "Erreur d'upload";
+      
+      if (error.code === 'ERR_NETWORK') {
+        errorMessage = "Impossible de se connecter au serveur. Vérifiez votre connexion.";
+      } else if (error.response?.status === 401) {
+        errorMessage = "Session expirée. Veuillez vous reconnecter.";
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
       return {
         success: false,
         message: error.response?.data?.message || error.message || "Erreur d'upload",
@@ -84,41 +105,55 @@ export class DocumentService {
     }
   }
 
+
   /**
-   * Mise à jour des documents (pour les documents rejetés)
+   * Mise à jour sélective des documents rejetés uniquement
+   * Cette méthode permet de retélécharger seulement les documents qui ont été rejetés par l'admin
    */
-  async updateAllDocuments(files: {
-    cniFront?: File;
-    cniBack?: File;
-    rccm?: File;
-    dfe?: File;
-  }, expiryDates: {
-    cniExpiry?: string;
-    rccmExpiry?: string;
-    dfeExpiry?: string;
-  } = {}): Promise<DocumentUploadResponse> {
+  async updateRejectedDocuments(
+    files: Record<string, File>, 
+    expiryDates: {
+      cniExpiry?: string;
+      rccmExpiry?: string;
+      dfeExpiry?: string;
+    } = {}
+  ): Promise<DocumentUploadResponse> {
     try {
       const token = this.getAuthToken();
-      
       if (!token) {
         throw new Error('Token d\'authentification manquant');
       }
 
       const formData = new FormData();
 
-      // Ajout des fichiers (optionnels pour la mise à jour)
-      if (files.cniFront) formData.append('cniFront', files.cniFront);
-      if (files.cniBack) formData.append('cniBack', files.cniBack);
-      if (files.rccm) formData.append('rccm', files.rccm);
-      if (files.dfe) formData.append('dfe', files.dfe);
+      // Ajouter seulement les fichiers fournis (documents rejetés)
+      Object.entries(files).forEach(([id, file]) => {
+        // Mapping des IDs frontend vers les noms attendus par le backend
+        const backendFieldMap: Record<string, string> = {
+          'cniFront': 'cniFront',
+          'cniBack': 'cniBack',
+          'rccm': 'rccm',
+          'dfe': 'dfe'
+        };
+        
+        const backendFieldName = backendFieldMap[id] || id;
+        formData.append(backendFieldName, file);
+        
+        console.log(`Ajout du fichier rejeté: ${backendFieldName} (${file.name})`);
+      });
 
-      // Ajout des dates d'expiration
+      // Ajouter les dates d'expiration si fournies
       if (expiryDates.cniExpiry) formData.append('cniExpiry', expiryDates.cniExpiry);
       if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
       if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
 
+      // Ajouter un flag pour indiquer que c'est un retéléchargement sélectif
+      formData.append('selective_update', 'true');
+
+      console.log('Retéléchargement sélectif des documents rejetés vers:', `${this.baseUrl}/documents-user/rejected`);
+
       const response = await axios.put(
-        `${this.baseUrl}/documents-user`,
+        `${this.baseUrl}/documents-user/rejected`,
         formData,
         {
           headers: {
@@ -130,76 +165,21 @@ export class DocumentService {
 
       return {
         success: true,
-        message: response.data.message || "Documents mis à jour avec succès",
+        message: response.data.message || "Documents rejetés mis à jour avec succès",
         data: response.data,
       };
     } catch (error: any) {
-      console.error('Erreur mise à jour documents:', error);
+      console.error('Erreur mise à jour documents rejetés:', error);
       return {
         success: false,
-        message: error.response?.data?.message || error.message || "Erreur de mise à jour",
+        message: error.response?.data?.message || error.message || "Erreur de mise à jour des documents rejetés",
         data: undefined,
       };
     }
   }
 
   /**
-   * Mise à jour des documents rejetés
-   */
-  async updateRejectedDocuments(
-  files: Record<string, File>, 
-  expiryDates: {
-    cniExpiry?: string;
-    rccmExpiry?: string;
-    dfeExpiry?: string;
-  } = {}
-): Promise<DocumentUploadResponse> {
-  try {
-    const token = this.getAuthToken();
-    if (!token) {
-      throw new Error('Token d\'authentification manquant');
-    }
-
-    const formData = new FormData();
-
-    // Ajouter seulement les fichiers fournis
-    Object.entries(files).forEach(([id, file]) => {
-      formData.append(id, file);
-    });
-
-    // Ajouter les dates d'expiration
-    if (expiryDates.cniExpiry) formData.append('cniExpiry', expiryDates.cniExpiry);
-    if (expiryDates.rccmExpiry) formData.append('rccmExpiry', expiryDates.rccmExpiry);
-    if (expiryDates.dfeExpiry) formData.append('dfeExpiry', expiryDates.dfeExpiry);
-
-    const response = await axios.put(
-      `${this.baseUrl}/documents-user/rejected`,
-      formData,
-      {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        }
-      }
-    );
-
-    return {
-      success: true,
-      message: response.data.message || "Documents rejetés mis à jour avec succès",
-      data: response.data,
-    };
-  } catch (error: any) {
-    console.error('Erreur mise à jour documents rejetés:', error);
-    return {
-      success: false,
-      message: error.response?.data?.message || error.message || "Erreur de mise à jour",
-      data: undefined,
-    };
-  }
-}
-
-  /**
-   * Récupération des documents de l'utilisateur
+   * Récupération des documents de l'utilisateur avec information sur les rejets
    */
   async getUserDocuments(): Promise<any> {
     try {
@@ -223,6 +203,83 @@ export class DocumentService {
       console.error('Erreur récupération documents:', error);
       throw new Error(error.response?.data?.message || error.message || 'Erreur lors de la récupération des documents');
     }
+  }
+
+  /**
+   * Récupération des documents rejetés seulement
+   */
+  async getRejectedDocuments(): Promise<any> {
+    try {
+      const token = this.getAuthToken();
+      
+      if (!token) {
+        throw new Error('Token d\'authentification manquant');
+      }
+
+      const response = await axios.get(`${this.baseUrl}/documents-user/rejected`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        }
+      });
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error: any) {
+      console.error('Erreur récupération documents rejetés:', error);
+      throw new Error(error.response?.data?.message || error.message || 'Erreur lors de la récupération des documents rejetés');
+    }
+  }
+
+  /**
+   * Création d'un PDF vide pour le RCCM temporaire
+   */
+  createEmptyRccmPDF(): File {
+    const pdfContent = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 4 0 R /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>
+endobj
+5 0 obj
+<< /Length 88 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(RCCM - Document temporaire) Tj
+0 -20 Td
+(A remplacer par le document officiel) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000246 00000 n 
+0000000365 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+503
+%%EOF`;
+
+    const blob = new Blob([pdfContent], { type: 'application/pdf' });
+    return new File([blob], 'rccm-temporaire.pdf', { 
+      type: 'application/pdf',
+      lastModified: Date.now()
+    });
   }
 
   /**
@@ -272,7 +329,7 @@ export class DocumentService {
   }
 
   /**
-   * Vérifier si tous les documents requis sont présents
+   * Vérifier si tous les documents requis sont présents (RCCM inclus)
    */
   validateAllRequiredDocuments(files: {
     cniFront?: File;
@@ -284,12 +341,55 @@ export class DocumentService {
     
     if (!files.cniFront) missing.push('CNI Recto');
     if (!files.cniBack) missing.push('CNI Verso');
-    if (!files.rccm) missing.push('RCCM');
+    if (!files.rccm) missing.push('RCCM'); // Maintenant requis
     if (!files.dfe) missing.push('DFE');
     
     return {
       isValid: missing.length === 0,
       missingDocuments: missing
+    };
+  }
+
+  /**
+   * NOUVELLE MÉTHODE: Validation spécifique pour les documents rejetés
+   */
+  validateRejectedDocuments(
+    files: Record<string, File>, 
+    rejectedDocIds: string[]
+  ): { isValid: boolean; missingDocuments: string[]; extraDocuments: string[] } {
+    const missing: string[] = [];
+    const extra: string[] = [];
+    
+    // Vérifier que tous les documents rejetés sont fournis
+    rejectedDocIds.forEach(docId => {
+      if (!files[docId]) {
+        const docNames: Record<string, string> = {
+          'cniFront': 'CNI Recto',
+          'cniBack': 'CNI Verso',
+          'rccm': 'RCCM',
+          'dfe': 'DFE'
+        };
+        missing.push(docNames[docId] || docId);
+      }
+    });
+
+    // Vérifier qu'on n'envoie pas de documents non rejetés
+    Object.keys(files).forEach(fileId => {
+      if (!rejectedDocIds.includes(fileId)) {
+        const docNames: Record<string, string> = {
+          'cniFront': 'CNI Recto',
+          'cniBack': 'CNI Verso',
+          'rccm': 'RCCM',
+          'dfe': 'DFE'
+        };
+        extra.push(docNames[fileId] || fileId);
+      }
+    });
+    
+    return {
+      isValid: missing.length === 0 && extra.length === 0,
+      missingDocuments: missing,
+      extraDocuments: extra
     };
   }
 

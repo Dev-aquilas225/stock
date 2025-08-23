@@ -1,5 +1,5 @@
-// src/pages/DocumentsRequiredPage.tsx - Version simplifiée et fonctionnelle
-import React, { useRef, useState } from 'react';
+// src/pages/DocumentsRequiredPage.tsx
+import React, { useRef, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FileText,
@@ -11,7 +11,6 @@ import {
   Loader,
   X,
   Eye,
-  
 } from 'lucide-react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
@@ -29,6 +28,7 @@ interface DocumentItem {
   icon: React.ComponentType<any>;
   isRequired?: boolean;
   file?: File;
+  uploadedAt?: Date;
   previewUrl?: string;
   isRejected?: boolean;
 }
@@ -68,7 +68,7 @@ const DocumentsRequiredPage: React.FC = () => {
       id: 'rccm',
       name: 'Registre de commerce (RCCM)',
       description: 'Document d\'enregistrement de votre entreprise',
-      status: 'not_required',
+      status: 'missing',
       icon: Shield,
       isRequired: true,
     },
@@ -85,6 +85,7 @@ const DocumentsRequiredPage: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFirstUpload, setIsFirstUpload] = useState(true);
 
   // États locaux pour les dates d'expiration
   const [expiryDates, setExpiryDates] = useState({
@@ -93,12 +94,59 @@ const DocumentsRequiredPage: React.FC = () => {
     dfeExpiry: ''
   });
 
-
   // Stockage temporaire des fichiers
   const [tempFiles, setTempFiles] = useState<{ [key: string]: File }>({});
 
   // Références pour les inputs fichiers
   const fileInputs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+
+  // Fonction pour générer un PDF vide pour le RCCM
+  const generateEmptyRccmPDF = (): File => {
+    const pdfContent = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 4 0 R /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>
+endobj
+5 0 obj
+<< /Length 88 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(RCCM - Document temporaire) Tj
+0 -20 Td
+(A remplacer par le document officiel) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000246 00000 n 
+0000000365 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+503
+%%EOF`;
+
+    const blob = new Blob([pdfContent], { type: 'application/pdf' });
+    return new File([blob], 'rccm-temporaire.pdf', { 
+      type: 'application/pdf',
+      lastModified: Date.now()
+    });
+  };
 
   // Upload de fichier (stockage temporaire)
   const handleUpload = (id: string) => {
@@ -109,15 +157,6 @@ const DocumentsRequiredPage: React.FC = () => {
     input.removeAttribute('capture');
     input.click();
   };
-
-  // const handleTakePhoto = (id: string) => {
-  //   const input = fileInputs.current[id];
-  //   if (!input) return;
-    
-  //   input.accept = 'image/*';
-  //   input.setAttribute('capture', 'environment');
-  //   input.click();
-  // };
 
   const handleFileChange = async (id: string, event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -230,9 +269,28 @@ const DocumentsRequiredPage: React.FC = () => {
 
   // Soumission finale de tous les documents
   const handleSubmit = async () => {
-    const requiredFiles = ['cniFront', 'cniBack', 'dfe'];
-    const missingFiles = requiredFiles.filter(id => !tempFiles[id]);
-
+    // Préparer les fichiers pour l'envoi
+    const filesToSend = {
+      cniFront: tempFiles.cniFront,
+      cniBack: tempFiles.cniBack,
+      rccm: tempFiles.rccm,
+      dfe: tempFiles.dfe,
+    };
+    
+    // Si c'est le premier upload et RCCM manquant, générer un PDF vide
+    if (isFirstUpload && !filesToSend.rccm) {
+      filesToSend.rccm = generateEmptyRccmPDF();
+      showToast({
+        type: 'info',
+        title: 'RCCM temporaire',
+        message: 'Un document RCCM temporaire a été généré pour compléter votre dossier'
+      });
+    }
+    
+    // Vérification des documents requis
+    const requiredFiles = ['cniFront', 'cniBack', 'dfe', 'rccm'];
+    const missingFiles = requiredFiles.filter(id => !filesToSend[id as keyof typeof filesToSend]);
+    
     if (missingFiles.length > 0) {
       showToast({
         type: 'error',
@@ -245,14 +303,7 @@ const DocumentsRequiredPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const files = {
-        cniFront: tempFiles.cniFront,
-        cniBack: tempFiles.cniBack,
-        rccm: tempFiles.rccm,
-        dfe: tempFiles.dfe,
-      };
-
-      const response = await documentService.uploadAllDocuments(files, expiryDates);
+      const response = await documentService.uploadAllDocuments(filesToSend, expiryDates);
 
       if (response.success) {
         showToast({
@@ -261,11 +312,13 @@ const DocumentsRequiredPage: React.FC = () => {
           message: response.message || 'Vos documents ont été envoyés pour validation'
         });
         
+        // Marquer que ce n'est plus le premier upload
+        setIsFirstUpload(false);
+        
         navigate('/compte-en-attente');
       } else {
         throw new Error(response.message);
       }
-
     } catch (error) {
       console.error('Erreur lors de l\'envoi:', error);
       showToast({
@@ -345,11 +398,18 @@ const DocumentsRequiredPage: React.FC = () => {
     }
   };
 
-  // filtrages des documents requis avant envoie
-  const requiredDocs = documents.filter(doc => doc.isRequired && doc.id !== 'rccm');
-  const uploadedCount = documents.filter(doc => 
-    doc.isRequired && doc.id !== 'rccm' && tempFiles[doc.id] // Exclure RCCM
-  ).length;
+  // Filtrage des documents requis
+  const requiredDocs = documents.filter(doc => doc.isRequired);
+  
+  // Compter les documents téléchargés (RCCM est toujours considéré comme prêt)
+  const uploadedCount = documents.filter(doc => {
+    if (doc.id === 'rccm') {
+      // Le RCCM est toujours considéré comme prêt (soit téléchargé, soit généré automatiquement)
+      return true;
+    }
+    return doc.isRequired && tempFiles[doc.id];
+  }).length;
+
   const hasRequiredFiles = uploadedCount === requiredDocs.length;
 
   if (isLoading) {
@@ -419,7 +479,7 @@ const DocumentsRequiredPage: React.FC = () => {
         {/* Documents List */}
         <div className="space-y-6 mb-8">
           {documents
-            .filter(doc => doc.isRequired || doc.id === 'rccm')
+            .filter(doc => doc.isRequired)
             .map((document) => {
             const progress = uploadProgress[document.id];
             const hasFile = !!tempFiles[document.id];
@@ -440,6 +500,12 @@ const DocumentsRequiredPage: React.FC = () => {
                       <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                         {document.description}
                       </p>
+                      {document.id === 'rccm' && !hasFile && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          Document temporaire généré pour le RCCM.
+                          Aucun téléchargement requis pour le moment.
+                        </p>
+                      )}
                       <div className="flex items-center mt-2">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(document.status, hasFile)}`}>
                           {getStatusIcon(document.status, document.id, hasFile)}
@@ -474,52 +540,45 @@ const DocumentsRequiredPage: React.FC = () => {
                   
                   {/* Actions */}
                   <div className="flex items-center space-x-2">
-          {hasFile ? (
-            <>
-              {document.previewUrl && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open(document.previewUrl, '_blank')}
-                >
-                  <Eye className="w-4 h-4" />
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => removeDocument(document.id)}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </>
-          ) : (
-            <>
-              {isEditable && (
-                <Button 
-                  size="sm" 
-                  onClick={() => handleUpload(document.id)}
-                  disabled={!isEditable}
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  {document.isRejected ? 'Re-télécharger' : 'Télécharger'}
-                </Button>
-              )}
-              {!isEditable && (
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  En attente de validation
-                </span>
-              )}
-            </>
-          )}
+                  {hasFile ? (
+                    <>
+                      {document.previewUrl && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(document.previewUrl, '_blank')}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeDocument(document.id)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      {isEditable && (
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleUpload(document.id)}
+                          disabled={!isEditable}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          {document.isRejected ? 'Re-télécharger' : 'Télécharger'}
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+              </Card>
+            );
+          })}
         </div>
-      </div>
-      </Card>
-    );
-  })}
-        </div>
-
-        
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">

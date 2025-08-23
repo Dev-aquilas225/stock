@@ -20,7 +20,7 @@ export type DocumentStatus =
   | 'pending' 
   | 'validated' 
   | 'rejected' 
-  | 'expired'
+  // | 'expired'
   | 'not_required';
 
 export interface UploadProgress {
