@@ -276,34 +276,34 @@ const SupplyPage: React.FC = () => {
         fetchProduits();
     }, [formData.fournisseurId, showToast]);
 
-const addProduitToForm = () => {
-    if (
-        formData.fournisseurId &&
-        formData.produits.length < produitsDisponibles.length
-    ) {
-        setFormData((prev) => ({
-            ...prev,
-            produits: [
-                ...prev.produits,
-                {
-                    produitId: 0,
-                    nom: "",
-                    prixNegocie: "",
-                    quantite: "",
-                    conditionnement: "",
-                    devise: "EUR" as Devise,
-                },
-            ],
-        }));
-    } else {
-        showToast({
-            type: "error",
-            title: "Limite atteinte",
-            message:
-                "Vous ne pouvez pas ajouter plus de produits que ceux disponibles pour ce fournisseur.",
-        });
-    }
-};
+    const addProduitToForm = () => {
+        if (
+            formData.fournisseurId &&
+            formData.produits.length < produitsDisponibles.length
+        ) {
+            setFormData((prev) => ({
+                ...prev,
+                produits: [
+                    ...prev.produits,
+                    {
+                        produitId: 0,
+                        nom: "",
+                        prixNegocie: "",
+                        quantite: "",
+                        conditionnement: "",
+                        devise: "EUR" as Devise,
+                    },
+                ],
+            }));
+        } else {
+            showToast({
+                type: "error",
+                title: "Limite atteinte",
+                message:
+                    "Vous ne pouvez pas ajouter plus de produits que ceux disponibles pour ce fournisseur.",
+            });
+        }
+    };
 
     const removeProduitFromForm = (index: number) => {
         setFormData((prev) => ({
@@ -793,8 +793,8 @@ const addProduitToForm = () => {
     };
 
     return (
-        <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
-            <div className="container mx-auto px-4 py-8">
+        <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900 overflow-x-hidden">
+            <div className="container mx-auto px-4 py-8 max-w-full">
                 {/* Header */}
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
@@ -838,13 +838,13 @@ const addProduitToForm = () => {
                             initial={{ opacity: 0, y: 30 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6, delay: 0.2 }}
-                            className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8"
+                            className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-4 sm:gap-6 mb-8"
                         >
-                            <Card className="text-center">
-                                <div className="p-3 bg-yellow-500/10 rounded-lg inline-block mb-3">
-                                    <Clock className="w-6 h-6 text-yellow-500" />
+                            <Card className="text-center p-3 sm:p-4">
+                                <div className="p-2 sm:p-3 bg-yellow-500/10 rounded-lg inline-block mb-2 sm:mb-3">
+                                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-500" />
                                 </div>
-                                <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -853,16 +853,16 @@ const addProduitToForm = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
                                     Brouillon
                                 </p>
                             </Card>
 
-                            <Card className="text-center">
-                                <div className="p-3 bg-blue-500/10 rounded-lg inline-block mb-3">
-                                    <CheckCircle className="w-6 h-6 text-blue-500" />
+                            <Card className="text-center p-3 sm:p-4">
+                                <div className="p-2 sm:p-3 bg-blue-500/10 rounded-lg inline-block mb-2 sm:mb-3">
+                                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />
                                 </div>
-                                <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -871,16 +871,16 @@ const addProduitToForm = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
                                     Validées
                                 </p>
                             </Card>
 
-                            <Card className="text-center">
-                                <div className="p-3 bg-orange-500/10 rounded-lg inline-block mb-3">
-                                    <Package className="w-6 h-6 text-orange-500" />
+                            <Card className="text-center p-3 sm:p-4">
+                                <div className="p-2 sm:p-3 bg-orange-500/10 rounded-lg inline-block mb-2 sm:mb-3">
+                                    <Package className="w-5 h-5 sm:w-6 sm:h-6 text-orange-500" />
                                 </div>
-                                <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -889,16 +889,16 @@ const addProduitToForm = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
                                     Reçues
                                 </p>
                             </Card>
 
-                            <Card className="text-center">
-                                <div className="p-3 bg-green-500/10 rounded-lg inline-block mb-3">
-                                    <CheckCircle className="w-6 h-6 text-green-500" />
+                            <Card className="text-center p-3 sm:p-4">
+                                <div className="p-2 sm:p-3 bg-green-500/10 rounded-lg inline-block mb-2 sm:mb-3">
+                                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-500" />
                                 </div>
-                                <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -907,16 +907,16 @@ const addProduitToForm = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
                                     Clôturées
                                 </p>
                             </Card>
 
-                            <Card className="text-center">
-                                <div className="p-3 bg-red-500/10 rounded-lg inline-block mb-3">
-                                    <RotateCcw className="w-6 h-6 text-red-500" />
+                            <Card className="text-center p-3 sm:p-4">
+                                <div className="p-2 sm:p-3 bg-red-500/10 rounded-lg inline-block mb-2 sm:mb-3">
+                                    <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />
                                 </div>
-                                <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -925,7 +925,7 @@ const addProduitToForm = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
                                     Annulées
                                 </p>
                             </Card>
@@ -940,8 +940,8 @@ const addProduitToForm = () => {
                         >
                             <Card>
                                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                                    <div className="flex flex-col sm:flex-row gap-4 flex-1">
-                                        <div className="relative flex-1 max-w-md">
+                                    <div className="flex flex-col sm:flex-row gap-4 flex-1 w-full">
+                                        <div className="relative flex-1 max-w-md w-full">
                                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                                             <input
                                                 type="text"
@@ -960,7 +960,7 @@ const addProduitToForm = () => {
                                             onChange={(e) =>
                                                 setStatusFilter(e.target.value)
                                             }
-                                            className="px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                            className="px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none w-full sm:w-auto"
                                         >
                                             <option value="all">
                                                 Tous les statuts
@@ -992,7 +992,10 @@ const addProduitToForm = () => {
                                             </option>
                                         </select>
                                     </div>
-                                    <Button onClick={() => setShowForm(true)}>
+                                    <Button
+                                        onClick={() => setShowForm(true)}
+                                        className="w-full md:w-auto"
+                                    >
                                         <Plus className="w-4 h-4 mr-2" />
                                         Nouvelle commande
                                     </Button>
@@ -1017,15 +1020,15 @@ const addProduitToForm = () => {
                                         delay: index * 0.1,
                                     }}
                                 >
-                                    <Card className="hover:shadow-md transition-shadow">
+                                    <Card className="hover:shadow-md transition-shadow p-3 sm:p-4">
                                         <div className="flex flex-col lg:flex-row lg:items-center justify-between">
                                             <div className="flex-1">
                                                 <div className="flex items-center mb-2">
-                                                    <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mr-3">
+                                                    <h3 className="text-base sm:text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mr-3">
                                                         {order.id}
                                                     </h3>
                                                     <span
-                                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                                                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
                                                             order.status,
                                                         )}`}
                                                     >
@@ -1038,7 +1041,7 @@ const addProduitToForm = () => {
                                                     </span>
                                                 </div>
 
-                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm mb-4">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 text-xs sm:text-sm mb-4">
                                                     <div className="flex items-center">
                                                         <Building className="w-4 h-4 text-gray-400 mr-2" />
                                                         <span className="text-nexsaas-vanta-black dark:text-gray-300">
@@ -1063,7 +1066,7 @@ const addProduitToForm = () => {
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center">
-                                                        <span className="text-lg font-bold text-nexsaas-saas-green">
+                                                        <span className="text-base sm:text-lg font-bold text-nexsaas-saas-green">
                                                             {
                                                                 order.montantTotalConverti
                                                             }{" "}
@@ -1080,16 +1083,16 @@ const addProduitToForm = () => {
                                                         (item, index) => (
                                                             <div
                                                                 key={index}
-                                                                className="bg-nexsaas-light-gray dark:bg-gray-700 rounded-lg p-3"
+                                                                className="bg-nexsaas-light-gray dark:bg-gray-700 rounded-lg p-2 sm:p-3"
                                                             >
                                                                 <div className="flex items-center justify-between">
                                                                     <div>
-                                                                        <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                                                        <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm sm:text-base">
                                                                             {
                                                                                 item.name
                                                                             }
                                                                         </h4>
-                                                                        <div className="flex items-center space-x-4 text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                                                        <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
                                                                             <span>
                                                                                 Commandé:{" "}
                                                                                 {
@@ -1114,7 +1117,7 @@ const addProduitToForm = () => {
                                                                         </div>
                                                                     </div>
                                                                     <div className="text-right">
-                                                                        <span className="font-bold text-nexsaas-saas-green">
+                                                                        <span className="font-bold text-nexsaas-saas-green text-sm sm:text-base">
                                                                             {
                                                                                 item.prixNegocie
                                                                             }{" "}
@@ -1134,7 +1137,7 @@ const addProduitToForm = () => {
                                                 </div>
                                             </div>
 
-                                            <div className="flex flex-col space-y-2 mt-4 lg:mt-0 lg:ml-4">
+                                            <div className="flex flex-col space-y-2 mt-4 lg:mt-0 lg:ml-4 ml-0">
                                                 {order.status ===
                                                     StatutCommande.BROUILLON && (
                                                     <Button
@@ -1244,24 +1247,27 @@ const addProduitToForm = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+                        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 sm:p-6 z-50 overflow-y-auto"
                         onClick={() => setShowForm(false)}
                     >
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-3 sm:p-6 w-full max-w-[95vw] sm:max-w-lg md:max-w-2xl lg:max-w-3xl"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
+                            <h2 className="text-lg sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-6">
                                 Nouvelle Commande Fournisseur
                             </h2>
 
-                            <form onSubmit={handleSubmit} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <form
+                                onSubmit={handleSubmit}
+                                className="space-y-3 sm:space-y-6"
+                            >
+                                <div className="grid grid-cols-1 gap-3 sm:gap-6">
                                     <div>
-                                        <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                        <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                             Fournisseur
                                         </label>
                                         <div className="relative">
@@ -1276,7 +1282,7 @@ const addProduitToForm = () => {
                                                         produits: [],
                                                     })
                                                 }
-                                                className="w-full pl-10 pr-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                                className="w-full pl-10 pr-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none text-xs sm:text-base"
                                                 required
                                                 disabled={isLoadingFournisseurs}
                                             >
@@ -1315,20 +1321,21 @@ const addProduitToForm = () => {
                                                 .toISOString()
                                                 .split("T")[0]
                                         }
+                                        className="text-xs sm:text-base"
                                     />
                                 </div>
 
                                 <div>
-                                    <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                    <h3 className="text-sm sm:text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2 sm:mb-4">
                                         Produits
                                     </h3>
                                     {formData.produits.map((produit, index) => (
                                         <div
                                             key={index}
-                                            className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-4 mb-4"
+                                            className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-3 mb-3"
                                         >
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                            <div className="flex justify-between items-center mb-2 sm:mb-4">
+                                                <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-xs sm:text-base">
                                                     Produit {index + 1}
                                                 </h4>
                                                 <Button
@@ -1345,189 +1352,206 @@ const addProduitToForm = () => {
                                                     <X className="w-4 h-4" />
                                                 </Button>
                                             </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                                <div>
-                                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                                        Produit
-                                                    </label>
-                                                    <div className="relative">
-                                                        <Package className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                                        <select
-                                                            value={
-                                                                produit.produitId ||
-                                                                ""
-                                                            }
-                                                            onChange={(e) =>
-                                                                updateProduitInForm(
-                                                                    index,
-                                                                    "produitId",
-                                                                    e.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            className="w-full pl-10 pr-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
-                                                            required
-                                                            disabled={
-                                                                isLoadingProduits ||
-                                                                !formData.fournisseurId
-                                                            }
-                                                        >
-                                                            <option value="">
-                                                                Sélectionner un
-                                                                produit
-                                                            </option>
-                                                            {produitsDisponibles.length ===
-                                                                0 &&
-                                                            formData.fournisseurId &&
-                                                            !isLoadingProduits ? (
-                                                                <option
-                                                                    value=""
-                                                                    disabled
-                                                                >
-                                                                    Aucun
-                                                                    produit
-                                                                    disponible
+                                            <div className="space-y-3">
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                    <div className="sm:col-span-2">
+                                                        <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                            Produit
+                                                        </label>
+                                                        <div className="relative">
+                                                            <Package className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                                            <select
+                                                                value={
+                                                                    produit.produitId ||
+                                                                    ""
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateProduitInForm(
+                                                                        index,
+                                                                        "produitId",
+                                                                        e.target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                className="w-full pl-10 pr-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none text-xs sm:text-base"
+                                                                required
+                                                                disabled={
+                                                                    isLoadingProduits ||
+                                                                    !formData.fournisseurId
+                                                                }
+                                                            >
+                                                                <option value="">
+                                                                    Sélectionner
+                                                                    un produit
                                                                 </option>
-                                                            ) : (
-                                                                produitsDisponibles
-                                                                    .filter(
-                                                                        (p) =>
-                                                                            !formData.produits.some(
-                                                                                (
-                                                                                    prod,
-                                                                                    i,
-                                                                                ) =>
-                                                                                    i !==
-                                                                                        index &&
-                                                                                    prod.produitId &&
-                                                                                    prod.produitId ===
-                                                                                        p.id,
+                                                                {produitsDisponibles.length ===
+                                                                    0 &&
+                                                                formData.fournisseurId &&
+                                                                !isLoadingProduits ? (
+                                                                    <option
+                                                                        value=""
+                                                                        disabled
+                                                                    >
+                                                                        Aucun
+                                                                        produit
+                                                                        disponible
+                                                                    </option>
+                                                                ) : (
+                                                                    produitsDisponibles
+                                                                        .filter(
+                                                                            (
+                                                                                p,
+                                                                            ) =>
+                                                                                !formData.produits.some(
+                                                                                    (
+                                                                                        prod,
+                                                                                        i,
+                                                                                    ) =>
+                                                                                        i !==
+                                                                                            index &&
+                                                                                        prod.produitId &&
+                                                                                        prod.produitId ===
+                                                                                            p.id,
+                                                                                ),
+                                                                        )
+                                                                        .map(
+                                                                            (
+                                                                                p,
+                                                                            ) => (
+                                                                                <option
+                                                                                    key={
+                                                                                        p.id
+                                                                                    }
+                                                                                    value={
+                                                                                        p.id
+                                                                                    }
+                                                                                >
+                                                                                    {p.nom ||
+                                                                                        `Produit ${p.id}`}
+                                                                                </option>
                                                                             ),
-                                                                    )
-                                                                    .map(
-                                                                        (p) => (
-                                                                            <option
-                                                                                key={
-                                                                                    p.id
-                                                                                }
-                                                                                value={
-                                                                                    p.id
-                                                                                }
-                                                                            >
-                                                                                {p.nom ||
-                                                                                    `Produit ${p.id}`}
-                                                                            </option>
-                                                                        ),
-                                                                    )
-                                                            )}
-                                                        </select>
-                                                        {produit.nom && (
-                                                            <p className="mt-2 text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                                Produit
-                                                                sélectionné:{" "}
-                                                                {produit.nom}
-                                                            </p>
-                                                        )}
-                                                        {produitsDisponibles.length ===
-                                                            0 &&
-                                                            formData.fournisseurId &&
-                                                            !isLoadingProduits && (
-                                                                <p className="mt-2 text-sm text-red-500">
-                                                                    Aucun
-                                                                    produit
-                                                                    disponible
-                                                                    pour ce
-                                                                    fournisseur.
+                                                                        )
+                                                                )}
+                                                            </select>
+                                                            {produit.nom && (
+                                                                <p className="mt-2 text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                                                    Produit
+                                                                    sélectionné:{" "}
+                                                                    {
+                                                                        produit.nom
+                                                                    }
                                                                 </p>
                                                             )}
+                                                            {produitsDisponibles.length ===
+                                                                0 &&
+                                                                formData.fournisseurId &&
+                                                                !isLoadingProduits && (
+                                                                    <p className="mt-2 text-xs sm:text-sm text-red-500">
+                                                                        Aucun
+                                                                        produit
+                                                                        disponible
+                                                                        pour ce
+                                                                        fournisseur.
+                                                                    </p>
+                                                                )}
+                                                        </div>
+                                                    </div>
+                                                    <Input
+                                                        label="Quantité"
+                                                        type="number"
+                                                        value={produit.quantite}
+                                                        onChange={(value) =>
+                                                            updateProduitInForm(
+                                                                index,
+                                                                "quantite",
+                                                                value,
+                                                            )
+                                                        }
+                                                        icon={Package}
+                                                        required
+                                                        min="1"
+                                                        className="text-xs sm:text-base"
+                                                    />
+                                                    <div>
+                                                        <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                            Devise
+                                                        </label>
+                                                        <div className="relative">
+                                                            <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                                            <select
+                                                                value={
+                                                                    produit.devise
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateProduitInForm(
+                                                                        index,
+                                                                        "devise",
+                                                                        e.target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                className="w-full pl-10 pr-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none text-xs sm:text-base"
+                                                                required
+                                                            >
+                                                                {availableCurrencies.map(
+                                                                    (
+                                                                        currency,
+                                                                    ) => (
+                                                                        <option
+                                                                            key={
+                                                                                currency
+                                                                            }
+                                                                            value={
+                                                                                currency
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                currency
+                                                                            }
+                                                                        </option>
+                                                                    ),
+                                                                )}
+                                                            </select>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <Input
-                                                    label="Quantité"
-                                                    type="number"
-                                                    value={produit.quantite}
-                                                    onChange={(value) =>
-                                                        updateProduitInForm(
-                                                            index,
-                                                            "quantite",
-                                                            value,
-                                                        )
-                                                    }
-                                                    icon={Package}
-                                                    required
-                                                    min="1"
-                                                />
-                                                <div>
-                                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                                        Devise
-                                                    </label>
-                                                    <div className="relative">
-                                                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                                        <select
-                                                            value={
-                                                                produit.devise
-                                                            }
-                                                            onChange={(e) =>
-                                                                updateProduitInForm(
-                                                                    index,
-                                                                    "devise",
-                                                                    e.target
-                                                                        .value as Devise,
-                                                                )
-                                                            }
-                                                            className="w-full pl-10 pr-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
-                                                            required
-                                                        >
-                                                            {availableCurrencies.map(
-                                                                (currency) => (
-                                                                    <option
-                                                                        key={
-                                                                            currency
-                                                                        }
-                                                                        value={
-                                                                            currency
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            currency
-                                                                        }
-                                                                    </option>
-                                                                ),
-                                                            )}
-                                                        </select>
-                                                    </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <Input
+                                                        label={`Prix négocié (${produit.devise})`}
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={
+                                                            produit.prixNegocie
+                                                        }
+                                                        onChange={(value) =>
+                                                            updateProduitInForm(
+                                                                index,
+                                                                "prixNegocie",
+                                                                value,
+                                                            )
+                                                        }
+                                                        icon={DollarSign}
+                                                        required
+                                                        min="0.01"
+                                                        className="text-xs sm:text-base"
+                                                    />
+                                                    <Input
+                                                        label="Conditionnement"
+                                                        value={
+                                                            produit.conditionnement
+                                                        }
+                                                        onChange={(value) =>
+                                                            updateProduitInForm(
+                                                                index,
+                                                                "conditionnement",
+                                                                value,
+                                                            )
+                                                        }
+                                                        icon={Package}
+                                                        required
+                                                        className="text-xs sm:text-base"
+                                                    />
                                                 </div>
-                                                <Input
-                                                    label={`Prix négocié (${produit.devise})`}
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={produit.prixNegocie}
-                                                    onChange={(value) =>
-                                                        updateProduitInForm(
-                                                            index,
-                                                            "prixNegocie",
-                                                            value,
-                                                        )
-                                                    }
-                                                    icon={DollarSign}
-                                                    required
-                                                    min="0.01"
-                                                />
-                                                <Input
-                                                    label="Conditionnement"
-                                                    value={
-                                                        produit.conditionnement
-                                                    }
-                                                    onChange={(value) =>
-                                                        updateProduitInForm(
-                                                            index,
-                                                            "conditionnement",
-                                                            value,
-                                                        )
-                                                    }
-                                                    icon={Package}
-                                                    required
-                                                />
                                             </div>
                                         </div>
                                     ))}
@@ -1541,6 +1565,7 @@ const addProduitToForm = () => {
                                             formData.produits.length >=
                                                 produitsDisponibles.length
                                         }
+                                        className="w-full sm:w-auto"
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
                                         Ajouter un produit
@@ -1548,7 +1573,7 @@ const addProduitToForm = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                    <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                         Notes (optionnel)
                                     </label>
                                     <textarea
@@ -1560,7 +1585,7 @@ const addProduitToForm = () => {
                                             })
                                         }
                                         rows={3}
-                                        className="w-full px-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                        className="w-full px-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none text-xs sm:text-base"
                                         placeholder="Informations complémentaires..."
                                     />
                                 </div>
@@ -1568,10 +1593,10 @@ const addProduitToForm = () => {
                                 <div className="flex items-center">
                                     <DollarSign className="w-5 h-5 text-gray-400 mr-2" />
                                     <div>
-                                        <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                        <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                             Montant total estimé
                                         </label>
-                                        <p className="text-lg font-bold text-nexsaas-saas-green">
+                                        <p className="text-sm sm:text-lg font-bold text-nexsaas-saas-green">
                                             {calculateMontantTotalConverti()}{" "}
                                             {formData.produits[0]?.devise ||
                                                 "EUR"}
@@ -1579,15 +1604,19 @@ const addProduitToForm = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end space-x-4">
+                                <div className="flex flex-col sm:flex-row sm:justify-end space-y-3 sm:space-y-0 sm:space-x-4">
                                     <Button
                                         type="button"
                                         variant="outline"
                                         onClick={() => setShowForm(false)}
+                                        className="w-full sm:w-auto"
                                     >
                                         Annuler
                                     </Button>
-                                    <Button type="submit">
+                                    <Button
+                                        type="submit"
+                                        className="w-full sm:w-auto"
+                                    >
                                         Créer la commande
                                     </Button>
                                 </div>
@@ -1609,38 +1638,38 @@ const addProduitToForm = () => {
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-3 sm:p-6 w-full max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
+                            <h2 className="text-lg sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-6">
                                 Confirmer la Réception - {selectedOrder.id}
                             </h2>
 
-                            <div className="space-y-6">
+                            <div className="space-y-3 sm:space-y-6">
                                 {selectedOrder.items.map((item, index) => (
                                     <div
                                         key={index}
-                                        className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-4"
+                                        className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-3"
                                     >
-                                        <h3 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                        <h3 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4 text-sm sm:text-base">
                                             {item.name}
                                         </h3>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                     Quantité commandée
                                                 </label>
                                                 <input
                                                     type="number"
                                                     value={item.quantite}
                                                     disabled
-                                                    className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-nexsaas-deep-blue dark:text-nexsaas-pure-white"
+                                                    className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-xs sm:text-base"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                     Quantité reçue
                                                 </label>
                                                 <input
@@ -1675,12 +1704,12 @@ const addProduitToForm = () => {
                                                             }),
                                                         )
                                                     }
-                                                    className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                                    className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none text-xs sm:text-base"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                     Quantité défectueuse
                                                 </label>
                                                 <input
@@ -1716,7 +1745,7 @@ const addProduitToForm = () => {
                                                             }),
                                                         )
                                                     }
-                                                    className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                                    className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none text-xs sm:text-base"
                                                 />
                                             </div>
                                         </div>
@@ -1756,16 +1785,16 @@ const addProduitToForm = () => {
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-3 sm:p-6 w-full max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
+                            <h2 className="text-lg sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-6">
                                 Demande de Retour - {selectedOrder.id}
                             </h2>
 
-                            <div className="space-y-6">
+                            <div className="space-y-3 sm:space-y-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                    <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                         Motif du retour
                                     </label>
                                     <textarea
@@ -1777,13 +1806,13 @@ const addProduitToForm = () => {
                                             }))
                                         }
                                         rows={3}
-                                        className="w-full px-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                        className="w-full px-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none text-xs sm:text-base"
                                         placeholder="Décrivez le motif du retour..."
                                     />
                                 </div>
 
                                 <div>
-                                    <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                    <h3 className="text-sm sm:text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4">
                                         Articles à retourner
                                     </h3>
 
@@ -1798,10 +1827,10 @@ const addProduitToForm = () => {
                                             return (
                                                 <div
                                                     key={index}
-                                                    className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-4"
+                                                    className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-3"
                                                 >
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                                    <div className="flex justify-between items-center mb-2 sm:mb-3">
+                                                        <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-xs sm:text-base">
                                                             {item.name}
                                                         </h4>
                                                         <Button
@@ -1828,9 +1857,9 @@ const addProduitToForm = () => {
                                                         </Button>
                                                     </div>
 
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                         <div>
-                                                            <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                            <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                                 Quantité à
                                                                 retourner
                                                             </label>
@@ -1867,12 +1896,12 @@ const addProduitToForm = () => {
                                                                         }),
                                                                     );
                                                                 }}
-                                                                className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                                                className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none text-xs sm:text-base"
                                                             />
                                                         </div>
 
                                                         <div>
-                                                            <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                            <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                                 Motif spécifique
                                                             </label>
                                                             <input
@@ -1900,7 +1929,7 @@ const addProduitToForm = () => {
                                                                         }),
                                                                     );
                                                                 }}
-                                                                className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                                                className="w-full px-4 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none text-xs sm:text-base"
                                                                 placeholder="Ex: Écran cassé, défaut de fabrication..."
                                                             />
                                                         </div>
@@ -1950,27 +1979,27 @@ const addProduitToForm = () => {
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-3 sm:p-6 w-full max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <h2 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
+                            <h2 className="text-lg sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-6">
                                 Détails de la Commande - {selectedOrder.id}
                             </h2>
 
-                            <div className="space-y-8">
+                            <div className="space-y-4 sm:space-y-8">
                                 {/* Informations générales */}
                                 <div>
-                                    <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                    <h3 className="text-sm sm:text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4">
                                         Informations Générales
                                     </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         <div className="flex items-center">
                                             <PackageIcon className="w-5 h-5 text-gray-400 mr-2" />
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                     Identifiant
                                                 </label>
-                                                <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                                                <p className="text-nexsaas-vanta-black dark:text-gray-300 text-xs sm:text-base">
                                                     {selectedOrder.id}
                                                 </p>
                                             </div>
@@ -1978,11 +2007,11 @@ const addProduitToForm = () => {
                                         <div className="flex items-center">
                                             <CheckCircle className="w-5 h-5 text-gray-400 mr-2" />
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                     Statut
                                                 </label>
                                                 <span
-                                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
                                                         selectedOrder.status,
                                                     )}`}
                                                 >
@@ -1998,10 +2027,10 @@ const addProduitToForm = () => {
                                         <div className="flex items-center">
                                             <Calendar className="w-5 h-5 text-gray-400 mr-2" />
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                     Date de commande
                                                 </label>
-                                                <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                                                <p className="text-nexsaas-vanta-black dark:text-gray-300 text-xs sm:text-base">
                                                     {selectedOrder.orderDate}
                                                 </p>
                                             </div>
@@ -2009,10 +2038,10 @@ const addProduitToForm = () => {
                                         <div className="flex items-center">
                                             <Calendar className="w-5 h-5 text-gray-400 mr-2" />
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                     Date de livraison estimée
                                                 </label>
-                                                <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                                                <p className="text-nexsaas-vanta-black dark:text-gray-300 text-xs sm:text-base">
                                                     {selectedOrder.deliveryDate}
                                                 </p>
                                             </div>
@@ -2021,10 +2050,10 @@ const addProduitToForm = () => {
                                             <div className="flex items-center">
                                                 <Calendar className="w-5 h-5 text-gray-400 mr-2" />
                                                 <div>
-                                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                    <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                         Date de réception
                                                     </label>
-                                                    <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                                                    <p className="text-nexsaas-vanta-black dark:text-gray-300 text-xs sm:text-base">
                                                         {
                                                             selectedOrder.receivedDate
                                                         }
@@ -2035,10 +2064,10 @@ const addProduitToForm = () => {
                                         <div className="flex items-center">
                                             <DollarSign className="w-5 h-5 text-gray-400 mr-2" />
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                     Montant total
                                                 </label>
-                                                <p className="text-lg font-bold text-nexsaas-saas-green">
+                                                <p className="text-sm sm:text-lg font-bold text-nexsaas-saas-green">
                                                     {
                                                         selectedOrder.montantTotalConverti
                                                     }{" "}
@@ -2053,17 +2082,17 @@ const addProduitToForm = () => {
 
                                 {/* Fournisseur */}
                                 <div>
-                                    <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                    <h3 className="text-sm sm:text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4">
                                         Fournisseur
                                     </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         <div className="flex items-center">
                                             <Building className="w-5 h-5 text-gray-400 mr-2" />
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                     Nom
                                                 </label>
-                                                <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                                                <p className="text-nexsaas-vanta-black dark:text-gray-300 text-xs sm:text-base">
                                                     {selectedOrder.supplier.nom}
                                                 </p>
                                             </div>
@@ -2071,10 +2100,10 @@ const addProduitToForm = () => {
                                         <div className="flex items-center">
                                             <Mail className="w-5 h-5 text-gray-400 mr-2" />
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                     Email
                                                 </label>
-                                                <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                                                <p className="text-nexsaas-vanta-black dark:text-gray-300 text-xs sm:text-base">
                                                     {
                                                         selectedOrder.supplier
                                                             .email
@@ -2085,10 +2114,10 @@ const addProduitToForm = () => {
                                         <div className="flex items-center">
                                             <Phone className="w-5 h-5 text-gray-400 mr-2" />
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                     Téléphone
                                                 </label>
-                                                <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                                                <p className="text-nexsaas-vanta-black dark:text-gray-300 text-xs sm:text-base">
                                                     {
                                                         selectedOrder.supplier
                                                             .telephone
@@ -2099,10 +2128,10 @@ const addProduitToForm = () => {
                                         <div className="flex items-center">
                                             <AlertCircle className="w-5 h-5 text-gray-400 mr-2" />
                                             <div>
-                                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                <label className="block text-xs sm:text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
                                                     Supprimé
                                                 </label>
-                                                <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                                                <p className="text-nexsaas-vanta-black dark:text-gray-300 text-xs sm:text-base">
                                                     {selectedOrder.supplier
                                                         .isDeleted
                                                         ? "Oui"
@@ -2115,24 +2144,24 @@ const addProduitToForm = () => {
 
                                 {/* Articles */}
                                 <div>
-                                    <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                    <h3 className="text-sm sm:text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4">
                                         Articles
                                     </h3>
                                     {selectedOrder.items.map((item, index) => (
                                         <div
                                             key={index}
-                                            className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-4 mb-4"
+                                            className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-3 mb-3"
                                         >
-                                            <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                            <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4 text-sm sm:text-base">
                                                 {item.name}
                                             </h4>
 
                                             {/* Lot et Quantités */}
-                                            <div className="mb-4">
-                                                <h5 className="text-sm font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                            <div className="mb-3">
+                                                <h5 className="text-xs sm:text-sm font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                     Lot et Quantités
                                                 </h5>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs sm:text-sm">
                                                     <div className="flex items-center">
                                                         <PackageIcon className="w-5 h-5 text-gray-400 mr-2" />
                                                         <div>
@@ -2195,11 +2224,11 @@ const addProduitToForm = () => {
                                             </div>
 
                                             {/* Prix */}
-                                            <div className="mb-4">
-                                                <h5 className="text-sm font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                            <div className="mb-3">
+                                                <h5 className="text-xs sm:text-sm font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                     Prix
                                                 </h5>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs sm:text-sm">
                                                     <div className="flex items-center">
                                                         <DollarSign className="w-5 h-5 text-gray-400 mr-2" />
                                                         <div>
@@ -2263,10 +2292,10 @@ const addProduitToForm = () => {
 
                                             {/* Autres informations */}
                                             <div>
-                                                <h5 className="text-sm font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                <h5 className="text-xs sm:text-sm font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                     Autres informations
                                                 </h5>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs sm:text-sm">
                                                     <div className="flex items-center">
                                                         <FileText className="w-5 h-5 text-gray-400 mr-2" />
                                                         <div>
@@ -2368,10 +2397,10 @@ const addProduitToForm = () => {
                                 {/* Notes */}
                                 {selectedOrder.notes && (
                                     <div>
-                                        <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                        <h3 className="text-sm sm:text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4">
                                             Notes
                                         </h3>
-                                        <p className="text-nexsaas-vanta-black dark:text-gray-300 bg-nexsaas-light-gray dark:bg-gray-700 rounded-lg p-4">
+                                        <p className="text-nexsaas-vanta-black dark:text-gray-300 bg-nexsaas-light-gray dark:bg-gray-700 rounded-lg p-3 text-xs sm:text-base">
                                             {selectedOrder.notes}
                                         </p>
                                     </div>
@@ -2382,7 +2411,7 @@ const addProduitToForm = () => {
                                     (ret) => ret.orderId === selectedOrder.id,
                                 ).length > 0 && (
                                     <div>
-                                        <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
+                                        <h3 className="text-sm sm:text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4">
                                             Demandes de retour
                                         </h3>
                                         {returnRequests
@@ -2394,14 +2423,14 @@ const addProduitToForm = () => {
                                             .map((ret) => (
                                                 <div
                                                     key={ret.id}
-                                                    className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-4 mb-4"
+                                                    className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-3 mb-3"
                                                 >
-                                                    <div className="flex justify-between items-center mb-3">
-                                                        <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                                    <div className="flex justify-between items-center mb-2 sm:mb-3">
+                                                        <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm sm:text-base">
                                                             Retour {ret.id}
                                                         </h4>
                                                         <span
-                                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                                                                 ret.status ===
                                                                 "pending"
                                                                     ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400"
@@ -2431,7 +2460,7 @@ const addProduitToForm = () => {
                                                             </span>
                                                         </span>
                                                     </div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs sm:text-sm">
                                                         <div className="flex items-center">
                                                             <Calendar className="w-5 h-5 text-gray-400 mr-2" />
                                                             <div>
@@ -2454,8 +2483,8 @@ const addProduitToForm = () => {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="mt-4">
-                                                        <h5 className="text-sm font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                                    <div className="mt-3">
+                                                        <h5 className="text-xs sm:text-sm font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                                             Articles retournés
                                                         </h5>
                                                         {ret.items.map(
@@ -2477,7 +2506,7 @@ const addProduitToForm = () => {
                                                                         key={
                                                                             index
                                                                         }
-                                                                        className="text-sm text-nexsaas-vanta-black dark:text-gray-300"
+                                                                        className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300"
                                                                     >
                                                                         <p>
                                                                             {
