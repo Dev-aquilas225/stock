@@ -32,6 +32,7 @@ import DocumentsRequiredPage from './pages/DocumentsRequiredPage';
 import AccountPendingPage from './pages/AccountPendingPage';
 import SubscriptionInactivePage from './pages/SubscriptionInactivePage';
 import AgentsPage from './pages/modules/AgentsPage';
+import ReturnsPage from './pages/modules/ReturnsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 function AnimatedRoutes() {
@@ -74,6 +75,22 @@ function AnimatedRoutes() {
               element={
                 <ProtectedRoute>
                   <SupplyPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/returns"
+              element={
+                <ProtectedRoute>
+                  <ReturnsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/returns/new"
+              element={
+                <ProtectedRoute>
+                  <ReturnsPage />
                 </ProtectedRoute>
               }
             />
@@ -197,7 +214,6 @@ function AnimatedRoutes() {
                 </ProtectedRoute>
               }
             />
-            {/* 404 Page - Must be last */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>
