@@ -311,7 +311,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                             )}
                             {errorMessage?.includes("HTTPS") && (
                                 <p className="text-gray-300">
-                                    Veuillez accéder à ce site via HTTPS ou
+                                    Veuillez accéder à ce site via HTTPS ou,
                                     localhost.
                                 </p>
                             )}
