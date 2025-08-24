@@ -1,5 +1,11 @@
 {
     "schemaVersion": 2,
-    "appName": "portal-client",
-    "dockerfilePath": "./Dockerfile"
+    "appName": "portail-client",
+    "dockerfilePath": "./Dockerfile",
+    "serviceName": "nginx",
+    "ports": [
+        {
+            "containerPort": 80
+        }
+    ]
 }
