@@ -209,9 +209,8 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
                 </div>
                 <div class="qr-info">
                   <h3>${qr.productName}</h3>
-                  <p><strong>Numero:</strong> ${qr.id}</p>
-                  <p><strong>Série:</strong> ${qr.serialNumber}</p>
-                  <p><strong>Statut:</strong> ${qr.status}</p>
+                  <p>${qr.id}</p>
+                  ${qr.status === "ENDOMMAGE" ? `<p> ${qr.status}</p>` : ""}
                 </div>
               </div>
             `,
@@ -251,7 +250,6 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
             return;
         }
 
-        // Note: Implémentation réelle du PDF nécessiterait une bibliothèque comme jsPDF
         alert(
             "Téléchargement PDF non implémenté. Utilisez une bibliothèque comme jsPDF pour une implémentation complète.",
         );
@@ -275,7 +273,7 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-            }, index * 100); // Stagger downloads
+            }, index * 100);
         });
     };
 
@@ -414,7 +412,7 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
                                             onError={(e) => {
                                                 e.currentTarget.style.display =
                                                     "none";
-                                                e.currentTarget.style.display =
+                                                e.currentTarget.nextElementSibling!.style.display =
                                                     "flex";
                                             }}
                                         />
@@ -444,8 +442,7 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
                                             layout === "list" ? "text-left" : ""
                                         }`}
                                     >
-                                        <strong>Numero:</strong>{" "}
-                                        {qr.id}
+                                        <strong>Numero:</strong> {qr.id}
                                     </p>
                                     <p
                                         className={`text-sm text-nexsaas-vanta-black dark:text-gray-300 mb-1 ${
@@ -455,6 +452,7 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
                                         <strong>Série:</strong>{" "}
                                         {qr.serialNumber}
                                     </p>
+
                                     <p
                                         className={`text-sm text-nexsaas-vanta-black dark:text-gray-300 mb-2 ${
                                             layout === "list" ? "text-left" : ""

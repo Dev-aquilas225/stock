@@ -12,13 +12,16 @@ export interface Commande {
     montantTotal: string;
     montantTotalConverti: string;
     deviseConvertion: Devise;
+    isReceived: boolean;
+    retourInit: boolean;
+    retourEnd: boolean;
     creeLe: string;
     majLe: string;
 }
 
 export enum StatutCommande {
     BROUILLON = "BROUILLON",
-    VALIDEE = "VALIDEE",
+    VALIDEE = "VALIDEE",        
     REÇUE = "REÇUE",
     ANNULEE = "ANNULEE",
     CLOTUREE = "CLOTUREE",
@@ -49,10 +52,24 @@ export interface ProduitCommande {
     sku: string;
     lot: string;
     conditionnement: string;
+    reception: Reception | null;
+
+    quantiteRetournee: number;
+    dateRetour: string | null;
+    motifRetour: string | null;
+    statutRetour: string | null;
+}
+
+export interface Reception {
+    id: number;
     quantiteRecue: number;
     quantiteEndommage: number;
     dateReception: string | null;
     commentaireReception: string | null;
+}
+
+export interface Retour {
+    id: number;
     quantiteRetournee: number;
     dateRetour: string | null;
     motifRetour: string | null;
@@ -124,6 +141,43 @@ export const createCommande = async (
         const errorMessage =
             err.response?.data?.message ||
             "Erreur lors de la création de la commande";
+        throw new Error(errorMessage);
+    }
+};
+
+export interface UpdateCommandeStatutPayload {
+    statut: StatutCommande;
+    receptions?: {
+        produitCommandeId: number;
+        quantiteRecue: number;
+        quantiteEndommage: number;
+        dateReception: string;
+        commentaireReception?: string;
+    }[];
+}
+
+export const updateCommandeStatut = async (
+    commandeId: number,
+    data: UpdateCommandeStatutPayload,
+): Promise<Commande> => {
+    const token = localStorage.getItem("token");
+
+    try {
+        const response = await axiosClient.patch(
+            `/commandes/${commandeId}/statut`,
+            data,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            },
+        );
+
+        return response.data.data; // Ajuste selon la structure de réponse de ton backend
+    } catch (err: any) {
+        const errorMessage =
+            err.response?.data?.message ||
+            "Erreur lors de la mise à jour du statut de la commande";
         throw new Error(errorMessage);
     }
 };

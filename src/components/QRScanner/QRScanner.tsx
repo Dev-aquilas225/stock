@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Camera, X, Scan } from "lucide-react";
-import jsQR from "jsqr";
+import { Camera, X } from "lucide-react";
+import { BrowserQRCodeReader } from "@zxing/library";
 import Button from "../UI/Button";
 
 interface QRScannerProps {
@@ -12,45 +12,29 @@ interface QRScannerProps {
 
 const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
     const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-    const [isScanning, setIsScanning] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [scanTip, setScanTip] = useState<string | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const animationFrameId = useRef<number | null>(null);
+    const codeReader = useRef<BrowserQRCodeReader | null>(null);
+    const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const isScanningRef = useRef<boolean>(false);
 
     useEffect(() => {
         console.log("QRScanner mounted, isOpen:", isOpen);
-        if (isOpen) {
+        if (isOpen && !codeReader.current) {
+            codeReader.current = new BrowserQRCodeReader();
             checkBrowserCompatibility();
         }
         return () => {
             console.log("QRScanner unmounting");
-            stopCamera();
-            if (animationFrameId.current) {
-                cancelAnimationFrame(animationFrameId.current);
+            stopScanner();
+            if (scanTimeoutRef.current) {
+                clearTimeout(scanTimeoutRef.current);
             }
         };
     }, [isOpen]);
 
     const checkBrowserCompatibility = () => {
-        // Check for secure context (HTTPS or localhost)
-        const isSecureContext =
-            window.isSecureContext !== false &&
-            (window.location.protocol === "https:" ||
-                window.location.hostname === "localhost" ||
-                window.location.hostname === "127.0.0.1");
-        if (!isSecureContext) {
-            console.error(
-                "Insecure context detected. Camera access requires HTTPS or localhost.",
-            );
-            setErrorMessage(
-                "Accès à la caméra requis : veuillez utiliser HTTPS ou localhost.",
-            );
-            setHasPermission(false);
-            return;
-        }
-
-        // Check for getUserMedia support
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             console.error("getUserMedia is not supported in this browser");
             setErrorMessage(
@@ -59,29 +43,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
             setHasPermission(false);
             return;
         }
-
-        checkCameraAvailability();
-    };
-
-    const checkCameraAvailability = async () => {
-        try {
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(
-                (device) => device.kind === "videoinput",
-            );
-            if (videoDevices.length === 0) {
-                console.error("No video input devices found");
-                setErrorMessage("Aucune caméra détectée sur cet appareil.");
-                setHasPermission(false);
-            } else {
-                console.log("Available cameras:", videoDevices);
-                requestCameraPermission();
-            }
-        } catch (err) {
-            console.error("Error checking devices:", err);
-            setErrorMessage("Erreur lors de la vérification des appareils.");
-            setHasPermission(false);
-        }
+        requestCameraPermission();
     };
 
     const requestCameraPermission = async () => {
@@ -89,15 +51,16 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: "environment", // Prefer rear camera
-                    width: { ideal: 1280 }, // Optimize for performance
+                    facingMode: "environment",
+                    width: { ideal: 1280 },
                     height: { ideal: 720 },
                 },
             });
             console.log("Camera permission granted, stream obtained");
             setHasPermission(true);
             setErrorMessage(null);
-            if (videoRef.current) {
+            setScanTip(null);
+            if (videoRef.current && codeReader.current) {
                 videoRef.current.srcObject = stream;
                 videoRef.current.onloadedmetadata = () => {
                     if (videoRef.current) {
@@ -108,9 +71,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                             );
                         });
                     }
-                    if (isScanning) {
-                        scanQRCode();
-                    }
+                    startScanning();
                 };
             }
         } catch (err: any) {
@@ -127,13 +88,79 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                     "Contexte sécurisé requis (utilisez HTTPS ou localhost).",
                 );
             } else {
-                setErrorMessage(`Erreur: ${err.message}`);
+                setErrorMessage(`Erreur: ${err.message || "Erreur inconnue"}`);
             }
         }
     };
 
-    const stopCamera = () => {
-        console.log("Stopping camera...");
+    const startScanning = async () => {
+        if (!videoRef.current || !codeReader.current || isScanningRef.current) {
+            console.log("Scanning already in progress or components not ready");
+            return;
+        }
+
+        isScanningRef.current = true;
+        try {
+            console.log("Starting QR code scanning...");
+            await codeReader.current.decodeFromVideoDevice(
+                null, // Auto-select camera
+                videoRef.current,
+                (result, error) => {
+                    if (result) {
+                        console.log("QR Code detected:", result.getText());
+                        onScan(result.getText());
+                        // Keep scanner open for multiple scans
+                    }
+                    if (error) {
+                        // Safely handle errors
+                        const errorMessage = error?.message || String(error);
+                        if (
+                            errorMessage.includes("No MultiFormat Readers") ||
+                            errorMessage.includes("No QR code found")
+                        ) {
+                            console.log("No valid QR code found in frame");
+                        } else {
+                            console.error(
+                                "Scanning error:",
+                                errorMessage,
+                                error,
+                            );
+                        }
+                    }
+                },
+            );
+
+            // Set timeout for user feedback if no QR code is detected
+            scanTimeoutRef.current = setTimeout(() => {
+                setScanTip(
+                    "Aucun code QR détecté. Essayez de rapprocher la caméra, d'améliorer l'éclairage ou de tapoter l'écran pour ajuster la mise au point.",
+                );
+                isScanningRef.current = false;
+                stopScanner();
+                // Restart scanning after a brief pause
+                setTimeout(() => {
+                    if (isOpen && videoRef.current) {
+                        startScanning();
+                    }
+                }, 5000);
+            }, 20000);
+        } catch (err: any) {
+            console.error("Scanning failed:", err.message || err);
+            setErrorMessage(
+                `Erreur lors du scan du QR code: ${
+                    err.message || "Erreur inconnue"
+                }`,
+            );
+            isScanningRef.current = false;
+        }
+    };
+
+    const stopScanner = () => {
+        console.log("Stopping scanner...");
+        if (codeReader.current) {
+            codeReader.current.reset();
+            codeReader.current = null; // Ensure reader is recreated on next mount
+        }
         if (videoRef.current && videoRef.current.srcObject) {
             const tracks = (
                 videoRef.current.srcObject as MediaStream
@@ -141,55 +168,12 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
             tracks.forEach((track) => track.stop());
             videoRef.current.srcObject = null;
         }
-        if (animationFrameId.current) {
-            cancelAnimationFrame(animationFrameId.current);
-            animationFrameId.current = null;
+        if (scanTimeoutRef.current) {
+            clearTimeout(scanTimeoutRef.current);
+            scanTimeoutRef.current = null;
         }
-    };
-
-    const scanQRCode = () => {
-        if (!videoRef.current || !canvasRef.current || !isScanning) return;
-
-        const canvas = canvasRef.current;
-        const context = canvas.getContext("2d");
-        if (!context) {
-            console.error("Failed to get canvas context");
-            setErrorMessage(
-                "Erreur: Impossible d'accéder au contexte du canvas.",
-            );
-            return;
-        }
-
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-        context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        const imageData = context.getImageData(
-            0,
-            0,
-            canvas.width,
-            canvas.height,
-        );
-
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: "dontInvert",
-        });
-
-        if (code) {
-            console.log("QR Code detected:", code.data);
-            onScan(code.data);
-            setIsScanning(false);
-            return;
-        }
-
-        animationFrameId.current = requestAnimationFrame(scanQRCode);
-    };
-
-    const startScanning = () => {
-        if (!isScanning && hasPermission) {
-            console.log("Starting QR code scanning");
-            setIsScanning(true);
-            scanQRCode();
-        }
+        setScanTip(null);
+        isScanningRef.current = false;
     };
 
     if (!isOpen) return null;
@@ -219,17 +203,14 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                             ref={videoRef}
                             autoPlay
                             playsInline
-                            muted // Ensure compatibility with iOS Safari
+                            muted
                             className="w-full h-full object-cover"
                         />
-                        <canvas ref={canvasRef} style={{ display: "none" }} />
 
                         {/* Scanning Overlay */}
                         <div className="absolute inset-0 flex items-center justify-center">
                             <motion.div
-                                animate={
-                                    isScanning ? { scale: [1, 1.1, 1] } : {}
-                                }
+                                animate={{ scale: [1, 1.1, 1] }}
                                 transition={{ duration: 1, repeat: Infinity }}
                                 className="w-64 h-64 border-4 border-nexsaas-saas-green rounded-lg relative"
                             >
@@ -238,45 +219,23 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white"></div>
                                 <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white"></div>
 
-                                {isScanning && (
-                                    <motion.div
-                                        animate={{ y: [0, 240, 0] }}
-                                        transition={{
-                                            duration: 2,
-                                            repeat: Infinity,
-                                        }}
-                                        className="absolute top-0 left-0 w-full h-1 bg-nexsaas-saas-green"
-                                    />
-                                )}
+                                <motion.div
+                                    animate={{ y: [0, 240, 0] }}
+                                    transition={{
+                                        duration: 2,
+                                        repeat: Infinity,
+                                    }}
+                                    className="absolute top-0 left-0 w-full h-1 bg-nexsaas-saas-green"
+                                />
                             </motion.div>
                         </div>
 
-                        {/* Scan Button */}
-                        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2">
-                            <Button
-                                onClick={startScanning}
-                                disabled={isScanning}
-                                className="bg-nexsaas-saas-green hover:bg-green-600 text-white px-8 py-4 rounded-full"
-                            >
-                                {isScanning ? (
-                                    <motion.div
-                                        animate={{ rotate: 360 }}
-                                        transition={{
-                                            duration: 1,
-                                            repeat: Infinity,
-                                            ease: "linear",
-                                        }}
-                                    >
-                                        <Scan className="w-6 h-6" />
-                                    </motion.div>
-                                ) : (
-                                    <>
-                                        <Camera className="w-6 h-6 mr-2" />
-                                        Scanner
-                                    </>
-                                )}
-                            </Button>
-                        </div>
+                        {/* Scan Tips */}
+                        {scanTip && (
+                            <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-black/70 text-white p-4 rounded-lg max-w-sm text-center">
+                                <p>{scanTip}</p>
+                            </div>
+                        )}
                     </>
                 ) : (
                     <div className="flex-1 flex items-center justify-center bg-gray-900">
@@ -290,7 +249,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                             <p className="text-gray-300 mb-6">
                                 {hasPermission === false
                                     ? errorMessage ||
-                                      "Veuillez autoriser l'accès à la caméra pour scanner les codes QR"
+                                      "Veuillez autoriser l'accès à la caméra pour scanner les QR codes"
                                     : "Vérification de l'accès à la caméra en cours..."}
                             </p>
                             {hasPermission === false &&
@@ -311,7 +270,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                             )}
                             {errorMessage?.includes("HTTPS") && (
                                 <p className="text-gray-300">
-                                    Veuillez accéder à ce site via HTTPS ou,
+                                    Veuillez accéder à ce site via HTTPS ou
                                     localhost.
                                 </p>
                             )}

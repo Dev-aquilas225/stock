@@ -23,6 +23,7 @@ import {
     ArrowUp,
     ArrowDown,
     Minus,
+    Loader2,
 } from "lucide-react";
 import Card from "../../components/UI/Card";
 import Button from "../../components/UI/Button";
@@ -34,9 +35,9 @@ import {
     Commande,
     ProduitCommande,
     StatutCommande,
-    Fournisseur,
     createCommande,
     CreateCommandePayload,
+    updateCommandeStatut,
 } from "../../api/commandeApi";
 import {
     getFournisseurs,
@@ -46,37 +47,53 @@ import {
 } from "../../api/fournisseurApi";
 import { Devise } from "../../types";
 
-interface OrderItem {
-    prixBase: string;
-    prixNegocie: string;
-    quantite: number;
-    montantTotal: string;
-    devise: Devise;
-    montantTotalConverti: string;
-    deviseConvertion: Devise;
-    sku: string;
-    lot: string;
-    conditionnement: string;
-    quantiteRecue: number;
-    quantiteEndommage: number;
-    dateReception: string | null;
-    commentaireReception: string | null;
-    quantiteRetournee: number;
-    dateRetour: string | null;
-    motifRetour: string | null;
-    statutRetour: string | null;
-    name: string;
-}
-
 interface Order {
+    commandeId: number;
     id: string;
     supplier: {
+        id: number;
         nom: string;
-        email: string;
+        adresse: string;
         telephone: string;
+        email: string;
+        categorie: string;
+        delaiLivraison: string;
         isDeleted: boolean;
     };
-    items: OrderItem[];
+    items: {
+        id: number;
+        produit: {
+            id: number;
+            nom: string;
+            prix: string;
+            conditionnement: string;
+            delaiApprovisionnement: string;
+            devise: Devise;
+            sku: string;
+            image: string | null;
+        };
+        prixBase: string;
+        prixNegocie: string;
+        quantite: number;
+        montantTotal: string;
+        devise: Devise;
+        montantTotalConverti: string;
+        deviseConvertion: Devise;
+        sku: string;
+        lot: string;
+        conditionnement: string;
+        reception: {
+            id: number;
+            quantiteRecue: number | null;
+            quantiteEndommage: number | null;
+            dateReception: string | null;
+            commentaireReception: string | null;
+        } | null;
+        quantiteRetournee: number;
+        dateRetour: string | null;
+        motifRetour: string | null;
+        statutRetour: string | null;
+    }[];
     montantTotalConverti: string;
     deviseConvertion: Devise;
     status: StatutCommande;
@@ -112,7 +129,17 @@ const mapStatutCommandeToOrderStatus = (
 
 const mapCommandeToOrder = (commande: Commande): Order => {
     const items = commande.produits.map((produit: ProduitCommande) => ({
-        name: produit.produit.nom,
+        id: produit.id,
+        produit: {
+            id: produit.produit.id,
+            nom: produit.produit.nom,
+            prix: produit.produit.prix,
+            conditionnement: produit.produit.conditionnement,
+            delaiApprovisionnement: produit.produit.delaiApprovisionnement,
+            devise: produit.produit.devise,
+            sku: produit.produit.sku,
+            image: produit.produit.image,
+        },
         prixBase: produit.prixBase,
         prixNegocie: produit.prixNegocie,
         quantite: produit.quantite,
@@ -123,10 +150,7 @@ const mapCommandeToOrder = (commande: Commande): Order => {
         sku: produit.sku,
         lot: produit.lot,
         conditionnement: produit.conditionnement,
-        quantiteRecue: produit.quantiteRecue,
-        quantiteEndommage: produit.quantiteEndommage,
-        dateReception: produit.dateReception,
-        commentaireReception: produit.commentaireReception,
+        reception: produit.reception,
         quantiteRetournee: produit.quantiteRetournee,
         dateRetour: produit.dateRetour,
         motifRetour: produit.motifRetour,
@@ -134,26 +158,28 @@ const mapCommandeToOrder = (commande: Commande): Order => {
     }));
 
     return {
+        commandeId: commande.id,
         id: commande.reference,
         supplier: {
+            id: commande.fournisseur.id,
             nom: commande.fournisseur.nom,
-            email: commande.fournisseur.email,
+            adresse: commande.fournisseur.adresse,
             telephone: commande.fournisseur.telephone,
+            email: commande.fournisseur.email,
+            categorie: commande.fournisseur.categorie,
+            delaiLivraison: commande.fournisseur.delaiLivraison,
             isDeleted: commande.fournisseur.isDeleted,
         },
         items,
-        montantTotalConverti: items
-            .reduce(
-                (sum, item) => sum + parseFloat(item.montantTotalConverti),
-                0,
-            )
-            .toFixed(2),
-        deviseConvertion: items[0]?.deviseConvertion || "EUR",
+        montantTotalConverti: commande.montantTotalConverti,
+        deviseConvertion: commande.deviseConvertion,
         status: mapStatutCommandeToOrderStatus(commande.statut),
         orderDate: commande.creeLe.split("T")[0],
         deliveryDate: commande.dateLivraisonEstimee.split("T")[0],
-        receivedDate: commande.produits.some((p) => p.dateReception)
-            ? commande.produits[0].dateReception?.split("T")[0]
+        receivedDate: commande.produits.some((p) => p.reception?.dateReception)
+            ? commande.produits
+                  .find((p) => p.reception?.dateReception)
+                  ?.reception?.dateReception?.split("T")[0]
             : undefined,
         notes: commande.note,
     };
@@ -161,6 +187,7 @@ const mapCommandeToOrder = (commande: Commande): Order => {
 
 const SupplyPage: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
     const [showReceiveModal, setShowReceiveModal] = useState(false);
     const [showReturnModal, setShowReturnModal] = useState(false);
     const [showDetailModal, setShowDetailModal] = useState(false);
@@ -178,6 +205,10 @@ const SupplyPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingFournisseurs, setIsLoadingFournisseurs] = useState(false);
     const [isLoadingProduits, setIsLoadingProduits] = useState(false);
+    const [loadingOrders, setLoadingOrders] = useState<Set<string>>(new Set());
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isLoadingReceive, setIsLoadingReceive] = useState(false);
+    const [isLoadingReturn, setIsLoadingReturn] = useState(false);
 
     const [formData, setFormData] = useState({
         fournisseurId: "",
@@ -197,7 +228,7 @@ const SupplyPage: React.FC = () => {
     const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
 
     // Available currencies
-    const availableCurrencies: Devise[] = ["EUR", "USD", "GBP", "JPY", "XOF"];
+    const availableCurrencies: Devise[] = Object.values(Devise);
 
     const getLocalToday = () => {
         const today = new Date();
@@ -207,13 +238,27 @@ const SupplyPage: React.FC = () => {
         return `${year}-${month}-${day}`;
     };
 
+    const refreshOrders = async () => {
+        setIsLoading(true);
+        try {
+            const commandes = await getCommandes();
+            const mappedOrders = commandes.map(mapCommandeToOrder);
+            setOrders(mappedOrders);
+        } catch (error: any) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message:
+                    error.message || "Erreur lors du chargement des commandes.",
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     useEffect(() => {
         const fetchInitialData = async () => {
             try {
-                setIsLoading(true);
-                const commandes = await getCommandes();
-                const mappedOrders = commandes.map(mapCommandeToOrder);
-                setOrders(mappedOrders);
                 setIsLoadingFournisseurs(true);
                 const fournisseursData = await getFournisseurs();
                 setFournisseurs(fournisseursData.filter((f) => !f.isDeleted));
@@ -232,12 +277,12 @@ const SupplyPage: React.FC = () => {
                         "Erreur lors du chargement des données.",
                 });
             } finally {
-                setIsLoading(false);
                 setIsLoadingFournisseurs(false);
             }
         };
 
         fetchInitialData();
+        refreshOrders();
     }, [showToast]);
 
     useEffect(() => {
@@ -468,6 +513,8 @@ const SupplyPage: React.FC = () => {
             return;
         }
 
+        setIsSubmitting(true);
+
         try {
             const payload: CreateCommandePayload = {
                 fournisseurId: parseInt(formData.fournisseurId),
@@ -482,110 +529,60 @@ const SupplyPage: React.FC = () => {
                 })),
             };
 
-            console.log("Payload sent to createCommande:", payload);
-            const response = await createCommande(payload);
-            console.log("Response from createCommande:", response);
+            let response;
+            let reference;
+            if (isEditing && selectedOrder) {
+                console.log("Payload sent to updateCommande:", payload);
+                response = await updateCommande(
+                    selectedOrder.commandeId,
+                    payload,
+                );
+                console.log("Response from updateCommande:", response);
+                reference = response.data?.data?.reference || selectedOrder.id;
+                showToast({
+                    type: "success",
+                    title: "Commande mise à jour",
+                    message: `La commande ${reference} a été mise à jour avec succès`,
+                });
+                logActivity({
+                    type: "update",
+                    module: "Approvisionnements",
+                    description: `Commande mise à jour: ${reference}`,
+                    metadata: {
+                        orderId: reference,
+                        supplier:
+                            response.data?.data?.fournisseur?.nom ||
+                            "Fournisseur inconnu",
+                    },
+                });
+            } else {
+                console.log("Payload sent to createCommande:", payload);
+                response = await createCommande(payload);
+                console.log("Response from createCommande:", response);
+                reference = response.data?.data?.reference || "CMD-UNKNOWN";
+                showToast({
+                    type: "success",
+                    title: "Commande créée",
+                    message: `La commande ${reference} a été créée avec succès`,
+                });
+                logActivity({
+                    type: "create",
+                    module: "Approvisionnements",
+                    description: `Nouvelle commande créée: ${reference}`,
+                    metadata: {
+                        orderId: reference,
+                        supplier:
+                            response.data?.data?.fournisseur?.nom ||
+                            "Fournisseur inconnu",
+                    },
+                });
+            }
 
-            // Fetch updated commands list
-            const updatedCommands = await getCommandes();
-            console.log("Updated commands:", updatedCommands);
-
-            // Assuming getCommandes returns an array of Commande objects
-            const newOrders = updatedCommands.map((commande: Commande) => ({
-                id: commande.reference || "CMD-UNKNOWN",
-                supplier: {
-                    nom: commande.fournisseur?.nom || "Fournisseur inconnu",
-                    email: commande.fournisseur?.email || "",
-                    telephone: commande.fournisseur?.telephone || "",
-                    isDeleted: commande.fournisseur?.isDeleted || false,
-                },
-                items: Array.isArray(commande.produits)
-                    ? commande.produits.map((produit: ProduitCommande) => ({
-                          name: produit.produit?.nom || "Produit inconnu",
-                          prixBase: produit.prixBase || "0",
-                          prixNegocie: produit.prixNegocie || "0",
-                          quantite: produit.quantite || 0,
-                          montantTotal: produit.montantTotal || "0",
-                          devise: produit.devise || "EUR",
-                          montantTotalConverti:
-                              produit.montantTotalConverti || "0",
-                          deviseConvertion: produit.deviseConvertion || "EUR",
-                          sku: produit.sku || "",
-                          lot: produit.lot || "",
-                          conditionnement: produit.conditionnement || "",
-                          quantiteRecue: produit.quantiteRecue || 0,
-                          quantiteEndommage: produit.quantiteEndommage || 0,
-                          dateReception: produit.dateReception || null,
-                          commentaireReception:
-                              produit.commentaireReception || null,
-                          quantiteRetournee: produit.quantiteRetournee || 0,
-                          dateRetour: produit.dateRetour || null,
-                          motifRetour: produit.motifRetour || null,
-                          statutRetour: produit.statutRetour || null,
-                      }))
-                    : [],
-                montantTotalConverti:
-                    Array.isArray(commande.produits) && commande.produits.length
-                        ? commande.produits
-                              .reduce(
-                                  (sum, item) =>
-                                      sum +
-                                      parseFloat(
-                                          item.montantTotalConverti || "0",
-                                      ),
-                                  0,
-                              )
-                              .toFixed(2)
-                        : "0.00",
-                deviseConvertion:
-                    Array.isArray(commande.produits) &&
-                    commande.produits[0]?.deviseConvertion
-                        ? commande.produits[0].deviseConvertion
-                        : "EUR",
-                status: mapStatutCommandeToOrderStatus(
-                    commande.statut || StatutCommande.BROUILLON,
-                ),
-                orderDate: commande.creeLe
-                    ? commande.creeLe.split("T")[0]
-                    : new Date().toISOString().split("T")[0],
-                deliveryDate: commande.dateLivraisonEstimee
-                    ? commande.dateLivraisonEstimee.split("T")[0]
-                    : new Date().toISOString().split("T")[0],
-                receivedDate:
-                    Array.isArray(commande.produits) &&
-                    commande.produits.some((p) => p.dateReception)
-                        ? commande.produits
-                              .find((p) => p.dateReception)
-                              ?.dateReception?.split("T")[0]
-                        : undefined,
-                notes: commande.note,
-            }));
-
-            setOrders(newOrders);
-
-            logActivity({
-                type: "create",
-                module: "Approvisionnements",
-                description: `Nouvelle commande créée: ${
-                    response.data?.data?.reference || "CMD-UNKNOWN"
-                }`,
-                metadata: {
-                    orderId: response.data?.data?.reference || "CMD-UNKNOWN",
-                    supplier:
-                        response.data?.data?.fournisseur?.nom ||
-                        "Fournisseur inconnu",
-                },
-            });
-
-            showToast({
-                type: "success",
-                title: "Commande créée",
-                message: `La commande ${
-                    response.data?.data?.reference || "CMD-UNKNOWN"
-                } a été créée avec succès`,
-            });
+            await refreshOrders();
 
             setShowForm(false);
+            setIsEditing(false);
+            setSelectedOrder(null);
             setFormData({
                 fournisseurId: "",
                 dateLivraisonEstimee: "",
@@ -599,9 +596,32 @@ const SupplyPage: React.FC = () => {
                 title: "Erreur",
                 message:
                     error.message ||
-                    "Erreur lors de la création de la commande.",
+                    "Erreur lors de la " +
+                        (isEditing ? "mise à jour" : "création") +
+                        " de la commande.",
             });
+        } finally {
+            setIsSubmitting(false);
         }
+    };
+
+    const handleShowEdit = (order: Order) => {
+        setSelectedOrder(order);
+        setFormData({
+            fournisseurId: order.supplier.id.toString(),
+            dateLivraisonEstimee: order.deliveryDate,
+            notes: order.notes || "",
+            produits: order.items.map((item) => ({
+                produitId: item.produit.id,
+                nom: item.produit.nom,
+                prixNegocie: item.prixNegocie,
+                quantite: item.quantite.toString(),
+                conditionnement: item.conditionnement,
+                devise: item.devise,
+            })),
+        });
+        setIsEditing(true);
+        setShowForm(true);
     };
 
     const handleReceiveOrder = (order: Order) => {
@@ -611,72 +631,69 @@ const SupplyPage: React.FC = () => {
         } = {};
         order.items.forEach((item, index) => {
             initialReceiveData[index.toString()] = {
-                received: item.quantite - item.quantiteRecue,
-                defective: 0,
+                received: item.reception?.quantiteRecue || 0,
+                defective: item.reception?.quantiteEndommage || 0,
             };
         });
         setReceiveData(initialReceiveData);
         setShowReceiveModal(true);
     };
 
-    const confirmReceive = () => {
+    const confirmReceive = async () => {
         if (!selectedOrder) return;
 
-        const updatedOrders = orders.map((order) => {
-            if (order.id === selectedOrder.id) {
-                const updatedItems = order.items.map((item, index) => {
-                    const receiveInfo = receiveData[index.toString()];
-                    if (receiveInfo) {
-                        return {
-                            ...item,
-                            quantiteRecue:
-                                item.quantiteRecue + receiveInfo.received,
-                            quantiteEndommage:
-                                item.quantiteEndommage + receiveInfo.defective,
-                            dateReception: new Date().toISOString(),
-                            commentaireReception:
-                                receiveInfo.defective > 0
-                                    ? "Réception avec produits défectueux"
-                                    : "Réception complète",
-                        };
-                    }
-                    return item;
-                });
+        setIsLoadingReceive(true);
 
-                const allReceived = updatedItems.every(
-                    (item) => item.quantiteRecue >= item.quantite,
-                );
-
-                return {
-                    ...order,
-                    items: updatedItems,
-                    status: allReceived
-                        ? StatutCommande.CLOTUREE
-                        : StatutCommande.REÇUE,
-                    receivedDate: new Date().toISOString().split("T")[0],
+        try {
+            const receptions = selectedOrder.items.map((item, index) => {
+                const receiveInfo = receiveData[index.toString()] || {
+                    received: 0,
+                    defective: 0,
                 };
-            }
-            return order;
-        });
+                return {
+                    produitCommandeId: item.id,
+                    quantiteRecue: receiveInfo.received,
+                    quantiteEndommage: receiveInfo.defective,
+                    dateReception: new Date().toISOString(),
+                    commentaireReception:
+                        receiveInfo.defective > 0
+                            ? "Réception avec produits défectueux"
+                            : "Réception complète",
+                };
+            });
 
-        setOrders(updatedOrders);
+            await updateCommandeStatut(selectedOrder.commandeId, {
+                statut: StatutCommande.REÇUE,
+                receptions,
+            });
 
-        logActivity({
-            type: "update",
-            module: "Approvisionnements",
-            description: `Réception confirmée pour la commande ${selectedOrder.id}`,
-            metadata: { orderId: selectedOrder.id, receiveData },
-        });
+            await refreshOrders();
 
-        showToast({
-            type: "success",
-            title: "Réception confirmée",
-            message: `La réception de la commande ${selectedOrder.id} a été enregistrée`,
-        });
+            logActivity({
+                type: "update",
+                module: "Approvisionnements",
+                description: `Réception mise à jour pour la commande ${selectedOrder.id}`,
+                metadata: { orderId: selectedOrder.id, receiveData },
+            });
 
-        setShowReceiveModal(false);
-        setSelectedOrder(null);
-        setReceiveData({});
+            showToast({
+                type: "success",
+                title: "Réception mise à jour",
+                message: `La réception de la commande ${selectedOrder.id} a été mise à jour`,
+            });
+        } catch (error: any) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message:
+                    error.message ||
+                    "Erreur lors de la mise à jour de la réception.",
+            });
+        } finally {
+            setIsLoadingReceive(false);
+            setShowReceiveModal(false);
+            setReceiveData({});
+        }
     };
 
     const handleReturnRequest = (order: Order) => {
@@ -684,10 +701,10 @@ const SupplyPage: React.FC = () => {
         setReturnData({
             reason: "",
             items: order.items
-                .filter((item) => item.quantiteEndommage > 0)
+                .filter((item) => item.reception?.quantiteEndommage || 0 > 0)
                 .map((item, index) => ({
                     itemId: index.toString(),
-                    quantity: item.quantiteEndommage,
+                    quantity: item.reception?.quantiteEndommage || 0,
                     reason: "Produit défectueux",
                 })),
         });
@@ -695,7 +712,11 @@ const SupplyPage: React.FC = () => {
     };
 
     const submitReturnRequest = () => {
-        if (!selectedOrder || returnData.items.length === 0) return;
+        setIsLoadingReturn(true);
+        if (!selectedOrder || returnData.items.length === 0) {
+            setIsLoadingReturn(false);
+            return;
+        }
 
         const newReturn: ReturnRequest = {
             id: `RET-${String(returnRequests.length + 1).padStart(3, "0")}`,
@@ -721,30 +742,56 @@ const SupplyPage: React.FC = () => {
             message: `La demande de retour ${newReturn.id} a été envoyée au fournisseur`,
         });
 
+        setIsLoadingReturn(false);
         setShowReturnModal(false);
         setSelectedOrder(null);
         setReturnData({ reason: "", items: [] });
     };
 
-    const updateOrderStatus = (orderId: string, newStatus: StatutCommande) => {
-        setOrders((prev) =>
-            prev.map((order) =>
-                order.id === orderId ? { ...order, status: newStatus } : order,
-            ),
-        );
+    const updateOrderStatus = async (
+        orderId: string,
+        newStatus: StatutCommande,
+    ) => {
+        const order = orders.find((o) => o.id === orderId);
+        if (!order) return;
 
-        logActivity({
-            type: "update",
-            module: "Approvisionnements",
-            description: `Statut de la commande ${orderId} mis à jour: ${newStatus}`,
-            metadata: { orderId, newStatus },
-        });
+        setLoadingOrders((prev) => new Set([...prev, orderId]));
 
-        showToast({
-            type: "success",
-            title: "Statut mis à jour",
-            message: `Le statut de la commande ${orderId} a été mis à jour`,
-        });
+        try {
+            await updateCommandeStatut(order.commandeId, { statut: newStatus });
+
+            await refreshOrders();
+
+            logActivity({
+                type: "update",
+                module: "Approvisionnements",
+                description: `Statut de la commande ${orderId} mis à jour: ${newStatus}`,
+                metadata: { orderId, newStatus },
+            });
+
+            showToast({
+                type: "success",
+                title: "Statut mis à jour",
+                message: `Le statut de la commande ${orderId} a été mis à jour`,
+            });
+        } catch (error: any) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message:
+                    error.message || "Erreur lors de la mise à jour du statut.",
+            });
+        } finally {
+            setLoadingOrders((prev) => {
+                const newSet = new Set(prev);
+                newSet.delete(orderId);
+                return newSet;
+            });
+        }
+    };
+
+    const closeOrder = (orderId: string) => {
+        updateOrderStatus(orderId, StatutCommande.CLOTUREE);
     };
 
     const handleShowDetails = (order: Order) => {
@@ -800,23 +847,23 @@ const SupplyPage: React.FC = () => {
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}
-                    className="mb-8"
+                    className="mb-4"
                 >
-                    <div className="flex items-center mb-4">
-                        <Link to="/dashboard" className="mr-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Link to="/dashboard">
                             <Button variant="ghost" size="sm">
-                                <ArrowLeft className="w-4 h-4 mr-2" />
+                                <ArrowLeft className="w-3 h-3 mr-1" />
                                 Retour
                             </Button>
                         </Link>
-                        <div className="p-3 bg-blue-500 rounded-lg mr-4">
-                            <Package className="w-8 h-8 text-white" />
+                        <div className="p-2 bg-blue-500 rounded-lg">
+                            <Package className="w-6 h-6 text-white" />
                         </div>
-                        <div>
-                            <h1 className="text-3xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                        <div className="flex-1 min-w-0">
+                            <h1 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white truncate">
                                 Gestion des Approvisionnements
                             </h1>
-                            <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                            <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300 truncate">
                                 Créez, suivez et gérez vos commandes
                                 fournisseurs
                             </p>
@@ -838,13 +885,13 @@ const SupplyPage: React.FC = () => {
                             initial={{ opacity: 0, y: 30 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6, delay: 0.2 }}
-                            className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-4 sm:gap-6 mb-8"
+                            className="flex overflow-x-auto gap-2 mb-4 pb-2 sm:grid sm:grid-cols-3 md:grid-cols-5 sm:gap-4"
                         >
-                            <Card className="text-center p-3 sm:p-4">
-                                <div className="p-2 sm:p-3 bg-yellow-500/10 rounded-lg inline-block mb-2 sm:mb-3">
-                                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-500" />
+                            <Card className="text-center p-2 min-w-[100px] sm:p-3">
+                                <div className="p-1 bg-yellow-500/10 rounded-lg inline-block mb-1">
+                                    <Clock className="w-4 h-4 text-yellow-500" />
                                 </div>
-                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -853,16 +900,16 @@ const SupplyPage: React.FC = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
                                     Brouillon
                                 </p>
                             </Card>
 
-                            <Card className="text-center p-3 sm:p-4">
-                                <div className="p-2 sm:p-3 bg-blue-500/10 rounded-lg inline-block mb-2 sm:mb-3">
-                                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />
+                            <Card className="text-center p-2 min-w-[100px] sm:p-3">
+                                <div className="p-1 bg-blue-500/10 rounded-lg inline-block mb-1">
+                                    <CheckCircle className="w-4 h-4 text-blue-500" />
                                 </div>
-                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -871,16 +918,16 @@ const SupplyPage: React.FC = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
                                     Validées
                                 </p>
                             </Card>
 
-                            <Card className="text-center p-3 sm:p-4">
-                                <div className="p-2 sm:p-3 bg-orange-500/10 rounded-lg inline-block mb-2 sm:mb-3">
-                                    <Package className="w-5 h-5 sm:w-6 sm:h-6 text-orange-500" />
+                            <Card className="text-center p-2 min-w-[100px] sm:p-3">
+                                <div className="p-1 bg-orange-500/10 rounded-lg inline-block mb-1">
+                                    <Package className="w-4 h-4 text-orange-500" />
                                 </div>
-                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -889,16 +936,16 @@ const SupplyPage: React.FC = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
                                     Reçues
                                 </p>
                             </Card>
 
-                            <Card className="text-center p-3 sm:p-4">
-                                <div className="p-2 sm:p-3 bg-green-500/10 rounded-lg inline-block mb-2 sm:mb-3">
-                                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-500" />
+                            <Card className="text-center p-2 min-w-[100px] sm:p-3">
+                                <div className="p-1 bg-green-500/10 rounded-lg inline-block mb-1">
+                                    <CheckCircle className="w-4 h-4 text-green-500" />
                                 </div>
-                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -907,16 +954,16 @@ const SupplyPage: React.FC = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
                                     Clôturées
                                 </p>
                             </Card>
 
-                            <Card className="text-center p-3 sm:p-4">
-                                <div className="p-2 sm:p-3 bg-red-500/10 rounded-lg inline-block mb-2 sm:mb-3">
-                                    <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />
+                            <Card className="text-center p-2 min-w-[100px] sm:p-3">
+                                <div className="p-1 bg-red-500/10 rounded-lg inline-block mb-1">
+                                    <RotateCcw className="w-4 h-4 text-red-500" />
                                 </div>
-                                <h3 className="text-xl sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     {
                                         orders.filter(
                                             (o) =>
@@ -925,7 +972,7 @@ const SupplyPage: React.FC = () => {
                                         ).length
                                     }
                                 </h3>
-                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
                                     Annulées
                                 </p>
                             </Card>
@@ -993,7 +1040,10 @@ const SupplyPage: React.FC = () => {
                                         </select>
                                     </div>
                                     <Button
-                                        onClick={() => setShowForm(true)}
+                                        onClick={() => {
+                                            setIsEditing(false);
+                                            setShowForm(true);
+                                        }}
                                         className="w-full md:w-auto"
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
@@ -1058,7 +1108,7 @@ const SupplyPage: React.FC = () => {
                                                     <div className="flex items-center">
                                                         <span className="text-nexsaas-vanta-black dark:text-gray-300">
                                                             {order.items.length}{" "}
-                                                            article
+                                                            Produit(s)
                                                             {order.items
                                                                 .length > 1
                                                                 ? "s"
@@ -1080,16 +1130,18 @@ const SupplyPage: React.FC = () => {
                                                 {/* Items Details */}
                                                 <div className="space-y-2">
                                                     {order.items.map(
-                                                        (item, index) => (
+                                                        (item, itemIndex) => (
                                                             <div
-                                                                key={index}
+                                                                key={itemIndex}
                                                                 className="bg-nexsaas-light-gray dark:bg-gray-700 rounded-lg p-2 sm:p-3"
                                                             >
                                                                 <div className="flex items-center justify-between">
                                                                     <div>
                                                                         <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm sm:text-base">
                                                                             {
-                                                                                item.name
+                                                                                item
+                                                                                    .produit
+                                                                                    .nom
                                                                             }
                                                                         </h4>
                                                                         <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300">
@@ -1101,19 +1153,27 @@ const SupplyPage: React.FC = () => {
                                                                             </span>
                                                                             <span>
                                                                                 Reçu:{" "}
-                                                                                {
-                                                                                    item.quantiteRecue
-                                                                                }
+                                                                                {item
+                                                                                    .reception
+                                                                                    ?.quantiteRecue ||
+                                                                                    0}
                                                                             </span>
-                                                                            {item.quantiteEndommage >
-                                                                                0 && (
-                                                                                <span className="text-red-500">
-                                                                                    Défectueux:{" "}
-                                                                                    {
-                                                                                        item.quantiteEndommage
-                                                                                    }
-                                                                                </span>
-                                                                            )}
+                                                                            {item
+                                                                                .reception
+                                                                                ?.quantiteEndommage &&
+                                                                                item
+                                                                                    .reception
+                                                                                    ?.quantiteEndommage >
+                                                                                    0 && (
+                                                                                    <span className="text-red-500">
+                                                                                        Défectueux:{" "}
+                                                                                        {
+                                                                                            item
+                                                                                                .reception
+                                                                                                ?.quantiteEndommage
+                                                                                        }
+                                                                                    </span>
+                                                                                )}
                                                                         </div>
                                                                     </div>
                                                                     <div className="text-right">
@@ -1149,16 +1209,23 @@ const SupplyPage: React.FC = () => {
                                                                 StatutCommande.VALIDEE,
                                                             )
                                                         }
+                                                        disabled={loadingOrders.has(
+                                                            order.id,
+                                                        )}
                                                     >
-                                                        <CheckCircle className="w-4 h-4 mr-1" />
+                                                        {loadingOrders.has(
+                                                            order.id,
+                                                        ) ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                                                        ) : (
+                                                            <CheckCircle className="w-4 h-4 mr-1" />
+                                                        )}
                                                         Valider
                                                     </Button>
                                                 )}
 
-                                                {(order.status ===
-                                                    StatutCommande.VALIDEE ||
-                                                    order.status ===
-                                                        StatutCommande.REÇUE) && (
+                                                {order.status ===
+                                                    StatutCommande.VALIDEE && (
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
@@ -1167,30 +1234,96 @@ const SupplyPage: React.FC = () => {
                                                                 order,
                                                             )
                                                         }
+                                                        disabled={loadingOrders.has(
+                                                            order.id,
+                                                        )}
                                                     >
-                                                        <Package className="w-4 h-4 mr-1" />
+                                                        {loadingOrders.has(
+                                                            order.id,
+                                                        ) ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                                                        ) : (
+                                                            <Package className="w-4 h-4 mr-1" />
+                                                        )}
                                                         Confirmer réception
                                                     </Button>
                                                 )}
 
-                                                {order.items.some(
-                                                    (item) =>
-                                                        item.quantiteEndommage >
-                                                        0,
-                                                ) && (
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            handleReturnRequest(
-                                                                order,
-                                                            )
-                                                        }
-                                                        className="text-red-500 hover:text-red-600"
-                                                    >
-                                                        <RotateCcw className="w-4 h-4 mr-1" />
-                                                        Demander retour
-                                                    </Button>
+                                                {order.status ===
+                                                    StatutCommande.REÇUE && (
+                                                    <>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                handleReceiveOrder(
+                                                                    order,
+                                                                )
+                                                            }
+                                                            disabled={loadingOrders.has(
+                                                                order.id,
+                                                            )}
+                                                        >
+                                                            {loadingOrders.has(
+                                                                order.id,
+                                                            ) ? (
+                                                                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                                                            ) : (
+                                                                <Edit className="w-4 h-4 mr-1" />
+                                                            )}
+                                                            Modifier réception
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                closeOrder(
+                                                                    order.id,
+                                                                )
+                                                            }
+                                                            disabled={loadingOrders.has(
+                                                                order.id,
+                                                            )}
+                                                        >
+                                                            {loadingOrders.has(
+                                                                order.id,
+                                                            ) ? (
+                                                                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                                                            ) : (
+                                                                <CheckCircle className="w-4 h-4 mr-1" />
+                                                            )}
+                                                            Clôturer
+                                                        </Button>
+                                                        {order.items.some(
+                                                            (item) =>
+                                                                item.reception
+                                                                    ?.quantiteEndommage >
+                                                                0,
+                                                        ) && (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    handleReturnRequest(
+                                                                        order,
+                                                                    )
+                                                                }
+                                                                className="text-red-500 hover:text-red-600"
+                                                                disabled={loadingOrders.has(
+                                                                    order.id,
+                                                                )}
+                                                            >
+                                                                {loadingOrders.has(
+                                                                    order.id,
+                                                                ) ? (
+                                                                    <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                                                                ) : (
+                                                                    <RotateCcw className="w-4 h-4 mr-1" />
+                                                                )}
+                                                                Demander retour
+                                                            </Button>
+                                                        )}
+                                                    </>
                                                 )}
 
                                                 {(order.status ===
@@ -1207,8 +1340,17 @@ const SupplyPage: React.FC = () => {
                                                             )
                                                         }
                                                         className="text-red-500 hover:text-red-600"
+                                                        disabled={loadingOrders.has(
+                                                            order.id,
+                                                        )}
                                                     >
-                                                        <X className="w-4 h-4 mr-1" />
+                                                        {loadingOrders.has(
+                                                            order.id,
+                                                        ) ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                                                        ) : (
+                                                            <X className="w-4 h-4 mr-1" />
+                                                        )}
                                                         Annuler
                                                     </Button>
                                                 )}
@@ -1222,14 +1364,37 @@ const SupplyPage: React.FC = () => {
                                                                 order,
                                                             )
                                                         }
+                                                        disabled={loadingOrders.has(
+                                                            order.id,
+                                                        )}
                                                     >
-                                                        <Eye className="w-4 h-4" />
+                                                        {loadingOrders.has(
+                                                            order.id,
+                                                        ) ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : (
+                                                            <Eye className="w-4 h-4" />
+                                                        )}
                                                     </Button>
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        onClick={() =>
+                                                            handleShowEdit(
+                                                                order,
+                                                            )
+                                                        }
+                                                        disabled={loadingOrders.has(
+                                                            order.id,
+                                                        )}
                                                     >
-                                                        <Edit className="w-4 h-4" />
+                                                        {loadingOrders.has(
+                                                            order.id,
+                                                        ) ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : (
+                                                            <Edit className="w-4 h-4" />
+                                                        )}
                                                     </Button>
                                                 </div>
                                             </div>
@@ -1248,7 +1413,10 @@ const SupplyPage: React.FC = () => {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 sm:p-6 z-50 overflow-y-auto"
-                        onClick={() => setShowForm(false)}
+                        onClick={() => {
+                            setShowForm(false);
+                            setIsEditing(false);
+                        }}
                     >
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0 }}
@@ -1258,7 +1426,9 @@ const SupplyPage: React.FC = () => {
                             onClick={(e) => e.stopPropagation()}
                         >
                             <h2 className="text-lg sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-6">
-                                Nouvelle Commande Fournisseur
+                                {isEditing
+                                    ? "Modifier Commande Fournisseur"
+                                    : "Nouvelle Commande Fournisseur"}
                             </h2>
 
                             <form
@@ -1608,16 +1778,26 @@ const SupplyPage: React.FC = () => {
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        onClick={() => setShowForm(false)}
+                                        onClick={() => {
+                                            setShowForm(false);
+                                            setIsEditing(false);
+                                        }}
+                                        disabled={isSubmitting}
                                         className="w-full sm:w-auto"
                                     >
                                         Annuler
                                     </Button>
                                     <Button
                                         type="submit"
+                                        disabled={isSubmitting}
                                         className="w-full sm:w-auto"
                                     >
-                                        Créer la commande
+                                        {isSubmitting ? (
+                                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                        ) : null}
+                                        {isEditing
+                                            ? "Mettre à jour la commande"
+                                            : "Créer la commande"}
                                     </Button>
                                 </div>
                             </form>
@@ -1642,7 +1822,9 @@ const SupplyPage: React.FC = () => {
                             onClick={(e) => e.stopPropagation()}
                         >
                             <h2 className="text-lg sm:text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-6">
-                                Confirmer la Réception - {selectedOrder.id}
+                                {selectedOrder.status === StatutCommande.REÇUE
+                                    ? `Modifier la Réception - ${selectedOrder.id}`
+                                    : `Confirmer la Réception - ${selectedOrder.id}`}
                             </h2>
 
                             <div className="space-y-3 sm:space-y-6">
@@ -1652,7 +1834,7 @@ const SupplyPage: React.FC = () => {
                                         className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-3"
                                     >
                                         <h3 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4 text-sm sm:text-base">
-                                            {item.name}
+                                            {item.produit.nom}
                                         </h3>
 
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1677,7 +1859,9 @@ const SupplyPage: React.FC = () => {
                                                     min="0"
                                                     max={
                                                         item.quantite -
-                                                        item.quantiteRecue
+                                                        (item.reception
+                                                            ?.quantiteRecue ||
+                                                            0)
                                                     }
                                                     value={
                                                         receiveData[
@@ -1759,12 +1943,23 @@ const SupplyPage: React.FC = () => {
                                         onClick={() =>
                                             setShowReceiveModal(false)
                                         }
+                                        disabled={isLoadingReceive}
                                     >
                                         Annuler
                                     </Button>
-                                    <Button onClick={confirmReceive}>
-                                        <CheckCircle className="w-4 h-4 mr-2" />
-                                        Confirmer la réception
+                                    <Button
+                                        onClick={confirmReceive}
+                                        disabled={isLoadingReceive}
+                                    >
+                                        {isLoadingReceive ? (
+                                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                        ) : (
+                                            <CheckCircle className="w-4 h-4 mr-2" />
+                                        )}
+                                        {selectedOrder.status ===
+                                        StatutCommande.REÇUE
+                                            ? "Mettre à jour la réception"
+                                            : "Confirmer la réception"}
                                     </Button>
                                 </div>
                             </div>
@@ -1831,7 +2026,7 @@ const SupplyPage: React.FC = () => {
                                                 >
                                                     <div className="flex justify-between items-center mb-2 sm:mb-3">
                                                         <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-xs sm:text-base">
-                                                            {item.name}
+                                                            {item.produit.nom}
                                                         </h4>
                                                         <Button
                                                             variant="ghost"
@@ -1867,7 +2062,9 @@ const SupplyPage: React.FC = () => {
                                                                 type="number"
                                                                 min="1"
                                                                 max={
-                                                                    item.quantiteEndommage
+                                                                    item
+                                                                        .reception
+                                                                        ?.quantiteEndommage
                                                                 }
                                                                 value={
                                                                     returnItem.quantity
@@ -1947,17 +2144,23 @@ const SupplyPage: React.FC = () => {
                                         onClick={() =>
                                             setShowReturnModal(false)
                                         }
+                                        disabled={isLoadingReturn}
                                     >
                                         Annuler
                                     </Button>
                                     <Button
                                         onClick={submitReturnRequest}
                                         disabled={
+                                            isLoadingReturn ||
                                             returnData.items.length === 0 ||
                                             !returnData.reason
                                         }
                                     >
-                                        <RotateCcw className="w-4 h-4 mr-2" />
+                                        {isLoadingReturn ? (
+                                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                        ) : (
+                                            <RotateCcw className="w-4 h-4 mr-2" />
+                                        )}
                                         Envoyer la demande
                                     </Button>
                                 </div>
@@ -2153,7 +2356,7 @@ const SupplyPage: React.FC = () => {
                                             className="border border-nexsaas-light-gray dark:border-gray-600 rounded-lg p-3 mb-3"
                                         >
                                             <h4 className="font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3 sm:mb-4 text-sm sm:text-base">
-                                                {item.name}
+                                                {item.produit.nom}
                                             </h4>
 
                                             {/* Lot et Quantités */}
@@ -2187,9 +2390,9 @@ const SupplyPage: React.FC = () => {
                                                         <div>
                                                             <label className="block text-nexsaas-vanta-black dark:text-gray-300">
                                                                 Quantité reçue:{" "}
-                                                                {
-                                                                    item.quantiteRecue
-                                                                }
+                                                                {item.reception
+                                                                    ?.quantiteRecue ||
+                                                                    0}
                                                             </label>
                                                         </div>
                                                     </div>
@@ -2199,9 +2402,9 @@ const SupplyPage: React.FC = () => {
                                                             <label className="block text-nexsaas-vanta-black dark:text-gray-300">
                                                                 Quantité
                                                                 défectueuse:{" "}
-                                                                {
-                                                                    item.quantiteEndommage
-                                                                }
+                                                                {item.reception
+                                                                    ?.quantiteEndommage ||
+                                                                    0}
                                                             </label>
                                                         </div>
                                                     </div>
@@ -2314,7 +2517,8 @@ const SupplyPage: React.FC = () => {
                                                             </label>
                                                         </div>
                                                     </div>
-                                                    {item.dateReception && (
+                                                    {item.reception
+                                                        ?.dateReception && (
                                                         <div className="flex items-center">
                                                             <Calendar className="w-5 h-5 text-gray-400 mr-2" />
                                                             <div>
@@ -2322,7 +2526,7 @@ const SupplyPage: React.FC = () => {
                                                                     Date de
                                                                     réception:{" "}
                                                                     {
-                                                                        item.dateReception.split(
+                                                                        item.reception?.dateReception.split(
                                                                             "T",
                                                                         )[0]
                                                                     }
@@ -2330,7 +2534,8 @@ const SupplyPage: React.FC = () => {
                                                             </div>
                                                         </div>
                                                     )}
-                                                    {item.commentaireReception && (
+                                                    {item.reception
+                                                        ?.commentaireReception && (
                                                         <div className="flex items-center">
                                                             <FileText className="w-5 h-5 text-gray-400 mr-2" />
                                                             <div>
@@ -2338,7 +2543,9 @@ const SupplyPage: React.FC = () => {
                                                                     Commentaire
                                                                     réception:{" "}
                                                                     {
-                                                                        item.commentaireReception
+                                                                        item
+                                                                            .reception
+                                                                            ?.commentaireReception
                                                                     }
                                                                 </label>
                                                             </div>
@@ -2510,7 +2717,9 @@ const SupplyPage: React.FC = () => {
                                                                     >
                                                                         <p>
                                                                             {
-                                                                                item.name
+                                                                                item
+                                                                                    .produit
+                                                                                    .nom
                                                                             }{" "}
                                                                             -
                                                                             Quantité:{" "}
