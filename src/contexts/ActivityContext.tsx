@@ -1,6 +1,23 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import axiosClient from '../api/axiosClient';
 
-export type ActivityType = 'login' | 'logout' | 'create' | 'update' | 'delete' | 'view' | 'scan' | 'sale' | 'payment';
+// Synchronisation avec les ActionType du backend
+export type ActivityType = 
+  | 'login' | 'logout' | 'reset_password' | 'change_password'
+  | 'create' | 'update' | 'delete' | 'view' | 'scan'
+  | 'sale' | 'payment' | 'refund' | 'invoice' | 'quote'
+  | 'stock_in' | 'stock_out' | 'stock_adjustment' | 'inventory'
+  | 'supply' | 'supplier_order' | 'order_receipt' | 'supplier_return'
+  | 'commission' | 'commission_calculation' | 'commission_payment'
+  | 'subscription' | 'subscription_activation' | 'subscription_renewal'
+  | 'return' | 'return_request' | 'return_validation'
+  | 'contact' | 'interaction' | 'phone_call' | 'email' | 'sms' | 'meeting'
+  | 'rating' | 'review' | 'product_rating'
+  | 'document_upload' | 'document_download' | 'document_validation'
+  | 'report_generation' | 'data_export' | 'statistics_view'
+  | 'pos_open' | 'pos_close' | 'pos_transaction' | 'cash_count'
+  | 'system_backup' | 'system_maintenance' | 'system_error'
+  | 'security_breach' | 'account_lock' | 'account_unlock';
 
 export interface Activity {
   id: string;
@@ -9,14 +26,53 @@ export interface Activity {
   description: string;
   timestamp: Date;
   userId?: string;
+  userName?: string;
   metadata?: Record<string, any>;
+  ipAddress?: string;
+  userAgent?: string;
+  isSystemAction?: boolean;
+}
+
+export interface ActivityFilters {
+  startDate?: Date;
+  endDate?: Date;
+  activityType?: ActivityType;
+  module?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ActivityStats {
+  totalActivities: number;
+  todayActivities: number;
+  topActivities: { type: ActivityType; count: number }[];
+  moduleStats: { module: string; count: number }[];
 }
 
 interface ActivityContextType {
+  // État local
   activities: Activity[];
+  loading: boolean;
+  error: string | null;
+  stats: ActivityStats | null;
+  
+  // Actions locales
   logActivity: (activity: Omit<Activity, 'id' | 'timestamp'>) => void;
+  
+  // Actions backend
+  fetchActivities: (filters?: ActivityFilters) => Promise<void>;
+  fetchStats: () => Promise<void>;
+  exportActivities: (filters?: ActivityFilters) => Promise<void>;
+  
+  // Utilitaires
   getActivitiesByModule: (module: string) => Activity[];
   getActivitiesByType: (type: ActivityType) => Activity[];
+  clearActivities: () => void;
+  
+  // Filtres
+  filters: ActivityFilters;
+  setFilters: (filters: ActivityFilters) => void;
 }
 
 const ActivityContext = createContext<ActivityContextType | undefined>(undefined);
@@ -31,31 +87,190 @@ export const useActivity = () => {
 
 export const ActivityProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<ActivityStats | null>(null);
+  const [filters, setFilters] = useState<ActivityFilters>({});
 
-  const logActivity = useCallback((activity: Omit<Activity, 'id' | 'timestamp'>) => {
+  // Log une activité localement et l'envoie au backend si nécessaire
+  const logActivity = useCallback(async (activity: Omit<Activity, 'id' | 'timestamp'>) => {
     const newActivity: Activity = {
       ...activity,
       id: Date.now().toString(),
       timestamp: new Date(),
+      userAgent: navigator.userAgent,
     };
 
-    setActivities(prev => [newActivity, ...prev.slice(0, 999)]); // Keep last 1000 activities
+    // Ajouter localement
+    setActivities(prev => [newActivity, ...prev.slice(0, 999)]);
+
+    // Envoyer au backend pour les actions importantes
+    if (activity.type !== 'view') {
+      try {
+        await axiosClient.post('/audit/log', {
+          action: activity.type.toUpperCase(),
+          description: activity.description,
+          metadata: activity.metadata,
+        });
+      } catch (err) {
+        console.warn('Erreur lors de l\'envoi de l\'activité au backend:', err);
+      }
+    }
   }, []);
 
+  // Récupérer les activités du backend
+  const fetchActivities = useCallback(async (filterParams?: ActivityFilters) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const params = new URLSearchParams();
+      const currentFilters = filterParams || filters;
+      
+      if (currentFilters.startDate) {
+        params.append('startDate', currentFilters.startDate.toISOString());
+      }
+      if (currentFilters.endDate) {
+        params.append('endDate', currentFilters.endDate.toISOString());
+      }
+      if (currentFilters.activityType) {
+        params.append('actionType', currentFilters.activityType.toUpperCase());
+      }
+      if (currentFilters.search) {
+        params.append('search', currentFilters.search);
+      }
+      if (currentFilters.page) {
+        params.append('page', currentFilters.page.toString());
+      }
+      if (currentFilters.limit) {
+        params.append('limit', currentFilters.limit.toString());
+      }
+
+      const response = await axiosClient.get(`/audit/client?${params.toString()}`);
+      
+      // Convertir les données du backend au format local
+      const backendActivities: Activity[] = response.data.map((audit: any) => ({
+        id: audit.id.toString(),
+        type: audit.typeAction.toLowerCase().replace(/_/g, '_') as ActivityType,
+        module: audit.module || 'System',
+        description: audit.description,
+        timestamp: new Date(audit.dateAction),
+        userId: audit.user?.id?.toString(),
+        userName: `${audit.user?.prenom} ${audit.user?.nom}`,
+        metadata: audit.metadata ? JSON.parse(audit.metadata) : undefined,
+        ipAddress: audit.ipAddress,
+        userAgent: audit.userAgent,
+        isSystemAction: audit.isSystemAction,
+      }));
+      
+      setActivities(backendActivities);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors du chargement des activités');
+      console.error('Erreur fetchActivities:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
+  // Récupérer les statistiques
+  const fetchStats = useCallback(async () => {
+    try {
+      const response = await axiosClient.get('/audit/stats');
+      setStats({
+        totalActivities: response.data.totalActions,
+        todayActivities: response.data.todayActions,
+        topActivities: response.data.topActions.map((item: any) => ({
+          type: item.type.toLowerCase() as ActivityType,
+          count: item.count,
+        })),
+        moduleStats: response.data.moduleStats || [],
+      });
+    } catch (err) {
+      console.error('Erreur fetchStats:', err);
+    }
+  }, []);
+
+  // Exporter les activités
+  const exportActivities = useCallback(async (filterParams?: ActivityFilters) => {
+    try {
+      const params = new URLSearchParams();
+      const currentFilters = filterParams || filters;
+      
+      if (currentFilters.startDate) {
+        params.append('startDate', currentFilters.startDate.toISOString());
+      }
+      if (currentFilters.endDate) {
+        params.append('endDate', currentFilters.endDate.toISOString());
+      }
+      if (currentFilters.activityType) {
+        params.append('actionType', currentFilters.activityType.toUpperCase());
+      }
+      if (currentFilters.search) {
+        params.append('search', currentFilters.search);
+      }
+
+      const response = await axiosClient.get(`/audit/export?${params.toString()}`);
+      
+      // Créer et télécharger le fichier CSV
+      const csvContent = response.data.data.map((row: any) => 
+        Object.values(row).join(',')
+      ).join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = response.data.filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Erreur exportActivities:', err);
+    }
+  }, [filters]);
+
+  // Utilitaires
   const getActivitiesByModule = useCallback((module: string) => {
-    return activities.filter(activity => activity.module === module);
+    return activities.filter(activity => 
+      activity.module.toLowerCase() === module.toLowerCase()
+    );
   }, [activities]);
 
   const getActivitiesByType = useCallback((type: ActivityType) => {
     return activities.filter(activity => activity.type === type);
   }, [activities]);
 
+  const clearActivities = useCallback(() => {
+    setActivities([]);
+    setStats(null);
+    setError(null);
+  }, []);
+
+  // Charger les activités au montage
+  useEffect(() => {
+    fetchActivities();
+    fetchStats();
+  }, [fetchStats, fetchActivities]);
+
   return (
     <ActivityContext.Provider value={{
+      // État
       activities,
+      loading,
+      error,
+      stats,
+      filters,
+      
+      // Actions
       logActivity,
+      fetchActivities,
+      fetchStats,
+      exportActivities,
+      setFilters,
+      
+      // Utilitaires
       getActivitiesByModule,
       getActivitiesByType,
+      clearActivities,
     }}>
       {children}
     </ActivityContext.Provider>
