@@ -90,9 +90,13 @@ export const ActivityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<ActivityStats | null>(null);
-  const [filters, setFilters] = useState<ActivityFilters>({});
+  const [filters, setFilters] = useState<ActivityFilters>({
+    page: 1,
+    limit: 50
+  });
 
-  // Log une activité localement et l'envoie au backend si nécessaire
+  // Log une activité localement et l'envoie au backend
+  // Log une activité localement
   const logActivity = useCallback(async (activity: Omit<Activity, 'id' | 'timestamp'>) => {
     const newActivity: Activity = {
       ...activity,
@@ -101,92 +105,72 @@ export const ActivityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       userAgent: navigator.userAgent,
     };
 
-    // Ajouter localement
     setActivities(prev => [newActivity, ...prev.slice(0, 999)]);
-
-    // Envoyer au backend pour les actions importantes
-    if (activity.type !== 'view') {
-      try {
-        await axiosClient.post('/audit/log', {
-          action: activity.type.toUpperCase(),
-          description: activity.description,
-          metadata: activity.metadata,
-        });
-      } catch (err) {
-        console.warn('Erreur lors de l\'envoi de l\'activité au backend:', err);
-      }
-    }
   }, []);
 
   // Récupérer les activités du backend
   const fetchActivities = useCallback(async (filterParams?: ActivityFilters) => {
-    setLoading(true);
-    setError(null);
+  setLoading(true);
+  setError(null);
+  
+  try {
+    const params = new URLSearchParams();
+    const currentFilters = { ...filters, ...filterParams };
     
-    try {
-      const params = new URLSearchParams();
-      const currentFilters = filterParams || filters;
-      
-      if (currentFilters.startDate) {
-        params.append('startDate', currentFilters.startDate.toISOString());
-      }
-      if (currentFilters.endDate) {
-        params.append('endDate', currentFilters.endDate.toISOString());
-      }
-      if (currentFilters.activityType) {
-        params.append('actionType', currentFilters.activityType.toUpperCase());
-      }
-      if (currentFilters.search) {
-        params.append('search', currentFilters.search);
-      }
-      if (currentFilters.page) {
-        params.append('page', currentFilters.page.toString());
-      }
-      if (currentFilters.limit) {
-        params.append('limit', currentFilters.limit.toString());
-      }
+    if (currentFilters.startDate) {
+      params.append('startDate', currentFilters.startDate.toISOString());
+    }
+    if (currentFilters.endDate) {
+      params.append('endDate', currentFilters.endDate.toISOString());
+    }
+    if (currentFilters.activityType) {
+      params.append('actionType', currentFilters.activityType);
+    }
+    if (currentFilters.module) {
+      params.append('module', currentFilters.module);
+    }
+    if (currentFilters.search) {
+      params.append('search', currentFilters.search);
+    }
+    if (currentFilters.page) {
+      params.append('page', currentFilters.page.toString());
+    }
+    if (currentFilters.limit) {
+      params.append('limit', currentFilters.limit.toString());
+    }
 
-      const response = await axiosClient.get(`/audit/client?${params.toString()}`);
-      
-      // Convertir les données du backend au format local
-      const backendActivities: Activity[] = response.data.map((audit: any) => ({
-        id: audit.id.toString(),
-        type: audit.typeAction.toLowerCase().replace(/_/g, '_') as ActivityType,
-        module: audit.module || 'System',
-        description: audit.description,
-        timestamp: new Date(audit.dateAction),
-        userId: audit.user?.id?.toString(),
-        userName: `${audit.user?.prenom} ${audit.user?.nom}`,
-        metadata: audit.metadata ? JSON.parse(audit.metadata) : undefined,
-        ipAddress: audit.ipAddress,
-        userAgent: audit.userAgent,
-        isSystemAction: audit.isSystemAction,
-      }));
-      
-      setActivities(backendActivities);
-    } catch (err: any) {
+    const response = await axiosClient.get(`/audit/client?${params.toString()}`);
+    
+    // Les données sont maintenant déjà converties par le backend
+    setActivities(response.data);
+  } catch (err: any) {
+    if (err.code !== 'ERR_CANCELED') {
       setError(err.response?.data?.message || 'Erreur lors du chargement des activités');
       console.error('Erreur fetchActivities:', err);
-    } finally {
-      setLoading(false);
     }
-  }, [filters]);
+  } finally {
+    setLoading(false);
+  }
+  }, []);
 
   // Récupérer les statistiques
   const fetchStats = useCallback(async () => {
     try {
       const response = await axiosClient.get('/audit/stats');
       setStats({
-        totalActivities: response.data.totalActions,
-        todayActivities: response.data.todayActions,
-        topActivities: response.data.topActions.map((item: any) => ({
-          type: item.type.toLowerCase() as ActivityType,
-          count: item.count,
+        totalActivities: response.data.totalActions || 0,
+        todayActivities: response.data.todayActions || 0,
+        topActivities: (response.data.topActions || []).map((item: any) => ({
+          type: (item.type?.toLowerCase() || 'view') as ActivityType,
+          count: item.count || 0,
         })),
         moduleStats: response.data.moduleStats || [],
       });
-    } catch (err) {
-      console.error('Erreur fetchStats:', err);
+    } catch (err: any) {
+      if (err.code !== 'ERR_CANCELED') {
+        console.error('Erreur fetchStats:', err);
+        // On continue même si les stats échouent
+      }
     }
   }, []);
 
@@ -205,6 +189,9 @@ export const ActivityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (currentFilters.activityType) {
         params.append('actionType', currentFilters.activityType.toUpperCase());
       }
+      if (currentFilters.module) {
+        params.append('module', currentFilters.module);
+      }
       if (currentFilters.search) {
         params.append('search', currentFilters.search);
       }
@@ -220,18 +207,19 @@ export const ActivityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = response.data.filename;
+      link.download = `activites-${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
       window.URL.revokeObjectURL(url);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erreur exportActivities:', err);
+      alert('Erreur lors de l\'exportation: ' + (err.response?.data?.message || err.message));
     }
   }, [filters]);
 
   // Utilitaires
   const getActivitiesByModule = useCallback((module: string) => {
     return activities.filter(activity => 
-      activity.module.toLowerCase() === module.toLowerCase()
+      activity.module && activity.module.toLowerCase() === module.toLowerCase()
     );
   }, [activities]);
 
@@ -247,9 +235,28 @@ export const ActivityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Charger les activités au montage
   useEffect(() => {
-    fetchActivities();
-    fetchStats();
-  }, [fetchStats, fetchActivities]);
+
+    let isMounted = true;
+
+    const initializeActivities = async () => {
+      try {
+        if (isMounted) setLoading(true);
+        await fetchStats();
+        await fetchActivities();
+      } catch (error) {
+        console.warn('Erreur lors du chargement initial des activités:', error);
+      }finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    initializeActivities();
+
+    return () => {
+      isMounted = false;
+    };
+
+  }, []); // Seulement au montage initial
 
   return (
     <ActivityContext.Provider value={{

@@ -87,7 +87,7 @@ export const ActivityWidget: React.FC<ActivityWidgetProps> = ({
                 Activité récente
               </h3>
               <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                {stats?.todayActivities || 0} actions aujourd'hui
+                {stats?.todayActions || 0} actions aujourd'hui
               </p>
             </div>
           </div>
@@ -172,7 +172,7 @@ export const ActivityWidget: React.FC<ActivityWidgetProps> = ({
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <p className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                {stats.totalActivities}
+                {stats.totalActions}
               </p>
               <p className="text-xs text-nexsaas-vanta-black dark:text-gray-400">
                 Total
@@ -180,7 +180,7 @@ export const ActivityWidget: React.FC<ActivityWidgetProps> = ({
             </div>
             <div>
               <p className="text-lg font-bold text-green-600">
-                {stats.todayActivities}
+                {stats.todayActions}
               </p>
               <p className="text-xs text-nexsaas-vanta-black dark:text-gray-400">
                 Aujourd'hui
@@ -188,7 +188,7 @@ export const ActivityWidget: React.FC<ActivityWidgetProps> = ({
             </div>
             <div>
               <p className="text-lg font-bold text-purple-600">
-                {stats.topActivities[0]?.count || 0}
+                {stats.topActions[0]?.count || 0}
               </p>
               <p className="text-xs text-nexsaas-vanta-black dark:text-gray-400">
                 Top action

@@ -57,18 +57,23 @@ export interface ActionType {
 class AuditApi {
   // Récupérer les audits du client connecté
   async getClientAudits(filters?: AuditFilters): Promise<AuditAction[]> {
-    const params = new URLSearchParams();
-    
-    if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          params.append(key, value.toString());
-        }
-      });
-    }
+    try {
+      const params = new URLSearchParams();
+      
+      if (filters) {
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            params.append(key, value.toString());
+          }
+        });
+      }
 
-    const response = await axiosClient.get(`/audit/client?${params.toString()}`);
-    return response.data;
+      const response = await axiosClient.get(`/audit/client?${params.toString()}`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Erreur getClientAudits:', error);
+      throw new Error(`Erreur lors de la récupération des audits: ${error.response?.data?.message || error.message}`);
+    }
   }
 
   // Récupérer tous les audits (admin uniquement)
