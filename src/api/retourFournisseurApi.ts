@@ -1,113 +1,82 @@
-import axios from "axios";
+import axiosClient from "./axiosClient";
 
-const API_URL = "http://localhost:8000"; // adapte si nécessaire
 
-// ✅ Création d'une instance axios réutilisable
-const axiosClient = axios.create({
-    baseURL: API_URL,
-    headers: { "Content-Type": "application/json" },
-});
 
 // 🎯 Type des données retour fournisseur
 export interface RetourFournisseur {
     id: number;
-    commande: {
+    produitCommande: {
         id: number;
-        reference: string;
+        commande: {
+            id: number;
+            reference: string;
+            fournisseur: {
+                id: number;
+                nom: string;
+                adresse: string;
+                telephone: string;
+                email: string;
+                categorie: string;
+                delaiLivraison: string;
+                isDeleted: boolean;
+                creeLe: string;
+            };
+            statut: string;
+            note: string;
+            dateLivraisonEstimee: string;
+            montantTotal: string;
+            montantTotalConverti: string;
+            deviseConvertion: string;
+            creeLe: string;
+            majLe: string;
+        };
+        produit: {
+            id: number;
+            nom: string;
+            prix: string;
+            conditionnement: string;
+            delaiApprovisionnement: string;
+            devise: string;
+            creeLe: string;
+            image: string | null;
+            sku: string;
+            majLe: string;
+        };
+        prixBase: string;
+        prixNegocie: string;
+        quantite: number;
+        montantTotal: string;
+        devise: string;
+        montantTotalConverti: string;
+        deviseConvertion: string;
+        sku: string;
+        lot: string;
+        conditionnement: string;
     };
-    motif: string;
-    quantite: number;
-    createdAt: string;
+    quantiteRetournee: number;
+    dateRetour: string;
+    motifRetour: string;
+    statutRetour: string;
 }
 
-// ✅ Fonction : Récupérer la liste des retours
-export const getRetoursFournisseurs = async (): Promise<RetourFournisseur[]> => {
-    try {
-        const token = localStorage.getItem("token");
 
-        const response = await axiosClient.get("/retours-fournisseurs", {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-
-        return response.data.data;
-    } catch (err: any) {
-        console.error("Erreur API Retours Fournisseurs:", err.response?.data || err.message);
-        throw new Error("Impossible de charger les données de retours");
-    }
-};
-
-// ✅ Fonction : Créer un retour fournisseur
-export const createRetourFournisseur = async (data: {
-    commandeId: number;
-    motif: string;
-    quantite: number;
-}): Promise<RetourFournisseur> => {
-    try {
-        const token = localStorage.getItem("token");
-
-        const response = await axiosClient.post("/retours-fournisseurs", data, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-
-        return response.data.data;
-    } catch (err: any) {
-        console.error("Erreur API Création Retour:", err.response?.data || err.message);
-        throw new Error("Impossible de créer le retour fournisseur");
-    }
-};
-
-// ✅ Fonction : Supprimer un retour fournisseur
-export const deleteRetourFournisseur = async (id: number): Promise<void> => {
-    try {
-        const token = localStorage.getItem("token");
-
-        await axiosClient.delete(`/retours-fournisseurs/${id}`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-    } catch (err: any) {
-        console.error("Erreur API Suppression Retour:", err.response?.data || err.message);
-        throw new Error("Impossible de supprimer le retour fournisseur");
-    }
-};
-
-// Approuver un retour fournisseur
-export const approveRetourFournisseur = async (id: string): Promise<RetourFournisseur> => {
-    const token = localStorage.getItem("token");
-    if (!token) throw new Error("Token manquant");
-
-    try {
-        const response = await axiosClient.patch(`/retours/${id}/approve`, {}, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        return response.data.data;
-    } catch (err: any) {
-        const status = err.response?.status;
-        let message =
-            err.response?.data?.message ||
-            "Erreur lors de l'approbation du retour fournisseur";
-
-        if (status === 404) message = `Retour avec ID ${id} non trouvé`;
-        else if (status === 403)
-            message = "Accès non autorisé pour approuver le retour";
-
-        throw new Error(message);
-    }
-};
-
-// Récupérer tous les retours fournisseurs (optional, if needed)
+// ✅ Fonction : Récupérer la liste des retours depuis /commandes/retours
 export const getRetoursFournisseur = async (): Promise<RetourFournisseur[]> => {
     const token = localStorage.getItem("token");
     if (!token) throw new Error("Token manquant");
 
     try {
-        const response = await axiosClient.get("/retours", {
+        const response = await axiosClient.get("/commandes/retours", {
             headers: { Authorization: `Bearer ${token}` },
         });
-        return response.data.data;
+
+        // ⚠️ Pas de "data.data", mais un tableau direct
+        return response.data as RetourFournisseur[];
     } catch (err: any) {
+        console.error("Erreur API Retours:", err.response?.data || err.message);
         throw new Error(
             err.response?.data?.message ||
-                "Erreur lors de la récupération des retours fournisseurs",
+                "Erreur lors de la récupération des retours fournisseurs"
         );
     }
 };
