@@ -15,8 +15,6 @@ import Card from "../../components/UI/Card";
 import Button from "../../components/UI/Button";
 import {
     getRetoursFournisseur,
-    deleteRetourFournisseur,
-    approveRetourFournisseur,
     RetourFournisseur,
 } from "../../api/retourFournisseurApi";
 import axios from "axios";
@@ -75,7 +73,6 @@ const ReturnsPage: React.FC = () => {
             //     },
             // );
             // setKpis(kpiRes.data);
-
             // // Fetch returns
             // const returnsData = await getRetoursFournisseur(user.token);
             // const mappedReturns: ReturnRequest[] = returnsData
