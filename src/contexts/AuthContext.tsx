@@ -10,12 +10,16 @@ import {
 } from "../api/authApi"; // Import the API functions and types
 import { getProfile } from "../api/profileApi";
 
+interface RegisterUserData extends Omit<User, "id" | "createdAt"> {
+    password?: string; // Add password field for registration
+}
+
 interface AuthContextType {
     user: User | null;
     displayUser: Partial<User> | null;
     isAuthenticated: boolean;
     login: (email: string, password: string) => Promise<void>;
-    register: (userData: Omit<User, "id" | "createdAt">) => Promise<void>;
+    register: (userData: RegisterUserData) => Promise<void>;
     logout: () => void;
     loading: boolean;
     setUser: (user: User | null) => void;
@@ -205,7 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    const register = async (userData: Omit<User, "id" | "createdAt">): Promise<void> => {
+    const register = async (userData: RegisterUserData): Promise<void> => {
         setLoading(true);
         try {
             const registerData: RegisterClientDto = {

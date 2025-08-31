@@ -476,7 +476,7 @@ const ActivityPage: React.FC = () => {
                         </div>
                       </div>
                       
-                      {activity.metadata && (
+                      {/* {activity.metadata && (
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           <details className="cursor-pointer">
                             <summary>Détails</summary>
@@ -485,7 +485,7 @@ const ActivityPage: React.FC = () => {
                             </pre>
                           </details>
                         </div>
-                      )}
+                      )} */}
                     </div>
                   </motion.div>
                 ))}
