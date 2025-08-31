@@ -30,10 +30,6 @@ export const useAuth = () => {
         const savedToken = localStorage.getItem("token");
         if (savedUser && savedToken) {
             try {
-<<<<<<< HEAD
-                setUser(JSON.parse(savedUser));
-                setToken(savedToken);
-=======
                 const parsedUser = JSON.parse(savedUser);
                 setUser(parsedUser);
                 setDisplayUser({
@@ -41,7 +37,6 @@ export const useAuth = () => {
                     prenom: parsedUser.prenom,
                     profilePicture: parsedUser.profilePicture,
                 });
->>>>>>> 3569d2a4643364fdda5b23cd0cd873b40931c7c0
             } catch (err) {
                 console.error("Failed to parse saved user:", err);
                 localStorage.removeItem("nexsaas_user");
@@ -59,97 +54,15 @@ export const useAuth = () => {
         setLoading(false);
     }, []);
 
-<<<<<<< HEAD
-    const register = async (formData: RegisterClientDto) => {
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await registerClient(formData);
-            const userData: User = {
-                id: res.id || `new-user-${Date.now()}`, // Fallback ID
-                prenom: formData.prenom,
-                nom: formData.nom,
-                email: formData.email,
-                type: formData.type,
-                companyName: formData.companyName,
-                createdAt: res.createdAt || new Date().toISOString(),
-            };
-            setUser(userData);
-            setToken(res.token);
-            localStorage.setItem("nexsaas_user", JSON.stringify(userData));
-            localStorage.setItem("token", res.token);
-            showToast({
-                type: "success",
-                title: "Inscription réussie",
-                message: `Bienvenue ${formData.prenom} ! Votre compte a été créé avec succès.`,
-                duration: 3000,
-            });
-            logActivity({
-                type: "create",
-                module: "Auth",
-                description: `Nouveau compte créé pour ${formData.prenom} ${formData.nom}`,
-                userId: userData.id,
-                metadata: {
-                    email: formData.email,
-                    type: formData.type,
-                    companyName: formData.companyName,
-                },
-            });
-            if (!res.docsValides) {
-                navigate("/documents-requis");
-            } else if (!res.verified) {
-                navigate("/compte-en-attente");
-            } else if (!res.actif) {
-                showToast({
-                    type: "warning",
-                    title: "Compte suspendu",
-                    message: "Votre compte a été suspendu",
-                    duration: 5000,
-                });
-            } else {
-                navigate("/dashboard");
-            }
-            return res;
-        } catch (err: any) {
-            const errorMessage =
-                err.response?.data?.message || "Erreur inconnue";
-            const statusCode = err.response?.data?.statusCode;
-
-            if (
-                statusCode === 400 &&
-                errorMessage ===
-                    "Demande déjà envoyée, un administrateur vous contactera"
-            ) {
-                showToast({
-                    type: "warning",
-                    title: "Inscription en attente",
-                    message: errorMessage,
-                    duration: 5000,
-                });
-                navigate("/compte-en-attente");
-            } else {
-                showToast({
-                    type: "error",
-                    title: "Erreur d'inscription",
-                    message: errorMessage,
-                    duration: 5000,
-                });
-            }
-            setError(errorMessage);
-            throw new Error(errorMessage);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-=======
->>>>>>> 3569d2a4643364fdda5b23cd0cd873b40931c7c0
     const login = async (formData: LoginClientDto) => {
+        
         setLoading(true);
         setError(null);
+
         try {
+            
             const res = await loginClient(formData);
-<<<<<<< HEAD
+
             const userData: User = {
                 id: res.user?.id || `user-${Date.now()}`, // Fallback ID
                 prenom: res.user?.prenom || "Utilisateur",
@@ -159,14 +72,14 @@ export const useAuth = () => {
                 companyName: res.user?.nomEntreprise,
                 createdAt: res.user?.createdAt || new Date().toISOString(),
             };
+
             setUser(userData);
             setToken(res.token);
             localStorage.setItem("nexsaas_user", JSON.stringify(userData));
-=======
+            
             if (!res.token) {
                 throw new Error("No token received from login");
             }
->>>>>>> 3569d2a4643364fdda5b23cd0cd873b40931c7c0
             localStorage.setItem("token", res.token);
 
             // Fetch full profile
@@ -433,10 +346,5 @@ export const useAuth = () => {
         navigate("/login-client");
     };
 
-<<<<<<< HEAD
-    return { register, login, logout, loading, error, user, token };
-};
-=======
     return { register, login, logout, loading, error, user, displayUser };
 };
->>>>>>> 3569d2a4643364fdda5b23cd0cd873b40931c7c0
