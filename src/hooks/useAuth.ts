@@ -63,24 +63,24 @@ export const useAuth = () => {
             
             const res = await loginClient(formData);
 
-            const userData: User = {
-                id: res.user?.id || `user-${Date.now()}`, // Fallback ID
-                prenom: res.user?.prenom || "Utilisateur",
-                nom: res.user?.nom || "",
-                email: res.user?.email || formData.email,
-                type: res.user?.type || "particulier",
-                companyName: res.user?.nomEntreprise,
-                createdAt: res.user?.createdAt || new Date().toISOString(),
-            };
+            // const userData: User = {
+            //     id: res.user?.id || `user-${Date.now()}`, // Fallback ID
+            //     prenom: res.user?.prenom || "Utilisateur",
+            //     nom: res.user?.nom || "",
+            //     email: res.user?.email || formData.email,
+            //     type: res.user?.type || "particulier",
+            //     companyName: res.user?.nomEntreprise,
+            //     createdAt: res.user?.createdAt || new Date().toISOString(),
+            // };
 
-            setUser(userData);
-            setToken(res.token);
-            localStorage.setItem("nexsaas_user", JSON.stringify(userData));
-            
+            // setUser(userData);
+            // setToken(res.token);
+            // localStorage.setItem("nexsaas_user", JSON.stringify(userData));
+
             if (!res.token) {
                 throw new Error("No token received from login");
             }
-            localStorage.setItem("token", res.token);
+            
 
             // Fetch full profile
             const profile = await getProfile();
@@ -102,6 +102,8 @@ export const useAuth = () => {
                 description: profile.description || res.user?.description || res.description || "",
                 nif: profile.nif || res.user?.nif || res.nif || "",
             };
+
+            localStorage.setItem("token", res.token);
 
             setUser(userData);
             setDisplayUser({

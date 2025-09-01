@@ -1,3 +1,4 @@
+// src/types/notification.ts
 export type NotificationType = 'info' | 'success' | 'warning' | 'error' | 'system';
 
 export interface Notification {
@@ -5,11 +6,14 @@ export interface Notification {
   type: NotificationType;
   title: string;
   message: string;
-  timestamp: Date;
+  // timestamp: Date;
   isRead: boolean;
   module?: string;
   actionUrl?: string;
   metadata?: Record<string, any>;
+  isGlobal: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface NotificationContextType {

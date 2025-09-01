@@ -1,136 +1,110 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-
-export type NotificationType = 'info' | 'success' | 'warning' | 'error' | 'system';
-
-export interface Notification {
-  id: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  timestamp: Date;
-  isRead: boolean;
-  module?: string;
-  actionUrl?: string;
-  metadata?: Record<string, any>;
-}
+// src/contexts/NotificationContext.tsx
+import React, { createContext, useContext } from 'react';
+import { useNotification } from '../hooks/useNotifications';
+import { NotificationType, Notification } from '../types/notification';
+import { notificationApi } from '../api/notificationApi';
 
 interface NotificationContextType {
   notifications: Notification[];
   unreadCount: number;
-  addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'isRead'>) => void;
-  markAsRead: (id: string) => void;
-  markAllAsRead: () => void;
-  deleteNotification: (id: string) => void;
-  clearAllNotifications: () => void;
+  loading: boolean;
+  error: string | null;
+  total: number;
+  hasMore: boolean;
+  addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'isRead'>) => Promise<void>;
+  markAsRead: (id: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
   getNotificationsByType: (type: NotificationType) => Notification[];
   getUnreadNotifications: () => Notification[];
+  refresh: () => Promise<void>;
+  updateFilters: (filters: any) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-export const useNotifications = () => {
+export const useNotificationsContext = () => {
   const context = useContext(NotificationContext);
   if (context === undefined) {
-    throw new Error('useNotifications must be used within a NotificationProvider');
+    throw new Error('useNotificationsContext must be used within a NotificationProvider');
   }
   return context;
 };
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    // Mock notifications for demo
-    {
-      id: '1',
-      type: 'success',
-      title: 'Vente effectuée',
-      message: 'Une vente de €2,499 a été enregistrée avec succès',
-      timestamp: new Date(Date.now() - 1000 * 60 * 5), // 5 minutes ago
-      isRead: false,
-      module: 'POS',
-      actionUrl: '/pos'
-    },
-    {
-      id: '2',
-      type: 'warning',
-      title: 'Stock faible',
-      message: 'iPhone 15 Pro - Il ne reste que 3 unités en stock',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-      isRead: false,
-      module: 'Stocks',
-      actionUrl: '/stocks'
-    },
-    {
-      id: '3',
-      type: 'info',
-      title: 'Nouveau affilié',
-      message: 'Marie Dubois a rejoint votre réseau d\'affiliés',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-      isRead: true,
-      module: 'Commissions',
-      actionUrl: '/commissions'
-    },
-    {
-      id: '4',
-      type: 'system',
-      title: 'Mise à jour système',
-      message: 'NexSaaS v2.1.0 est maintenant disponible avec de nouvelles fonctionnalités',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-      isRead: true,
-      module: 'Système'
-    }
-  ]);
+  const {
+    notifications: apiNotifications,
+    unreadCount,
+    loading,
+    error,
+    total,
+    hasMore,
+    refresh,
+    loadMore,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    deleteAll: clearAllNotifications,
+    updateFilters,
+  } = useNotification({ 
+    pageSize: 20, 
+    // Suppression de autoRefresh et refreshInterval
+    // Plus besoin de rafraîchissement automatique
+  });
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  // Convertir les notifications API en format Notification
+  const notifications: Notification[] = apiNotifications.map((n) => ({
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    message: n.message,
+    isRead: n.isRead,
+    isGlobal: n.isGlobal,
+    module: n.module,
+    actionUrl: n.actionUrl,
+    metadata: n.metadata,
+    createdAt: new Date(n.createdAt),
+    updatedAt: n.updatedAt,
+  }));
 
-  const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp' | 'isRead'>) => {
-    const newNotification: Notification = {
+  const addNotification = async (notification: Omit<Notification, 'id' | 'timestamp' | 'isRead'>) => {
+    await notificationApi.createNotification({
       ...notification,
-      id: Date.now().toString(),
-      timestamp: new Date(),
-      isRead: false,
-    };
+      isGlobal: false,
+    });
+    // Rafraîchir après ajout pour voir la nouvelle notification
+    await refresh();
+  };
 
-    setNotifications(prev => [newNotification, ...prev.slice(0, 99)]); // Keep last 100 notifications
-  }, []);
+  const getNotificationsByType = (type: NotificationType) => {
+    return notifications.filter((notification) => notification.type === type);
+  };
 
-  const markAsRead = useCallback((id: string) => {
-    setNotifications(prev => prev.map(notification => 
-      notification.id === id ? { ...notification, isRead: true } : notification
-    ));
-  }, []);
-
-  const markAllAsRead = useCallback(() => {
-    setNotifications(prev => prev.map(notification => ({ ...notification, isRead: true })));
-  }, []);
-
-  const deleteNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(notification => notification.id !== id));
-  }, []);
-
-  const clearAllNotifications = useCallback(() => {
-    setNotifications([]);
-  }, []);
-
-  const getNotificationsByType = useCallback((type: NotificationType) => {
-    return notifications.filter(notification => notification.type === type);
-  }, [notifications]);
-
-  const getUnreadNotifications = useCallback(() => {
-    return notifications.filter(notification => !notification.isRead);
-  }, [notifications]);
+  const getUnreadNotifications = () => {
+    return notifications.filter((notification) => !notification.isRead);
+  };
 
   return (
-    <NotificationContext.Provider value={{
-      notifications,
-      unreadCount,
-      addNotification,
-      markAsRead,
-      markAllAsRead,
-      deleteNotification,
-      clearAllNotifications,
-      getNotificationsByType,
-      getUnreadNotifications,
-    }}>
+    <NotificationContext.Provider
+      value={{
+        notifications,
+        unreadCount,
+        loading,
+        error,
+        total,
+        hasMore,
+        addNotification,
+        markAsRead,
+        markAllAsRead,
+        deleteNotification,
+        clearAllNotifications,
+        getNotificationsByType,
+        getUnreadNotifications,
+        refresh,
+        updateFilters,
+      }}
+    >
       {children}
     </NotificationContext.Provider>
   );

@@ -226,6 +226,7 @@ function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
+        {/* Plus besoin de WebSocketNotificationProvider */}
         <NotificationProvider>
           <ActivityProvider>
             <AuthProvider>

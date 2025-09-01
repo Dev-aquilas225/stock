@@ -11,8 +11,8 @@ export interface NotificationResponse {
   metadata?: Record<string, any>;
   isRead: boolean;
   isGlobal: boolean;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface NotificationsListResponse {
@@ -97,5 +97,13 @@ class NotificationApi {
     await axiosClient.delete(this.baseUrl);
   }
 }
+
+axiosClient.interceptors.request.use(config => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 export const notificationApi = new NotificationApi();

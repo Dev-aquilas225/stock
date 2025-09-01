@@ -4,14 +4,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Building2, Moon, Sun, LogOut, User, Bell, Settings, Menu, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useNotificationsContext  } from '../../contexts/NotificationContext';
 import { useToast } from '../../contexts/ToastContext';
 import NotificationDropdown from '../Notifications/NotificationDropdown';
 
 const Header: React.FC = () => {
   const { user, displayUser, isAuthenticated, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
-  const { unreadCount } = useNotifications();
+  const { unreadCount } = useNotificationsContext();
   const { showToast } = useToast();
   const navigate = useNavigate();
 

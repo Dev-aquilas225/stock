@@ -1,3 +1,4 @@
+// src/hooks/useNotifications.ts - Version simplifiée
 import { useState, useEffect, useCallback } from 'react';
 import { notificationApi, NotificationResponse, NotificationFilters } from '../api/notificationApi';
 import { useToast } from '../contexts/ToastContext';
@@ -20,16 +21,12 @@ export interface UseNotificationsReturn {
 
 interface UseNotificationsOptions {
   initialFilters?: NotificationFilters;
-  autoRefresh?: boolean;
-  refreshInterval?: number;
   pageSize?: number;
 }
 
-export const useNotifications = (options: UseNotificationsOptions = {}): UseNotificationsReturn => {
+export const useNotification = (options: UseNotificationsOptions = {}): UseNotificationsReturn => {
   const {
     initialFilters = {},
-    autoRefresh = true,
-    refreshInterval = 30000, // 30 secondes
     pageSize = 20,
   } = options;
 
@@ -44,9 +41,7 @@ export const useNotifications = (options: UseNotificationsOptions = {}): UseNoti
     limit: pageSize,
     offset: 0,
   });
-  const showToast = useToast().showToast;
-
-  // const { addToast } = useToast(); // La propriété 'addToast' n'existe pas sur le type 'ToastContextType'
+  const { showToast } = useToast();
 
   const fetchNotifications = useCallback(async (reset: boolean = false) => {
     try {
@@ -66,13 +61,19 @@ export const useNotifications = (options: UseNotificationsOptions = {}): UseNoti
 
       setUnreadCount(response.unreadCount);
       setTotal(response.total);
-    } catch (err) {
-      setError('Erreur lors du chargement des notifications');
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors du chargement des notifications');
       console.error('Error fetching notifications:', err);
+      showToast({
+        type: 'error',
+        title: 'Erreur',
+        message: 'Impossible de charger les notifications',
+        duration: 5000,
+      });
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, showToast]);
 
   const refresh = useCallback(async () => {
     await fetchNotifications(true);
@@ -90,6 +91,8 @@ export const useNotifications = (options: UseNotificationsOptions = {}): UseNoti
   const markAsRead = useCallback(async (id: string) => {
     try {
       await notificationApi.markAsRead(id);
+      
+      // Mettre à jour localement
       setNotifications(prev => 
         prev.map(notification => 
           notification.id === id 
@@ -97,17 +100,22 @@ export const useNotifications = (options: UseNotificationsOptions = {}): UseNoti
             : notification
         )
       );
+      
+      // Mettre à jour le compteur
       setUnreadCount(prev => Math.max(0, prev - 1));
+      
       showToast({ 
         type: 'success', 
-        title: 'Succès', 
-        message: 'Notification marquée comme lue' 
+        title: 'Notification lue', 
+        message: 'Notification marquée comme lue',
+        duration: 2000,
       });
-    } catch (err) {
+    } catch (err: any) {
       showToast({ 
         type: 'error', 
         title: 'Erreur', 
-        message: 'Erreur lors de la mise à jour de la notification' 
+        message: err.message || 'Erreur lors de la mise à jour',
+        duration: 4000,
       });
       console.error('Error marking notification as read:', err);
     }
@@ -116,20 +124,25 @@ export const useNotifications = (options: UseNotificationsOptions = {}): UseNoti
   const markAllAsRead = useCallback(async () => {
     try {
       await notificationApi.markAllAsRead();
+      
+      // Mettre à jour localement
       setNotifications(prev => 
         prev.map(notification => ({ ...notification, isRead: true }))
       );
       setUnreadCount(0);
+      
       showToast({ 
         type: 'success', 
-        title: 'Succès', 
-        message: 'Toutes les notifications marquées comme lues' 
+        title: 'Notifications lues', 
+        message: 'Toutes les notifications ont été marquées comme lues',
+        duration: 3000,
       });
-    } catch (err) {
+    } catch (err: any) {
       showToast({ 
         type: 'error', 
         title: 'Erreur', 
-        message: 'Erreur lors de la mise à jour des notifications' 
+        message: err.message || 'Erreur lors de la mise à jour',
+        duration: 4000,
       });
       console.error('Error marking all notifications as read:', err);
     }
@@ -138,25 +151,31 @@ export const useNotifications = (options: UseNotificationsOptions = {}): UseNoti
   const deleteNotification = useCallback(async (id: string) => {
     try {
       await notificationApi.deleteNotification(id);
+      
+      // Trouver la notification supprimée pour mettre à jour le compteur
+      const deletedNotification = notifications.find(n => n.id === id);
+      
+      // Mettre à jour localement
       setNotifications(prev => prev.filter(notification => notification.id !== id));
       
-      // Mettre à jour le compteur si la notification supprimée n'était pas lue
-      const deletedNotification = notifications.find(n => n.id === id);
+      // Mettre à jour les compteurs
       if (deletedNotification && !deletedNotification.isRead) {
         setUnreadCount(prev => Math.max(0, prev - 1));
       }
-      
       setTotal(prev => prev - 1);
+      
       showToast({ 
         type: 'success', 
-        title: 'Succès', 
-        message: 'Notification supprimée' 
+        title: 'Notification supprimée', 
+        message: 'La notification a été supprimée',
+        duration: 2000,
       });
-    } catch (err) {
+    } catch (err: any) {
       showToast({ 
         type: 'error', 
         title: 'Erreur', 
-        message: 'Erreur lors de la suppression de la notification' 
+        message: err.message || 'Erreur lors de la suppression',
+        duration: 4000,
       });
       console.error('Error deleting notification:', err);
     }
@@ -165,20 +184,25 @@ export const useNotifications = (options: UseNotificationsOptions = {}): UseNoti
   const deleteAll = useCallback(async () => {
     try {
       await notificationApi.deleteAllNotifications();
+      
+      // Vider localement
       setNotifications([]);
       setUnreadCount(0);
       setTotal(0);
       setCurrentOffset(0);
+      
       showToast({ 
         type: 'success', 
-        title: 'Succès', 
-        message: 'Toutes les notifications ont été supprimées' 
+        title: 'Notifications supprimées', 
+        message: 'Toutes les notifications ont été supprimées',
+        duration: 3000,
       });
-    } catch (err) {
+    } catch (err: any) {
       showToast({ 
         type: 'error', 
         title: 'Erreur', 
-        message: 'Erreur lors de la suppression des notifications' 
+        message: err.message || 'Erreur lors de la suppression',
+        duration: 4000,
       });
       console.error('Error deleting all notifications:', err);
     }
@@ -196,18 +220,7 @@ export const useNotifications = (options: UseNotificationsOptions = {}): UseNoti
   // Charger les notifications au montage et quand les filtres changent
   useEffect(() => {
     fetchNotifications(true);
-  }, [filters, fetchNotifications]); // React Hook useEffect has a missing dependency: 'fetchNotifications'. Either include it or remove the dependency array.eslintreact-hooks/exhaustive-deps
-
-  // Auto-refresh
-  useEffect(() => {
-    if (!autoRefresh) return;
-
-    const interval = setInterval(() => {
-      refresh();
-    }, refreshInterval);
-
-    return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, refresh]);
+  }, [filters]);
 
   const hasMore = currentOffset < total;
 
@@ -223,7 +236,7 @@ export const useNotifications = (options: UseNotificationsOptions = {}): UseNoti
     markAsRead,
     markAllAsRead,
     deleteNotification,
-    deleteAll: deleteAll,
+    deleteAll,
     updateFilters,
   };
 };

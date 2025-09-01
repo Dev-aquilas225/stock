@@ -1,3 +1,4 @@
+// src/types/toast.ts
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface Toast {
