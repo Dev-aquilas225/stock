@@ -47,8 +47,11 @@ import {
 } from "../../api/fournisseurApi";
 import { debounce } from "lodash";
 import { Devise } from "../../types";
+import { notifyNewOrder, notifyDocumentValidation, notifySystem, notifyCustom } from "../../utils/notificationUtils";
+import { useNotificationsContext } from "../../contexts/NotificationContext";
 
 // Interface aligned with API's Fournisseur
+
 interface Supplier extends Fournisseur {}
 
 interface Product extends Produit {
@@ -87,6 +90,7 @@ interface SupplierForm {
 }
 
 const SuppliersPage: React.FC = () => {
+    const {refresh: refreshNotifications} = useNotificationsContext();
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
@@ -138,6 +142,25 @@ const SuppliersPage: React.FC = () => {
         delaiApprovisionnement: "",
     });
 
+    // Nouvelle fonction pour vérifier les documents manquants
+    const checkMissingDocuments = async () => {
+        try {
+            for (const supplier of suppliers) {
+                // Vérifier si le fournisseur a tous les documents requis
+                const requiredDocs = ['Contrat', 'Assurance', 'RIB', 'SIRET'];
+                const supplierDocs = supplier.documents.map(doc => doc.nom);
+                
+                for (const requiredDoc of requiredDocs) {
+                    if (!supplierDocs.some(doc => doc.toLowerCase().includes(requiredDoc.toLowerCase()))) {
+                        await notifyDocumentIssue(supplier.nom, requiredDoc, 'missing');
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Erreur lors de la vérification des documents:', error);
+        }
+    };
+
     // Fetch all suppliers for suggestions with validation
     useEffect(() => {
         const fetchAllSuppliers = async () => {
@@ -164,6 +187,8 @@ const SuppliersPage: React.FC = () => {
                 setLoading(true);
                 const data = await getFournisseurs();
                 setSuppliers(data);
+
+                setTimeout(() => checkMissingDocuments(), 5000);
             } catch (err: any) {
                 setError(err.message);
                 showToast({
@@ -176,7 +201,169 @@ const SuppliersPage: React.FC = () => {
             }
         };
         fetchSuppliers();
-    }, [showToast]);
+    }, [showToast, ]);
+
+    // Notify when a new supplier is added
+    const notifySupplierAdded = async (supplierName: string, category: string) => {
+        try {
+            await notifyCustom({
+                type: 'success',
+                title: 'Nouveau fournisseur ajouté',
+                message: `Le fournisseur "${supplierName}" (${category}) a été ajouté avec succès au catalogue`,
+                module: 'Fournisseurs',
+                actionUrl: '/fournisseurs',
+                metadata: {
+                    supplierName,
+                    category,
+                    action: 'supplier_added',
+                },
+            });
+            // Rafraîchir les notifications pour voir la nouvelle immédiatement
+            await refreshNotifications();
+        } catch (error) {
+            console.error('Erreur lors de la création de la notification fournisseur:', error);
+        }
+    };
+
+    // Notify when a supplier is updated
+    const notifySupplierUpdated = async (supplierName: string, changes: string[]) => {
+        try {
+            await notifyCustom({
+                type: 'info',
+                title: 'Fournisseur modifié',
+                message: `Les informations de "${supplierName}" ont été mises à jour : ${changes.join(', ')}`,
+                module: 'Fournisseurs',
+                actionUrl: '/fournisseurs',
+                metadata: {
+                    supplierName,
+                    changes,
+                    action: 'supplier_updated',
+                },
+            });
+            await refreshNotifications();
+        } catch (error) {
+            console.error('Erreur lors de la création de la notification modification:', error);
+        }
+    };
+
+    /**
+     * Notifier lors de l'évaluation d'un fournisseur
+     */
+    const notifySupplierRated = async (supplierName: string, rating: number, oldRating?: number) => {
+        try {
+            const ratingChange = oldRating 
+                ? `(ancienne note: ${oldRating}/5)`
+                : '';
+            
+            await notifyCustom({
+                type: rating >= 4 ? 'success' : rating >= 3 ? 'warning' : 'error',
+                title: 'Fournisseur évalué',
+                message: `"${supplierName}" a reçu une note de ${rating}/5 ${ratingChange}`,
+                module: 'Fournisseurs',
+                actionUrl: '/fournisseurs',
+                metadata: {
+                    supplierName,
+                    rating,
+                    oldRating,
+                    action: 'supplier_rated',
+                },
+            });
+            await refreshNotifications();
+        } catch (error) {
+            console.error('Erreur lors de la création de la notification évaluation:', error);
+        }
+    };
+
+    /**
+     * Notifier lors de l'ajout d'un produit
+     */
+    const notifyProductAdded = async (supplierName: string, productName: string, price: number, currency: string) => {
+        try {
+            await notifyCustom({
+                type: 'success',
+                title: 'Nouveau produit ajouté',
+                message: `"${productName}" ajouté au catalogue de ${supplierName} à ${price} ${currency}`,
+                module: 'Fournisseurs',
+                actionUrl: '/fournisseurs',
+                metadata: {
+                    supplierName,
+                    productName,
+                    price,
+                    currency,
+                    action: 'product_added',
+                },
+            });
+            await refreshNotifications();
+        } catch (error) {
+            console.error('Erreur lors de la création de la notification produit:', error);
+        }
+    };
+
+    /**
+     * Notifier lors de documents manquants ou expirés
+     */
+    const notifyDocumentIssue = async (supplierName: string, documentType: string, issue: 'missing' | 'expired') => {
+        try {
+            const messages = {
+                missing: `Document manquant pour ${supplierName} : ${documentType}`,
+                expired: `Document expiré pour ${supplierName} : ${documentType}`,
+            };
+
+            await notifyCustom({
+                type: 'warning',
+                title: issue === 'missing' ? 'Document manquant' : 'Document expiré',
+                message: messages[issue],
+                module: 'Documents',
+                actionUrl: '/fournisseurs',
+                metadata: {
+                    supplierName,
+                    documentType,
+                    issue,
+                    action: 'document_issue',
+                },
+            });
+            await refreshNotifications();
+        } catch (error) {
+            console.error('Erreur lors de la création de la notification document:', error);
+        }
+    };
+
+    /**
+     * Notifier lors de prix modifiés (négociation)
+     */
+    const notifyPriceNegotiation = async (
+        supplierName: string, 
+        productName: string, 
+        oldPrice: number, 
+        newPrice: number, 
+        currency: string
+    ) => {
+        try {
+            const priceChange = newPrice > oldPrice ? 'augmentation' : 'réduction';
+            const percentage = Math.abs(((newPrice - oldPrice) / oldPrice) * 100).toFixed(1);
+            
+            await notifyCustom({
+                type: newPrice < oldPrice ? 'success' : 'warning',
+                title: 'Prix négocié',
+                message: `${priceChange} de ${percentage}% pour "${productName}" chez ${supplierName} : ${oldPrice}${currency} → ${newPrice}${currency}`,
+                module: 'Fournisseurs',
+                actionUrl: '/fournisseurs',
+                metadata: {
+                    supplierName,
+                    productName,
+                    oldPrice,
+                    newPrice,
+                    currency,
+                    percentage,
+                    priceChange,
+                    action: 'price_negotiated',
+                },
+            });
+            await refreshNotifications();
+        } catch (error) {
+            console.error('Erreur lors de la création de la notification prix:', error);
+        }
+    };
 
     // Debounced search for suggestions
     const searchSuppliers = useCallback(
@@ -396,15 +583,29 @@ const SuppliersPage: React.FC = () => {
 
             if (editingSupplier) {
                 await updateFournisseur(editingSupplier.id, fournisseurData);
+
+                // Déterminer quels champs ont été modifiés
+                const changes: string[] = [];
+                if (editingSupplier.nom !== supplierForm.nom) changes.push('nom');
+                if (editingSupplier.email !== supplierForm.email) changes.push('email');
+                if (editingSupplier.telephone !== supplierForm.telephone) changes.push('téléphone');
+                if (editingSupplier.adresse !== supplierForm.adresse) changes.push('adresse');
+                if (editingSupplier.categorie !== supplierForm.categorie) changes.push('catégorie');
+                if (editingSupplier.delaiLivraison !== supplierForm.delaiLivraison) changes.push('délai de livraison');
+
+                if (changes.length > 0) {
+                    await notifySupplierUpdated(supplierForm.nom, changes);
+                }
+
                 showToast({
                     type: "success",
                     title: "Fournisseur modifié",
-                    message:
-                        "Les informations du fournisseur ont été mises à jour",
+                    message: "Les informations du fournisseur ont été mises à jour",
                 });
             } else {
                 const response = await addFournisseur(fournisseurData, files);
                 console.log("addFournisseur response:", response); // For debugging
+
                 if (!response.success) {
                     throw new Error(
                         response.message ||
@@ -426,12 +627,14 @@ const SuppliersPage: React.FC = () => {
                 });
             }
 
-            // Fetch updated supplier list without mapping
+            // Refresh et cleanup
             const data = await getFournisseurs();
             setSuppliers(data);
             setShowSupplierModal(false);
             resetForms();
+
         } catch (err: any) {
+
             console.error("Erreur dans handleSaveSupplier:", err);
             showToast({
                 type: "error",
@@ -486,16 +689,38 @@ const SuppliersPage: React.FC = () => {
 
             if (editingProduct) {
                 await updateProduit(editingProduct.id, produitData);
+                const oldPrice = editingProduct.prix;
+                const newPrice = parseFloat(productForm.prix);
+
+                // Notifier si le prix a changé
+                if (oldPrice !== newPrice) {
+                    await notifyPriceNegotiation(
+                        selectedSupplier.nom,
+                        productForm.nom,
+                        oldPrice,
+                        newPrice,
+                        productForm.devise
+                    );
+                }
                 showToast({
                     type: "success",
                     title: "Produit modifié",
                     message: "Les informations du produit ont été mises à jour",
                 });
             } else {
+
                 await addProduitToFournisseur(
                     selectedSupplier.id,
                     produitData as CreateProduitDto,
                 );
+
+                await notifyProductAdded(
+                    selectedSupplier.nom,
+                    productForm.nom,
+                    parseFloat(productForm.prix),
+                    productForm.devise
+                );
+
                 showToast({
                     type: "success",
                     title: "Produit ajouté",
@@ -540,6 +765,8 @@ const SuppliersPage: React.FC = () => {
         if (!selectedSupplier) return;
 
         try {
+            const oldRating = selectedSupplier.evaluation?.note;
+
             const evaluationData = {
                 note: newRating,
                 commentaire: ratingComment,
@@ -555,6 +782,9 @@ const SuppliersPage: React.FC = () => {
                         : supplier,
                 ),
             );
+
+            await notifySupplierRated(selectedSupplier.nom, newRating, oldRating);
+
             logActivity({
                 type: "update",
                 module: "Fournisseurs",
@@ -565,6 +795,7 @@ const SuppliersPage: React.FC = () => {
                     comment: ratingComment,
                 },
             });
+
             showToast({
                 type: "success",
                 title: "Note enregistrée",
@@ -573,6 +804,7 @@ const SuppliersPage: React.FC = () => {
             setShowRatingModal(false);
             setNewRating(0);
             setRatingComment("");
+
         } catch (err: any) {
             showToast({
                 type: "error",
@@ -581,6 +813,7 @@ const SuppliersPage: React.FC = () => {
             });
         }
     };
+
 
     const toggleSupplierProducts = (supplierId: number) => {
         setExpandedSuppliers((prev) => {

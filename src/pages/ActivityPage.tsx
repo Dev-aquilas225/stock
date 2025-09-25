@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { 
   Activity, 
   Search, 
-  Filter, 
+  Filter,
   ArrowLeft,
   User,
   ShoppingCart,
@@ -17,58 +17,50 @@ import {
   LogOut,
   Plus,
   Scan,
-  BarChart3
+  BarChart3,
+  Download,
+  RefreshCw,
+  Calendar,
+  Clock,
+  AlertCircle,
+  TrendingUp,
+  Users,
+  FileText,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-import { useActivity, ActivityType } from '../contexts/ActivityContext';
+import { useActivity, ActivityType, ActivityFilters } from '../contexts/ActivityContext';
+// import { ApiDiagnostics } from '../utils/diagnostics';
 
 const ActivityPage: React.FC = () => {
-  const { activities } = useActivity();
+  const { 
+    activities, 
+    loading, 
+    error, 
+    stats,
+    fetchActivities,
+    fetchStats,
+    exportActivities,
+    filters,
+    setFilters 
+  } = useActivity();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterModule, setFilterModule] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [dateRange, setDateRange] = useState({
+    startDate: '',
+    endDate: ''
+  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
 
-  const getActivityIcon = (type: ActivityType) => {
-    switch (type) {
-      case 'login': return <LogIn className="w-4 h-4 text-green-500" />;
-      case 'logout': return <LogOut className="w-4 h-4 text-red-500" />;
-      case 'create': return <Plus className="w-4 h-4 text-blue-500" />;
-      case 'update': return <Edit className="w-4 h-4 text-yellow-500" />;
-      case 'delete': return <Trash2 className="w-4 h-4 text-red-500" />;
-      case 'view': return <Eye className="w-4 h-4 text-gray-500" />;
-      case 'scan': return <Scan className="w-4 h-4 text-purple-500" />;
-      case 'sale': return <ShoppingCart className="w-4 h-4 text-green-500" />;
-      case 'payment': return <CreditCard className="w-4 h-4 text-blue-500" />;
-      default: return <Activity className="w-4 h-4 text-gray-500" />;
-    }
-  };
-
-  const getModuleIcon = (module: string) => {
-    switch (module.toLowerCase()) {
-      case 'pos': return <ShoppingCart className="w-4 h-4 text-green-500" />;
-      case 'stocks': return <Package className="w-4 h-4 text-blue-500" />;
-      case 'ventes': return <BarChart3 className="w-4 h-4 text-purple-500" />;
-      case 'auth': return <User className="w-4 h-4 text-orange-500" />;
-      default: return <Activity className="w-4 h-4 text-gray-500" />;
-    }
-  };
-
-  const filteredActivities = useMemo(() => {
-    return activities.filter(activity => {
-      const matchesSearch = activity.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           activity.module.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesModule = filterModule === 'all' || activity.module.toLowerCase() === filterModule.toLowerCase();
-      const matchesType = filterType === 'all' || activity.type === filterType;
-      
-      return matchesSearch && matchesModule && matchesType;
-    });
-  }, [activities, searchTerm, filterModule, filterType]);
-
-  const modules = [...new Set(activities.map(a => a.module))];
-  const types: ActivityType[] = ['login', 'logout', 'create', 'update', 'delete', 'view', 'scan', 'sale', 'payment'];
-
-  const stats = useMemo(() => {
+  // Calcul des statistiques locales si les stats du contexte ne sont pas disponibles
+  const localStats = useMemo(() => {
+    if (stats) return stats;
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -77,12 +69,116 @@ const ActivityPage: React.FC = () => {
     const scanActivities = activities.filter(a => a.type === 'scan');
     
     return {
-      total: activities.length,
-      today: todayActivities.length,
+      totalActivities: activities.length,
+      todayActivities: todayActivities.length,
       sales: salesActivities.length,
       scans: scanActivities.length,
+      topActivities: [],
+      moduleStats: []
     };
-  }, [activities]);
+  }, [activities, stats]);
+
+  const getActivityIcon = (type: ActivityType | undefined) => {
+    if (!type) return <Activity className="w-4 h-4 text-gray-500" />;
+
+    const iconMap: Partial<Record<ActivityType, JSX.Element>> = {
+      login: <LogIn className="w-4 h-4 text-green-500" />,
+      logout: <LogOut className="w-4 h-4 text-red-500" />,
+      reset_password: <AlertCircle className="w-4 h-4 text-orange-500" />,
+      change_password: <AlertCircle className="w-4 h-4 text-blue-500" />,
+      create: <Plus className="w-4 h-4 text-blue-500" />,
+      update: <Edit className="w-4 h-4 text-yellow-500" />,
+      delete: <Trash2 className="w-4 h-4 text-red-500" />,
+      view: <Eye className="w-4 h-4 text-gray-500" />,
+      scan: <Scan className="w-4 h-4 text-purple-500" />,
+      sale: <ShoppingCart className="w-4 h-4 text-green-500" />,
+      payment: <CreditCard className="w-4 h-4 text-blue-500" />,
+      refund: <CreditCard className="w-4 h-4 text-red-500" />,
+      invoice: <FileText className="w-4 h-4 text-blue-500" />,
+      quote: <FileText className="w-4 h-4 text-gray-500" />,
+      stock_in: <Package className="w-4 h-4 text-green-500" />,
+      stock_out: <Package className="w-4 h-4 text-red-500" />,
+      stock_adjustment: <Package className="w-4 h-4 text-yellow-500" />,
+      inventory: <Package className="w-4 h-4 text-blue-500" />,
+    };
+
+    return iconMap[type] || <Activity className="w-4 h-4 text-gray-500" />;
+  };
+
+  const getModuleIcon = (module: string | undefined) => {
+    if (!module) return <Activity className="w-4 h-4 text-gray-500" />;
+
+    const moduleMap: Record<string, JSX.Element> = {
+      pos: <ShoppingCart className="w-4 h-4 text-green-500" />,
+      stocks: <Package className="w-4 h-4 text-blue-500" />,
+      ventes: <BarChart3 className="w-4 h-4 text-purple-500" />,
+      auth: <User className="w-4 h-4 text-orange-500" />,
+      users: <Users className="w-4 h-4 text-blue-500" />,
+      products: <Package className="w-4 h-4 text-green-500" />,
+      suppliers: <TrendingUp className="w-4 h-4 text-orange-500" />,
+      system: <AlertCircle className="w-4 h-4 text-gray-500" />,
+      reports: <BarChart3 className="w-4 h-4 text-purple-500" />,
+    };
+    
+    return moduleMap[module.toLowerCase()] || <Activity className="w-4 h-4 text-gray-500" />;
+  };
+
+  const filteredActivities = useMemo(() => {
+    return activities.filter(activity => {
+      const module = activity.module || '';
+      const type = activity.type || '';
+      const matchesSearch = activity.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           module.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           activity.userName?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesModule = filterModule === 'all' || module.toLowerCase() === filterModule.toLowerCase();
+      const matchesType = filterType === 'all' || type === filterType;
+      
+      return matchesSearch && matchesModule && matchesType;
+    });
+  }, [activities, searchTerm, filterModule, filterType]);
+
+  const modules = [...new Set(activities.map(a => a.module))];
+  const types: ActivityType[] = [
+    'login', 'logout', 'create', 'update', 'delete', 'view', 'scan', 
+    'sale', 'payment', 'stock_in', 'stock_out', 'inventory'
+  ];
+
+  const handleApplyFilters = useCallback(() => {
+    const newFilters: ActivityFilters = {
+      startDate: dateRange.startDate ? new Date(dateRange.startDate) : undefined,
+      endDate: dateRange.endDate ? new Date(dateRange.endDate) : undefined,
+      activityType: filterType !== 'all' ? filterType as ActivityType : undefined,
+      module: filterModule !== 'all' ? filterModule : undefined,
+      search: searchTerm || undefined,
+      page: currentPage,
+      limit: 50,
+    };
+
+    setFilters(newFilters);
+    fetchActivities(newFilters);
+  }, [dateRange, filterType, filterModule, searchTerm, currentPage, setFilters, fetchActivities]);
+
+  const handleRefresh = useCallback(() => {
+    fetchActivities(filters);
+    fetchStats();
+  }, [fetchActivities, fetchStats, filters]);
+
+  const handleExport = useCallback(() => {
+    const exportFilters: ActivityFilters = {
+      ...filters,
+      startDate: dateRange.startDate ? new Date(dateRange.startDate) : undefined,
+      endDate: dateRange.endDate ? new Date(dateRange.endDate) : undefined,
+    };
+    exportActivities(exportFilters);
+  }, [exportActivities, filters, dateRange]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleApplyFilters();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, handleApplyFilters]);
 
   return (
     <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
@@ -115,7 +211,23 @@ const ActivityPage: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* Stats Cards */}
+        {/* Error Display */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
+                <p className="text-red-700 dark:text-red-300">{error}</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Stats Cards - Design simplifié comme la version de base */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -127,7 +239,7 @@ const ActivityPage: React.FC = () => {
               <Activity className="w-6 h-6 text-blue-500" />
             </div>
             <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-              {stats.total}
+              {localStats.totalActivities}
             </h3>
             <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
               Total activités
@@ -139,7 +251,7 @@ const ActivityPage: React.FC = () => {
               <BarChart3 className="w-6 h-6 text-green-500" />
             </div>
             <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-              {stats.today}
+              {localStats.todayActivities}
             </h3>
             <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
               Aujourd'hui
@@ -151,7 +263,7 @@ const ActivityPage: React.FC = () => {
               <ShoppingCart className="w-6 h-6 text-purple-500" />
             </div>
             <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-              {stats.sales}
+              {localStats.sales || 0}
             </h3>
             <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
               Ventes effectuées
@@ -163,7 +275,7 @@ const ActivityPage: React.FC = () => {
               <Scan className="w-6 h-6 text-orange-500" />
             </div>
             <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-              {stats.scans}
+              {localStats.scans || 0}
             </h3>
             <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
               Codes scannés
@@ -210,11 +322,94 @@ const ActivityPage: React.FC = () => {
                 >
                   <option value="all">Tous les types</option>
                   {types.map(type => (
-                    <option key={type} value={type}>{type}</option>
+                    <option key={type} value={type}>
+                      {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </option>
                   ))}
                 </select>
               </div>
+              
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={loading}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Actualiser
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Exporter
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                >
+                  <Filter className="w-4 h-4 mr-2" />
+                  Filtres avancés
+                  {showFilters ? <ChevronUp className="w-4 h-4 ml-2" /> : <ChevronDown className="w-4 h-4 ml-2" />}
+                </Button>
+              </div>
             </div>
+
+            {/* Advanced Filters */}
+            {showFilters && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="border-t border-nexsaas-light-gray dark:border-gray-700 pt-4 mt-4"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-2">
+                      Date de début
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="date"
+                        value={dateRange.startDate}
+                        onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                        className="w-full pl-10 pr-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-nexsaas-vanta-black dark:text-gray-300 mb-2">
+                      Date de fin
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="date"
+                        value={dateRange.endDate}
+                        onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                        className="w-full pl-10 pr-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-end">
+                    <Button
+                      onClick={handleApplyFilters}
+                      className="w-full"
+                      disabled={loading}
+                    >
+                      {loading ? 'Chargement...' : 'Appliquer les filtres'}
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
           </Card>
         </motion.div>
 
@@ -229,7 +424,14 @@ const ActivityPage: React.FC = () => {
               Historique des Activités ({filteredActivities.length})
             </h2>
 
-            {filteredActivities.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-8">
+                <RefreshCw className="w-8 h-8 text-gray-400 mx-auto mb-4 animate-spin" />
+                <p className="text-nexsaas-vanta-black dark:text-gray-300">
+                  Chargement des activités...
+                </p>
+              </div>
+            ) : filteredActivities.length === 0 ? (
               <div className="text-center py-8">
                 <Activity className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-nexsaas-vanta-black dark:text-gray-300">
@@ -249,8 +451,8 @@ const ActivityPage: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center space-x-2">
-                          {getActivityIcon(activity.type)}
-                          {getModuleIcon(activity.module)}
+                          {getActivityIcon(activity.type || undefined)}
+                          {getModuleIcon(activity.module || '')}
                         </div>
                         <div>
                           <h3 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
@@ -259,14 +461,22 @@ const ActivityPage: React.FC = () => {
                           <div className="flex items-center space-x-4 text-sm text-nexsaas-vanta-black dark:text-gray-300">
                             <span className="capitalize">{activity.module}</span>
                             <span>•</span>
-                            <span className="capitalize">{activity.type}</span>
+                            <span className="capitalize">
+                              {activity.type ? activity.type.replace(/_/g, ' ') : 'unknown'}
+                            </span>
+                            {activity.userName && (
+                              <>
+                                <span>•</span>
+                                <span>{activity.userName}</span>
+                              </>
+                            )}
                             <span>•</span>
                             <span>{activity.timestamp.toLocaleString('fr-FR')}</span>
                           </div>
                         </div>
                       </div>
                       
-                      {activity.metadata && (
+                      {/* {activity.metadata && (
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           <details className="cursor-pointer">
                             <summary>Détails</summary>
@@ -275,7 +485,7 @@ const ActivityPage: React.FC = () => {
                             </pre>
                           </details>
                         </div>
-                      )}
+                      )} */}
                     </div>
                   </motion.div>
                 ))}

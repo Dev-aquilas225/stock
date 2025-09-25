@@ -1,3 +1,4 @@
+// src/contexts/ToastContext.tsx
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, AlertCircle, Info, AlertTriangle, X } from 'lucide-react';
