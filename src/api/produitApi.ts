@@ -18,6 +18,7 @@ export interface ProduitFournisseur {
     nom: string;
     prix: string;
     conditionnement: string;
+    prixVente: string;
     devise: Devise;
     fournisseur: Fournisseur;
 }
@@ -34,6 +35,7 @@ export enum StatutProduitStock {
 
 export interface ProduitStock {
     id: number;
+    code: string;
     qrCode: string;
     sku: string;
     lot: string;
@@ -61,6 +63,8 @@ export const getProduitsStock = async (): Promise<ProduitStockGroup[]> => {
                 Authorization: `Bearer ${token}`,
             },
         });
+
+        console.log("reponses", response);
 
         return response.data;
     } catch (err: any) {

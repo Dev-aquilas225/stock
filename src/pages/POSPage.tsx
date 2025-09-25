@@ -1,260 +1,104 @@
-// src/pages/POSPage.tsx
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
-import { 
-  ShoppingCart, 
-  Scan, 
-  Trash2, 
-  ArrowLeft,
-  User,
-  CreditCard,
-  Receipt,
-  RotateCcw,
-  Keyboard,
-  Package,
-  AlertTriangle,
-  X
-} from 'lucide-react';
-import Card from '../components/UI/Card';
-import Button from '../components/UI/Button';
-import QRScanner from '../components/QRScanner/QRScanner';
-import { useToast } from '../contexts/ToastContext';
-import { useActivity } from '../contexts/ActivityContext';
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
+import {
+    ShoppingCart,
+    Scan,
+    Trash2,
+    ArrowLeft,
+    User,
+    CreditCard,
+    Receipt,
+    RotateCcw,
+    Keyboard,
+    Package,
+    AlertTriangle,
+    X,
+} from "lucide-react";
+import Card from "../components/UI/Card";
+import Button from "../components/UI/Button";
+import QRScanner from "../components/QRScanner/QRScanner";
+import { useToast } from "../contexts/ToastContext";
+import { useActivity } from "../contexts/ActivityContext";
+import { scanProduitByCode, ProduitStock } from "../api/posApi";
+import { StatutProduitStock } from "../api/produitApi";
+import { createVente, VenteDto, VenteResponse } from "../api/venteApi";
 
-// Types pour le POS
 interface ProduitPOS {
-  id: string;
-  nom: string;
-  prix: number;
-  sku: string;
-  lot: string;
-  qrCode: string;
-  fournisseur: string;
-  statut: string;
+    id: string;
+    nom: string;
+    prix: number;
+    code: string;
 }
 
 interface ProduitPanier extends ProduitPOS {
-  dateAjout: Date;
+    code: string;
+    dateAjout: Date;
 }
 
 interface InfosClient {
-  nom?: string;
-  prenom?: string;
-  contact?: string;
+    nom?: string;
+    prenom?: string;
+    contact?: string;
 }
 
-type MoyenPaiement = 'WAVE' | 'ORANGE_MONEY' | 'MTN_MONEY' | 'MOOV_MONEY' | 'AUTRE';
-
-// Mock data pour les tests (à retirer en production)
-const MOCK_PRODUCTS = {
-  'PRD-001': {
-    id: '1',
-    nom: 'MacBook Pro 14"',
-    prix: 2499,
-    sku: 'MBP14-001',
-    lot: 'LOT-2024-01',
-    qrCode: 'PRD-001',
-    fournisseur: 'Apple Inc.',
-    statut: 'DISPONIBLE'
-  },
-  'PRD-002': {
-    id: '2',
-    nom: 'iPhone 15 Pro',
-    prix: 1199,
-    sku: 'IP15P-001',
-    lot: 'LOT-2024-02',
-    qrCode: 'PRD-002',
-    fournisseur: 'Apple Inc.',
-    statut: 'DISPONIBLE'
-  },
-  'PRD-003': {
-    id: '3',
-    nom: 'Samsung Galaxy S24',
-    prix: 899,
-    sku: 'SGS24-001',
-    lot: 'LOT-2024-03',
-    qrCode: 'PRD-003',
-    fournisseur: 'Samsung Electronics',
-    statut: 'DISPONIBLE'
-  }
-};
+type MoyenPaiement =
+    | "WAVE"
+    | "ORANGE_MONEY"
+    | "MTN_MONEY"
+    | "MOOV_MONEY"
+    | "AUTRE";
 
 const POSPage: React.FC = () => {
-    const navigate = useNavigate();
     const { showToast } = useToast();
     const { logActivity } = useActivity();
-
-    // États du POS
     const [panier, setPanier] = useState<ProduitPanier[]>([]);
     const [showScanner, setShowScanner] = useState(false);
     const [showSaisieManuelle, setShowSaisieManuelle] = useState(false);
     const [showModalPaiement, setShowModalPaiement] = useState(false);
     const [codeQRManuel, setCodeQRManuel] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [useMockData, setUseMockData] = useState(false);
-
-    // États pour le paiement
     const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement>("WAVE");
     const [infosClient, setInfosClient] = useState<InfosClient>({});
     const [autreMoyenPaiement, setAutreMoyenPaiement] = useState("");
 
-    // API Endpoints
-    const API_BASE = "http://localhost:8000";
-    const getAuthToken = () => localStorage.getItem("token");
-
-    // Fonction pour scanner/récupérer un produit
-    const scannerProduit = async (qrCode: string) => {
+    const scannerProduit = async (code: string) => {
         setIsLoading(true);
-
         try {
-            // Essayer d'abord avec l'API réelle
-            if (!useMockData) {
-                try {
-                    const token = getAuthToken();
-
-                    let response = await fetch(
-                        `${API_BASE}/produits-stock/scan`,
-                        {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({
-                                id: qrCode,
-                                commentaire: "Scan POS",
-                            }),
-                        },
-                    );
-
-                    // Si le premier essai échoue, essayer avec l'ID numérique
-                    if (!response.ok && qrCode.startsWith("PRD-")) {
-                        const numericId = qrCode.replace("PRD-", "");
-                        response = await fetch(
-                            `${API_BASE}/produits-stock/scan`,
-                            {
-                                method: "POST",
-                                headers: {
-                                    "Content-Type": "application/json",
-                                    Authorization: `Bearer ${token}`,
-                                },
-                                body: JSON.stringify({
-                                    id: numericId,
-                                    commentaire: "Scan POS avec ID numérique",
-                                }),
-                            },
-                        );
-                    }
-
-                    if (response.ok) {
-                        const produitStock = await response.json();
-
-                        // Vérifier que le produit est disponible
-                        if (produitStock.statut !== "CLOTUREE") {
-                            throw new Error(
-                                `Ce produit n'est pas disponible (statut: ${produitStock.statut})`,
-                            );
-                        }
-
-                        // Vérifier que le produit n'est pas déjà dans le panier
-                        const dejaEnPanier = panier.find(
-                            (item) => item.id === produitStock.id,
-                        );
-                        if (dejaEnPanier) {
-                            throw new Error(
-                                "Ce produit est déjà dans le panier",
-                            );
-                        }
-
-                        // Transformer en format POS
-                        const produitPOS: ProduitPOS = {
-                            id: produitStock.id,
-                            nom:
-                                produitStock.produitFournisseur?.nom ||
-                                "Produit sans nom",
-                            prix: parseFloat(
-                                produitStock.prixVente || produitStock.prix,
-                            ),
-                            sku: produitStock.sku,
-                            lot: produitStock.lot || "N/A",
-                            qrCode: produitStock.qrCode,
-                            fournisseur:
-                                produitStock.produitFournisseur?.fournisseur
-                                    ?.nom || "N/A",
-                            statut: produitStock.statut,
-                        };
-
-                        // Ajouter au panier
-                        ajouterAuPanier(produitPOS);
-
-                        logActivity({
-                            type: "scan",
-                            module: "POS",
-                            description: `Produit scanné: ${produitPOS.nom}`,
-                            metadata: {
-                                productId: produitPOS.id,
-                                qrCode: qrCode,
-                                sku: produitPOS.sku,
-                            },
-                        });
-
-                        showToast({
-                            type: "success",
-                            title: "Produit ajouté",
-                            message: `${produitPOS.nom} ajouté au panier`,
-                        });
-
-                        return produitPOS;
-                    }
-                } catch (apiError) {
-                    console.warn("Erreur API, passage en mode mock:", apiError);
-                    setUseMockData(true);
-                    showToast({
-                        type: "warning",
-                        title: "Mode démo activé",
-                        message: "Utilisation des données de démonstration",
-                    });
-                }
-            }
-
-            // Fallback: utiliser les données mockées
-            const mockProduct =
-                MOCK_PRODUCTS[qrCode as keyof typeof MOCK_PRODUCTS];
-
-            if (!mockProduct) {
-                throw new Error(`Produit avec code "${qrCode}" introuvable`);
-            }
-
-            // Vérifier que le produit n'est pas déjà dans le panier
+            const produitStock: ProduitStock = await scanProduitByCode(code);
             const dejaEnPanier = panier.find(
-                (item) => item.id === mockProduct.id,
+                (item) => item.id === produitStock.id.toString(),
             );
             if (dejaEnPanier) {
-                throw new Error("Ce produit est déjà dans le panier");
+                throw new Error("Produit déjà scanné");
             }
-
-            // Ajouter au panier
-            ajouterAuPanier(mockProduct);
-
+            if (produitStock.statut !== StatutProduitStock.DISPONIBLE) {
+                throw new Error("Ce produit ne peut pas être ajouté au panier");
+            }
+            const produitPOS: ProduitPOS = {
+                id: produitStock.id.toString(),
+                nom: produitStock.produitFournisseur?.nom || "Produit sans nom",
+                prix: parseFloat(
+                    produitStock.produitFournisseur?.prixVente || "0",
+                ),
+                code: produitStock.code,
+            };
+            ajouterAuPanier(produitPOS);
             logActivity({
                 type: "scan",
                 module: "POS",
-                description: `Produit scanné (démo): ${mockProduct.nom}`,
+                description: `Produit scanné: ${produitPOS.nom}`,
                 metadata: {
-                    productId: mockProduct.id,
-                    qrCode: qrCode,
-                    sku: mockProduct.sku,
+                    productId: produitPOS.id,
+                    qrCode: code,
                 },
             });
-
             showToast({
                 type: "success",
-                title: "Produit ajouté (démo)",
-                message: `${mockProduct.nom} ajouté au panier - Mode démo`,
+                title: "Produit ajouté",
+                message: `${produitPOS.nom} ajouté au panier`,
             });
-
-            return mockProduct;
+            return produitPOS;
         } catch (error: any) {
             console.error("Erreur scan produit:", error);
             showToast({
@@ -268,7 +112,6 @@ const POSPage: React.FC = () => {
         }
     };
 
-    // Ajouter un produit au panier
     const ajouterAuPanier = (produit: ProduitPOS) => {
         const produitPanier: ProduitPanier = {
             ...produit,
@@ -277,25 +120,10 @@ const POSPage: React.FC = () => {
         setPanier((prev) => [...prev, produitPanier]);
     };
 
-    // In POSPage.tsx, replace the handleScan function
     const handleScan = async (qrCode: string) => {
-        // Do not immediately close the scanner
-        // setShowScanner(false); // Removed to keep scanner open for multiple scans
-        const result = await scannerProduit(qrCode);
-        if (result) {
-            // Optionally show a button to close the scanner or keep it open
-            showToast({
-                type: "info",
-                title: "Continuer à scanner ?",
-                message:
-                    'Produit ajouté. Cliquez sur "Fermer" pour arrêter le scan.',
-            });
-        }
+        await scannerProduit(qrCode);
     };
 
-    // Update the Scanner Card in the render method to include a "Close Scanner" button
-    
-    // Gérer la saisie manuelle
     const handleSaisieManuelle = async () => {
         if (!codeQRManuel.trim()) {
             showToast({
@@ -305,13 +133,11 @@ const POSPage: React.FC = () => {
             });
             return;
         }
-
         await scannerProduit(codeQRManuel.trim());
         setCodeQRManuel("");
         setShowSaisieManuelle(false);
     };
 
-    // Supprimer un produit du panier
     const retirerDuPanier = (productId: string) => {
         setPanier((prev) => prev.filter((item) => item.id !== productId));
         showToast({
@@ -321,10 +147,8 @@ const POSPage: React.FC = () => {
         });
     };
 
-    // Vider le panier
     const viderPanier = () => {
         if (panier.length === 0) return;
-
         setPanier([]);
         setInfosClient({});
         showToast({
@@ -334,12 +158,10 @@ const POSPage: React.FC = () => {
         });
     };
 
-    // Calculer le total
     const calculerTotal = () => {
         return panier.reduce((total, item) => total + item.prix, 0);
     };
 
-    // Finaliser la vente
     const finaliserVente = async () => {
         if (panier.length === 0) {
             showToast({
@@ -350,103 +172,67 @@ const POSPage: React.FC = () => {
             return;
         }
 
+        if (moyenPaiement === "AUTRE" && !autreMoyenPaiement.trim()) {
+            showToast({
+                type: "error",
+                title: "Moyen de paiement requis",
+                message: "Veuillez préciser le moyen de paiement pour 'Autre'",
+            });
+            return;
+        }
+
         setIsLoading(true);
         try {
-            if (!useMockData) {
-                const token = getAuthToken();
+            const venteData: VenteDto = {
+                modePaiement: moyenPaiement,
+                nomClient: infosClient.nom?.trim(),
+                prenomClient: infosClient.prenom?.trim(),
+                contactClient: infosClient.contact?.trim(),
+                produits: panier.map((item) => ({
+                    produitStockId: parseInt(item.id),
+                })),
+                ...(moyenPaiement === "AUTRE" &&
+                    autreMoyenPaiement.trim() && {
+                        autreMoyenPaiement: autreMoyenPaiement.trim(),
+                    }),
+            };
 
-                // Préparer les données de vente
-                const venteData = {
-                    modePaiement: moyenPaiement,
-                    produits: panier.map((item) => ({
-                        produitStockId: parseInt(item.id),
-                    })),
-                    nomClient: infosClient.nom?.trim() || undefined,
-                    prenomClient: infosClient.prenom?.trim() || undefined,
-                    contactClient: infosClient.contact?.trim() || undefined,
-                    ...(moyenPaiement === "AUTRE" &&
-                        autreMoyenPaiement.trim() && {
-                            autreMoyenPaiement: autreMoyenPaiement.trim(),
-                        }),
-                };
+            const response: VenteResponse = await createVente(venteData);
 
-                const response = await fetch(`${API_BASE}/ventes`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify(venteData),
-                });
-
-                console.log("Scan Response:", response);
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(
-                        errorData.message || "Erreur lors de la vente",
-                    );
-                }
-
-                const vente = await response.json();
-
-                logActivity({
-                    type: "sale",
-                    module: "POS",
-                    description: `Vente effectuée - Total: €${calculerTotal().toFixed(
-                        2,
-                    )}`,
-                    metadata: {
-                        venteId: vente.data?.id,
-                        produits: panier.map((p) => ({
-                            id: p.id,
-                            nom: p.nom,
-                            prix: p.prix,
-                        })),
-                        total: calculerTotal(),
-                        moyenPaiement,
-                        client: infosClient,
-                    },
-                });
-
-                showToast({
-                    type: "success",
-                    title: "Vente effectuée",
-                    message: `Total: €${calculerTotal().toFixed(
-                        2,
-                    )} - Vente enregistrée`,
-                });
-            } else {
-                // Mode démo - simuler une vente réussie
-                logActivity({
-                    type: "sale",
-                    module: "POS",
-                    description: `Vente démo effectuée - Total: €${calculerTotal().toFixed(
-                        2,
-                    )}`,
-                    metadata: {
-                        venteId: Math.floor(Math.random() * 1000),
-                        produits: panier.map((p) => ({
-                            id: p.id,
-                            nom: p.nom,
-                            prix: p.prix,
-                        })),
-                        total: calculerTotal(),
-                        moyenPaiement,
-                        client: infosClient,
-                    },
-                });
-
-                showToast({
-                    type: "success",
-                    title: "Vente démo effectuée",
-                    message: `Total: €${calculerTotal().toFixed(
-                        2,
-                    )} - Mode démo`,
-                });
+            if (!response.success) {
+                throw new Error(response.message || "Erreur lors de la vente");
             }
 
-            // Réinitialiser
+            logActivity({
+                type: "sale",
+                module: "POS",
+                description: `Vente effectuée - Total: FCFA ${calculerTotal().toFixed(
+                    2,
+                )}`,
+                metadata: {
+                    venteId: response.message, // Adjust if API returns a specific venteId
+                    produits: panier.map((p) => ({
+                        id: p.id,
+                        nom: p.nom,
+                        prix: p.prix,
+                    })),
+                    total: calculerTotal(),
+                    moyenPaiement,
+                    ...(moyenPaiement === "AUTRE" && {
+                        autreMoyenPaiement: autreMoyenPaiement.trim(),
+                    }),
+                    client: infosClient,
+                },
+            });
+
+            showToast({
+                type: "success",
+                title: "Vente effectuée",
+                message: `Total: FCFA ${calculerTotal().toFixed(2)} - ${
+                    response.message
+                }`,
+            });
+
             setPanier([]);
             setInfosClient({});
             setMoyenPaiement("WAVE");
@@ -467,14 +253,13 @@ const POSPage: React.FC = () => {
     return (
         <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
             <div className="container mx-auto px-4 py-8">
-                {/* Header */}
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}
                     className="mb-8"
                 >
-                    <div className="flex items-center mb-4">
+                    <div className="flex items-center mb-4 flex-wrap">
                         <Link to="/dashboard" className="mr-4">
                             <Button variant="ghost" size="sm">
                                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -492,26 +277,16 @@ const POSPage: React.FC = () => {
                                 Scanner les produits disponibles et finaliser
                                 les ventes
                             </p>
-                            {/* {useMockData && (
-                <div className="mt-2 p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-md">
-                  <p className="text-yellow-800 dark:text-yellow-300 text-sm">
-                    ⚠️ Mode démo activé - Utilisation des données de démonstration
-                  </p>
-                </div>
-              )} */}
                         </div>
                     </div>
                 </motion.div>
-
-                {/* Actions principales */}
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6, delay: 0.1 }}
-                    className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8"
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8"
                 >
-                    {/* Scanner QR */}
-                    <Card className="p-6 hover:shadow-lg transition-all duration-300">
+                    <Card className="p-4 sm:p-6 hover:shadow-lg transition-all duration-300">
                         <div className="flex flex-col items-center text-center">
                             <div className="p-4 bg-nexsaas-saas-green rounded-full mb-4">
                                 <Scan className="w-8 h-8 text-white" />
@@ -546,9 +321,7 @@ const POSPage: React.FC = () => {
                             </div>
                         </div>
                     </Card>
-
-                    {/* Saisie manuelle */}
-                    <Card className="p-6 hover:shadow-lg transition-all duration-300">
+                    <Card className="p-4 sm:p-6 hover:shadow-lg transition-all duration-300">
                         <div className="flex flex-col items-center text-center">
                             <div className="p-4 bg-blue-500 rounded-full mb-4">
                                 <Keyboard className="w-8 h-8 text-white" />
@@ -572,15 +345,13 @@ const POSPage: React.FC = () => {
                         </div>
                     </Card>
                 </motion.div>
-
-                {/* Liste des produits dans le panier */}
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6, delay: 0.2 }}
                 >
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-6">
+                    <Card className="p-4 sm:p-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
                             <div>
                                 <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
                                     Panier ({panier.length})
@@ -589,31 +360,28 @@ const POSPage: React.FC = () => {
                                     Produits ajoutés pour la vente
                                 </p>
                             </div>
-                            <div className="flex items-center space-x-3">
-                                {panier.length > 0 && (
-                                    <>
-                                        <div className="text-right">
-                                            <p className="text-2xl font-bold text-nexsaas-saas-green">
-                                                €{calculerTotal().toFixed(2)}
-                                            </p>
-                                            <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                Total
-                                            </p>
-                                        </div>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={viderPanier}
-                                            className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                        >
-                                            <RotateCcw className="w-4 h-4 mr-2" />
-                                            Vider
-                                        </Button>
-                                    </>
-                                )}
-                            </div>
+                            {panier.length > 0 && (
+                                <div className="flex items-center space-x-3 mt-4 sm:mt-0">
+                                    <div className="text-right">
+                                        <p className="text-2xl font-bold text-nexsaas-saas-green">
+                                            FCFA {calculerTotal().toFixed(2)}
+                                        </p>
+                                        <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                            Total
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={viderPanier}
+                                        className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    >
+                                        <RotateCcw className="w-4 h-4 mr-2" />
+                                        Vider
+                                    </Button>
+                                </div>
+                            )}
                         </div>
-
                         {panier.length === 0 ? (
                             <div className="text-center py-12">
                                 <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
@@ -628,51 +396,32 @@ const POSPage: React.FC = () => {
                                 </p>
                             </div>
                         ) : (
-                            <div className="space-y-4">
+                            <div className="space-y-2">
                                 {panier.map((produit, index) => (
                                     <motion.div
                                         key={`${produit.id}-${index}`}
                                         initial={{ opacity: 0, x: -20 }}
                                         animate={{ opacity: 1, x: 0 }}
                                         exit={{ opacity: 0, x: 20 }}
-                                        className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:shadow-md transition-all duration-200"
+                                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:shadow-md transition-all duration-200 text-sm sm:text-base"
                                     >
-                                        <div className="flex-1">
-                                            <div className="flex items-center space-x-3">
-                                                <div className="p-2 bg-nexsaas-saas-green rounded-lg">
-                                                    <Package className="w-5 h-5 text-white" />
-                                                </div>
-                                                <div>
-                                                    <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                                        {produit.nom}
-                                                    </h4>
-                                                    <div className="flex items-center space-x-4 text-sm text-nexsaas-vanta-black dark:text-gray-300">
-                                                        <span>
-                                                            SKU: {produit.sku}
-                                                        </span>
-                                                        <span>
-                                                            Lot: {produit.lot}
-                                                        </span>
-                                                        <span>
-                                                            QR: {produit.qrCode}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-xs text-nexsaas-vanta-black dark:text-gray-400">
-                                                        Ajouté le{" "}
-                                                        {produit.dateAjout.toLocaleTimeString()}
-                                                    </p>
-                                                </div>
+                                        <div className="flex-1 flex items-center space-x-2 sm:space-x-4 overflow-hidden">
+                                            <div className="p-2 bg-nexsaas-saas-green rounded-lg flex-shrink-0">
+                                                <Package className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white truncate">
+                                                    {produit.nom}
+                                                </h4>
+                                                <p className="text-xs sm:text-sm text-nexsaas-vanta-black dark:text-gray-300 truncate">
+                                                    code: {produit.code}
+                                                </p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center space-x-4">
-                                            <div className="text-right">
-                                                <p className="text-lg font-bold text-nexsaas-saas-green">
-                                                    €{produit.prix.toFixed(2)}
-                                                </p>
-                                                <p className="text-xs text-nexsaas-vanta-black dark:text-gray-400">
-                                                    {produit.fournisseur}
-                                                </p>
-                                            </div>
+                                        <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
+                                            <p className="text-base sm:text-lg font-bold text-nexsaas-saas-green">
+                                                FCFA {produit.prix.toFixed(2)}
+                                            </p>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -686,14 +435,13 @@ const POSPage: React.FC = () => {
                                         </div>
                                     </motion.div>
                                 ))}
-
-                                {/* Actions du panier */}
-                                <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-600">
-                                    <div className="flex items-center space-x-4 mb-4 sm:mb-0">
+                                <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-600 gap-4">
+                                    <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
                                         <Button
                                             variant="outline"
                                             onClick={() => setShowScanner(true)}
                                             disabled={isLoading}
+                                            className="w-full sm:w-auto"
                                         >
                                             <Scan className="w-4 h-4 mr-2" />
                                             Ajouter
@@ -702,7 +450,7 @@ const POSPage: React.FC = () => {
                                             variant="outline"
                                             onClick={viderPanier}
                                             disabled={isLoading}
-                                            className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                            className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 w-full sm:w-auto"
                                         >
                                             <RotateCcw className="w-4 h-4 mr-2" />
                                             Vider le panier
@@ -714,10 +462,10 @@ const POSPage: React.FC = () => {
                                         }
                                         disabled={isLoading}
                                         size="lg"
-                                        className="bg-nexsaas-saas-green hover:bg-green-600 text-white px-8"
+                                        className="bg-nexsaas-saas-green hover:bg-green-600 text-white w-full sm:w-auto px-4 sm:px-8"
                                     >
                                         <Receipt className="w-5 h-5 mr-2" />
-                                        Procéder au paiement (€
+                                        Procéder au paiement (FCFA{" "}
                                         {calculerTotal().toFixed(2)})
                                     </Button>
                                 </div>
@@ -726,15 +474,11 @@ const POSPage: React.FC = () => {
                     </Card>
                 </motion.div>
             </div>
-
-            {/* QR Scanner */}
             <QRScanner
                 isOpen={showScanner}
                 onScan={handleScan}
                 onClose={() => setShowScanner(false)}
             />
-
-            {/* Modal Saisie Manuelle */}
             {showSaisieManuelle && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                     <motion.div
@@ -756,7 +500,7 @@ const POSPage: React.FC = () => {
                                     onChange={(e) =>
                                         setCodeQRManuel(e.target.value)
                                     }
-                                    placeholder="Saisissez le code (ex: PRD-001, PRD-002, PRD-003)"
+                                    placeholder="Saisissez le code"
                                     className="w-full px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
                                     onKeyPress={(e) =>
                                         e.key === "Enter" &&
@@ -777,7 +521,7 @@ const POSPage: React.FC = () => {
                                 </Button>
                                 <Button
                                     onClick={handleSaisieManuelle}
-                                    disabled={!codeQRManuel.trim()}
+                                    disabled={!codeQRManuel.trim() || isLoading}
                                 >
                                     Valider
                                 </Button>
@@ -786,8 +530,6 @@ const POSPage: React.FC = () => {
                     </motion.div>
                 </div>
             )}
-
-            {/* Modal Paiement */}
             {showModalPaiement && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                     <motion.div
@@ -798,8 +540,6 @@ const POSPage: React.FC = () => {
                         <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
                             Finaliser la Vente
                         </h3>
-
-                        {/* Résumé */}
                         <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                             <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                 Résumé de la commande
@@ -814,7 +554,7 @@ const POSPage: React.FC = () => {
                                             {item.nom}
                                         </span>
                                         <span className="text-nexsaas-saas-green font-medium">
-                                            €{item.prix.toFixed(2)}
+                                            FCFA {item.prix.toFixed(2)}
                                         </span>
                                     </div>
                                 ))}
@@ -823,106 +563,116 @@ const POSPage: React.FC = () => {
                                         Total:
                                     </span>
                                     <span className="text-nexsaas-saas-green">
-                                        €{calculerTotal().toFixed(2)}
+                                        FCFA {calculerTotal().toFixed(2)}
                                     </span>
                                 </div>
                             </div>
                         </div>
-
-                        <div className="space-y-4">
-                            {/* Informations Client */}
-                            <div>
-                                <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3">
-                                    <User className="w-4 h-4 inline mr-2" />
-                                    Informations Client (Optionnel)
-                                </h4>
-                                <div className="grid grid-cols-1 gap-3">
-                                    <input
-                                        type="text"
-                                        placeholder="Nom"
-                                        value={infosClient.nom || ""}
-                                        onChange={(e) =>
-                                            setInfosClient((prev) => ({
-                                                ...prev,
-                                                nom: e.target.value,
-                                            }))
-                                        }
-                                        className="px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Moyen de Paiement */}
-                            <div>
-                                <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3">
-                                    <CreditCard className="w-4 h-4 inline mr-2" />
-                                    Moyen de Paiement *
-                                </h4>
-                                <div className="space-y-2">
-                                    {[
-                                        { value: "WAVE", label: "Wave" },
-                                        {
-                                            value: "ORANGE_MONEY",
-                                            label: "Orange Money",
-                                        },
-                                        {
-                                            value: "MTN_MONEY",
-                                            label: "MTN Money",
-                                        },
-                                        {
-                                            value: "MOOV_MONEY",
-                                            label: "Moov Money",
-                                        },
-                                        { value: "AUTRE", label: "Autre" },
-                                    ].map((moyen) => (
-                                        <label
-                                            key={moyen.value}
-                                            className="flex items-center space-x-3 cursor-pointer"
-                                        >
-                                            <input
-                                                type="radio"
-                                                name="moyenPaiement"
-                                                value={moyen.value}
-                                                checked={
-                                                    moyenPaiement ===
-                                                    moyen.value
-                                                }
-                                                onChange={(e) =>
-                                                    setMoyenPaiement(
-                                                        e.target
-                                                            .value as MoyenPaiement,
-                                                    )
-                                                }
-                                                className="w-4 h-4 text-nexsaas-saas-green focus:ring-nexsaas-saas-green"
-                                            />
-                                            <span className="text-nexsaas-vanta-black dark:text-gray-300">
-                                                {moyen.label}
-                                            </span>
-                                        </label>
-                                    ))}
-                                </div>
-
-                                {/* Champ pour "Autre" moyen de paiement */}
-                                {moyenPaiement === "AUTRE" && (
-                                    <div className="mt-3">
-                                        <input
-                                            type="text"
-                                            placeholder="Précisez le moyen de paiement..."
-                                            value={autreMoyenPaiement}
-                                            onChange={(e) =>
-                                                setAutreMoyenPaiement(
-                                                    e.target.value,
-                                                )
-                                            }
-                                            className="w-full px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
-                                            required
-                                        />
-                                    </div>
-                                )}
+                        <div>
+                            <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3">
+                                <User className="w-4 h-4 inline mr-2" />
+                                Informations Client (Optionnel)
+                            </h4>
+                            <div className="grid grid-cols-1 gap-3">
+                                <input
+                                    type="text"
+                                    placeholder="Nom"
+                                    value={infosClient.nom || ""}
+                                    onChange={(e) =>
+                                        setInfosClient((prev) => ({
+                                            ...prev,
+                                            nom: e.target.value,
+                                        }))
+                                    }
+                                    className="px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Prénom"
+                                    value={infosClient.prenom || ""}
+                                    onChange={(e) =>
+                                        setInfosClient((prev) => ({
+                                            ...prev,
+                                            prenom: e.target.value,
+                                        }))
+                                    }
+                                    className="px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Contact (téléphone ou email)"
+                                    value={infosClient.contact || ""}
+                                    onChange={(e) =>
+                                        setInfosClient((prev) => ({
+                                            ...prev,
+                                            contact: e.target.value,
+                                        }))
+                                    }
+                                    className="px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                />
                             </div>
                         </div>
-
-                        {/* Actions */}
+                        <div className="mt-6">
+                            <h4 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-3">
+                                <CreditCard className="w-4 h-4 inline mr-2" />
+                                Moyen de Paiement *
+                            </h4>
+                            <div className="space-y-2">
+                                {[
+                                    { value: "WAVE", label: "Wave" },
+                                    {
+                                        value: "ORANGE_MONEY",
+                                        label: "Orange Money",
+                                    },
+                                    { value: "MTN_MONEY", label: "MTN Money" },
+                                    {
+                                        value: "MOOV_MONEY",
+                                        label: "Moov Money",
+                                    },
+                                    { value: "AUTRE", label: "Autre" },
+                                ].map((moyen) => (
+                                    <label
+                                        key={moyen.value}
+                                        className="flex items-center space-x-3 cursor-pointer"
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="moyenPaiement"
+                                            value={moyen.value}
+                                            checked={
+                                                moyenPaiement === moyen.value
+                                            }
+                                            onChange={(e) =>
+                                                setMoyenPaiement(
+                                                    e.target
+                                                        .value as MoyenPaiement,
+                                                )
+                                            }
+                                            className="w-4 h-4 text-nexsaas-saas-green focus:ring-nexsaas-saas-green"
+                                        />
+                                        <span className="text-nexsaas-vanta-black dark:text-gray-300">
+                                            {moyen.label}
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+                            {moyenPaiement === "AUTRE" && (
+                                <div className="mt-3">
+                                    <input
+                                        type="text"
+                                        placeholder="Précisez le moyen de paiement..."
+                                        value={autreMoyenPaiement}
+                                        onChange={(e) =>
+                                            setAutreMoyenPaiement(
+                                                e.target.value,
+                                            )
+                                        }
+                                        className="w-full px-4 py-2 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                        required
+                                    />
+                                </div>
+                            )}
+                        </div>
                         <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
                             <Button
                                 variant="outline"
@@ -948,14 +698,12 @@ const POSPage: React.FC = () => {
                                 ) : (
                                     <>
                                         <Receipt className="w-4 h-4 mr-2" />
-                                        Finaliser (€{calculerTotal().toFixed(2)}
-                                        )
+                                        Finaliser (FCFA{" "}
+                                        {calculerTotal().toFixed(2)})
                                     </>
                                 )}
                             </Button>
                         </div>
-
-                        {/* Note */}
                         <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
                             <div className="flex items-start">
                                 <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2 mt-0.5" />
@@ -968,12 +716,6 @@ const POSPage: React.FC = () => {
                                         comme vendus et ne pourront plus être
                                         scannés.
                                     </p>
-                                    {useMockData && (
-                                        <p className="mt-2 font-bold">
-                                            ⚠️ Mode démo: Les données ne seront
-                                            pas enregistrées en base.
-                                        </p>
-                                    )}
                                 </div>
                             </div>
                         </div>

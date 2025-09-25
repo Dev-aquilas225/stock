@@ -35,10 +35,35 @@ import {
     ProduitStockGroup,
     StatutProduitStock,
 } from "../../api/produitApi";
+import {
+    updateProductPrixVente,
+    ProductDto,
+    ProductPrixVenteDto,
+} from "../../api/productsApi";
+
+// Define the Devise type for type safety
+export type Devise = "EUR" | "USD" | "FCFA" | "GBP" | string;
+
+// Utility function to get currency symbol
+const getCurrencySymbol = (devise: Devise): string => {
+    switch (devise) {
+        case "EUR":
+            return "€";
+        case "USD":
+            return "$";
+        case "FCFA":
+            return "₣";
+        case "GBP":
+            return "£";
+        default:
+            return devise; // Fallback to devise code if unknown
+    }
+};
 
 interface ProductUnit {
     id: string;
     qrCode: string;
+    code: string;
     serialNumber: string;
     lot: string;
     status: StatutProduitStock;
@@ -52,11 +77,13 @@ interface ProductUnit {
 interface Product {
     id: string;
     name: string;
-    category: string;
     basePrice: number;
+    prixVente: number | null;
+    devise: Devise; // Added to store the currency from API
     minStock: number;
     description: string;
     supplier: string;
+    supplierId: string;
     units: ProductUnit[];
     totalReceived: number;
     totalSold: number;
@@ -71,13 +98,17 @@ const StockPage: React.FC = () => {
     const [showUnitForm, setShowUnitForm] = useState(false);
     const [showQRGenerator, setShowQRGenerator] = useState(false);
     const [showQRPrint, setShowQRPrint] = useState(false);
+    const [showPriceForm, setShowPriceForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    const [unitSearchTerm, setUnitSearchTerm] = useState("");
+    const [qrSearchTerm, setQRSearchTerm] = useState("");
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(
         null,
     );
     const [selectedUnit, setSelectedUnit] = useState<ProductUnit | null>(null);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [priceForm, setPriceForm] = useState({ prixVente: "" });
 
     const { showToast } = useToast();
     const { logActivity } = useActivity();
@@ -86,11 +117,13 @@ const StockPage: React.FC = () => {
 
     const [formData, setFormData] = useState({
         name: "",
-        category: "",
         basePrice: "",
+        prixVente: "",
+        devise: "FCFA" as Devise, // Default to FCFA for new products
         minStock: "",
         description: "",
         supplier: "",
+        supplierId: "",
     });
 
     const [unitForm, setUnitForm] = useState({
@@ -147,6 +180,7 @@ const StockPage: React.FC = () => {
     ): Product => {
         const units: ProductUnit[] = group.stocks.map((stock) => ({
             id: stock.id.toString(),
+            code: stock.code,
             qrCode: stock.qrCode,
             serialNumber: stock.sku,
             lot: stock.lot || "N/A",
@@ -166,11 +200,15 @@ const StockPage: React.FC = () => {
         return {
             id: group.produitFournisseur.id.toString(),
             name: group.produitFournisseur.nom,
-            category: group.produitFournisseur.categorie,
             basePrice: parseFloat(group.produitFournisseur.prix) || 0,
+            prixVente: group.produitFournisseur.prixVente
+                ? parseFloat(group.produitFournisseur.prixVente) || 0
+                : null,
+            devise: group.produitFournisseur.devise || "FCFA", // Store the API-provided currency
             minStock: 5,
             description: "",
             supplier: group.produitFournisseur.fournisseur.nom,
+            supplierId: group.produitFournisseur.fournisseur.id.toString(),
             units,
             totalReceived: units.length,
             totalSold: units.filter(
@@ -188,11 +226,13 @@ const StockPage: React.FC = () => {
     const resetForms = () => {
         setFormData({
             name: "",
-            category: "",
             basePrice: "",
+            prixVente: "",
+            devise: "FCFA",
             minStock: "",
             description: "",
             supplier: "",
+            supplierId: "",
         });
         setUnitForm({
             serialNumber: "",
@@ -201,6 +241,7 @@ const StockPage: React.FC = () => {
             notes: "",
             quantity: "1",
         });
+        setPriceForm({ prixVente: "" });
     };
 
     const getStatusColor = (status: StatutProduitStock) => {
@@ -289,7 +330,7 @@ const StockPage: React.FC = () => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!formData.name || !formData.category || !formData.basePrice) {
+        if (!formData.name || !formData.basePrice) {
             showToast({
                 type: "error",
                 title: "Erreur",
@@ -306,6 +347,10 @@ const StockPage: React.FC = () => {
                               ...product,
                               ...formData,
                               basePrice: parseFloat(formData.basePrice) || 0,
+                              prixVente: formData.prixVente
+                                  ? parseFloat(formData.prixVente)
+                                  : 0,
+                              devise: formData.devise,
                               minStock: parseInt(formData.minStock) || 0,
                           }
                         : product,
@@ -329,12 +374,17 @@ const StockPage: React.FC = () => {
                 id: `PRD-${String(products.length + 1).padStart(3, "0")}`,
                 ...formData,
                 basePrice: parseFloat(formData.basePrice) || 0,
+                prixVente: formData.prixVente
+                    ? parseFloat(formData.prixVente)
+                    : null,
+                devise: formData.devise,
                 minStock: parseInt(formData.minStock) || 0,
                 units: [],
                 totalReceived: 0,
                 totalSold: 0,
                 totalAvailable: 0,
                 totalDamaged: 0,
+                supplierId: formData.supplierId,
             };
 
             setProducts((prev) => [newProduct, ...prev]);
@@ -364,47 +414,6 @@ const StockPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleEditProduct = (product: Product) => {
-        setEditingProduct(product);
-        setFormData({
-            name: product.name,
-            category: product.category,
-            basePrice: product.basePrice.toString(),
-            minStock: product.minStock.toString(),
-            description: product.description,
-            supplier: product.supplier,
-        });
-        setShowForm(true);
-    };
-
-    const handleDeleteProduct = (productId: string) => {
-        if (
-            confirm(
-                "Êtes-vous sûr de vouloir supprimer ce produit et toutes ses unités ?",
-            )
-        ) {
-            setProducts((prev) => prev.filter((p) => p.id !== productId));
-
-            logActivity({
-                type: "delete",
-                module: "Stocks",
-                description: `Produit supprimé: ${productId}`,
-                metadata: { productId },
-            });
-
-            showToast({
-                type: "success",
-                title: "Produit supprimé",
-                message: "Le produit et toutes ses unités ont été supprimés",
-            });
-        }
-    };
-
-    const handleViewUnits = (product: Product) => {
-        setSelectedProduct(product);
-        setShowUnitsModal(true);
-    };
-
     const handleAddUnits = (product: Product) => {
         setSelectedProduct(product);
         setSelectedUnit(null);
@@ -423,6 +432,75 @@ const StockPage: React.FC = () => {
             quantity: "1",
         });
         setShowUnitForm(true);
+    };
+
+    const handleEditPrice = (product: Product) => {
+        setSelectedProduct(product);
+        setPriceForm({
+            prixVente: product.prixVente ? product.prixVente.toString() : "",
+        });
+        setShowPriceForm(true);
+    };
+
+    const handleSavePrice = async () => {
+        if (!selectedProduct || !priceForm.prixVente) {
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Veuillez entrer un prix de vente valide",
+            });
+            return;
+        }
+
+        try {
+            const productData: ProductPrixVenteDto = {
+                prixVente: priceForm.prixVente,
+            };
+
+            const updatedProduct = await updateProductPrixVente(
+                selectedProduct.id,
+                productData,
+            );
+
+            setProducts((prev) =>
+                prev.map((product) =>
+                    product.id === selectedProduct.id
+                        ? {
+                              ...product,
+                              prixVente: updatedProduct.prixVente || null,
+                              devise: product.devise, // Preserve the base price devise
+                          }
+                        : product,
+                ),
+            );
+
+            logActivity({
+                type: "update",
+                module: "Stocks",
+                description: `Prix de vente modifié pour le produit: ${selectedProduct.name}`,
+                metadata: {
+                    productId: selectedProduct.id,
+                    prixVente: priceForm.prixVente,
+                    devise: "FCFA",
+                },
+            });
+
+            showToast({
+                type: "success",
+                title: "Prix modifié",
+                message: "Le prix de vente a été mis à jour avec succès",
+            });
+
+            setShowPriceForm(false);
+            resetForms();
+        } catch (error: any) {
+            console.error("Erreur lors de la mise à jour du prix:", error);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: "Échec de la mise à jour du prix de vente",
+            });
+        }
     };
 
     const handleSaveUnit = () => {
@@ -471,6 +549,9 @@ const StockPage: React.FC = () => {
                 const newUnit: ProductUnit = {
                     id: `UNIT-${Date.now()}-${i}`,
                     qrCode: `QR-${selectedProduct.id}-UNIT-${String(
+                        unitNumber,
+                    ).padStart(3, "0")}`,
+                    code: `CODE-${selectedProduct.id}-${String(
                         unitNumber,
                     ).padStart(3, "0")}`,
                     serialNumber:
@@ -616,6 +697,7 @@ const StockPage: React.FC = () => {
 
     const handleGenerateQR = (product: Product) => {
         setSelectedProduct(product);
+        setQRSearchTerm("");
         setShowQRGenerator(true);
     };
 
@@ -623,12 +705,14 @@ const StockPage: React.FC = () => {
         if (product) {
             setSelectedProduct(product);
         }
+        setQRSearchTerm("");
         setShowQRPrint(true);
     };
 
     const getAllQRCodes = () => {
         const allCodes: Array<{
             id: string;
+            code: string;
             qrCode: string;
             serialNumber: string;
             lot: string;
@@ -640,6 +724,7 @@ const StockPage: React.FC = () => {
             product.units.forEach((unit) => {
                 allCodes.push({
                     id: unit.id,
+                    code: unit.code,
                     qrCode: `${URL_API}${unit.qrCode}`,
                     serialNumber: unit.serialNumber,
                     lot: unit.lot,
@@ -655,6 +740,7 @@ const StockPage: React.FC = () => {
     const getProductQRCodes = (product: Product) => {
         return product.units.map((unit) => ({
             id: unit.id,
+            code: unit.code,
             qrCode: `${URL_API}${unit.qrCode}`,
             serialNumber: unit.serialNumber,
             lot: unit.lot,
@@ -666,15 +752,11 @@ const StockPage: React.FC = () => {
     const filteredProducts = products.filter(
         (product) =>
             product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            product.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
             product.supplier.toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
     const handleProductAction = (product: Product, action: string) => {
         switch (action) {
-            case "view":
-                handleViewUnits(product);
-                break;
             case "add":
                 handleAddUnits(product);
                 break;
@@ -684,11 +766,8 @@ const StockPage: React.FC = () => {
             case "print":
                 handlePrintQRCodes(product);
                 break;
-            case "edit":
-                handleEditProduct(product);
-                break;
-            case "delete":
-                handleDeleteProduct(product.id);
+            case "editPrice":
+                handleEditPrice(product);
                 break;
             default:
                 break;
@@ -887,23 +966,29 @@ const StockPage: React.FC = () => {
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-base font-bold text-nexsaas-saas-green">
-                                                        €{product.basePrice}
+                                                        {product.prixVente !==
+                                                        null
+                                                            ? `₣${product.prixVente.toFixed(
+                                                                  2,
+                                                              )}`
+                                                            : "Prix de vente non défini"}
                                                     </p>
                                                     <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
-                                                        Prix de base
+                                                        Prix de vente (FCFA)
+                                                    </p>
+                                                    <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
+                                                        Prix négocié:{" "}
+                                                        {`${getCurrencySymbol(
+                                                            product.devise,
+                                                        )}${product.basePrice.toFixed(
+                                                            2,
+                                                        )}`}
                                                     </p>
                                                 </div>
                                             </div>
 
                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-                                                <div>
-                                                    <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                                        Catégorie:
-                                                    </span>
-                                                    <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
-                                                        {product.category}
-                                                    </p>
-                                                </div>
+                                                
                                                 <div>
                                                     <span className="text-gray-500 dark:text-gray-400 text-xs">
                                                         Fournisseur:
@@ -993,10 +1078,6 @@ const StockPage: React.FC = () => {
                                                 <option value="">
                                                     Actions
                                                 </option>
-                                                <option value="view">
-                                                    Voir unités (
-                                                    {product.units.length})
-                                                </option>
                                                 <option value="add">
                                                     Ajouter unités
                                                 </option>
@@ -1006,11 +1087,8 @@ const StockPage: React.FC = () => {
                                                 <option value="print">
                                                     Imprimer QR
                                                 </option>
-                                                <option value="edit">
-                                                    Modifier produit
-                                                </option>
-                                                <option value="delete">
-                                                    Supprimer produit
+                                                <option value="editPrice">
+                                                    Modifier prix de vente
                                                 </option>
                                             </select>
                                         </div>
@@ -1036,11 +1114,20 @@ const StockPage: React.FC = () => {
                             className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
-                                {editingProduct
-                                    ? "Modifier le produit"
-                                    : "Ajouter un produit"}
-                            </h2>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    {editingProduct
+                                        ? "Modifier le produit"
+                                        : "Ajouter un produit"}
+                                </h2>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowForm(false)}
+                                >
+                                    ✕
+                                </Button>
+                            </div>
 
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1055,22 +1142,14 @@ const StockPage: React.FC = () => {
                                         }
                                         required
                                     />
-                                    <Input
-                                        label="Catégorie"
-                                        value={formData.category}
-                                        onChange={(value) =>
-                                            setFormData({
-                                                ...formData,
-                                                category: value,
-                                            })
-                                        }
-                                        required
-                                    />
+                                    
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <Input
-                                        label="Prix de base (€)"
+                                        label={`Prix négocié (${getCurrencySymbol(
+                                            formData.devise,
+                                        )})`}
                                         type="number"
                                         step="0.01"
                                         value={formData.basePrice}
@@ -1081,6 +1160,18 @@ const StockPage: React.FC = () => {
                                             })
                                         }
                                         required
+                                    />
+                                    <Input
+                                        label="Prix de vente (₣)"
+                                        type="number"
+                                        step="0.01"
+                                        value={formData.prixVente}
+                                        onChange={(value) =>
+                                            setFormData({
+                                                ...formData,
+                                                prixVente: value,
+                                            })
+                                        }
                                     />
                                     <Input
                                         label="Stock minimum"
@@ -1105,6 +1196,29 @@ const StockPage: React.FC = () => {
                                         }
                                         required
                                     />
+                                    <div>
+                                        <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                            Devise (Prix négocié)
+                                        </label>
+                                        <select
+                                            value={formData.devise}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    devise: e.target
+                                                        .value as Devise,
+                                                })
+                                            }
+                                            className="w-full px-3 py-2 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                        >
+                                            <option value="EUR">EUR (€)</option>
+                                            <option value="USD">USD ($)</option>
+                                            <option value="FCFA">
+                                                FCFA (₣)
+                                            </option>
+                                            <option value="GBP">GBP (£)</option>
+                                        </select>
+                                    </div>
                                 </div>
 
                                 <div>
@@ -1175,6 +1289,18 @@ const StockPage: React.FC = () => {
                             </div>
 
                             <div className="mb-4 flex gap-2">
+                                <div className="relative flex-1 max-w-xs">
+                                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Rechercher par code produit..."
+                                        value={unitSearchTerm}
+                                        onChange={(e) =>
+                                            setUnitSearchTerm(e.target.value)
+                                        }
+                                        className="w-full pl-8 pr-3 py-1.5 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                    />
+                                </div>
                                 <Button
                                     onClick={() =>
                                         handleAddUnits(selectedProduct)
@@ -1196,178 +1322,260 @@ const StockPage: React.FC = () => {
                                 </Button>
                             </div>
 
-                            <div className="space-y-3">
-                                {selectedProduct.units.map((unit, index) => (
-                                    <motion.div
-                                        key={unit.id}
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{
-                                            duration: 0.5,
-                                            delay: index * 0.05,
-                                        }}
-                                        className="border border-nexsaas-light-gray dark:border-gray-700 rounded-lg p-3"
-                                    >
-                                        <div className="flex flex-col lg:flex-row lg:items-center justify-between">
-                                            <div className="flex-1">
-                                                <div className="flex items-center space-x-2 mb-2">
-                                                    <span
-                                                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                                                            unit.status,
-                                                        )}`}
-                                                    >
-                                                        {getStatusIcon(
-                                                            unit.status,
-                                                        )}
-                                                        <span className="ml-1 capitalize">
-                                                            {getStatusDisplayName(
-                                                                unit.status,
-                                                            )}
-                                                        </span>
-                                                    </span>
-                                                    <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                                                        {unit.id}
-                                                    </span>
-                                                </div>
+                            <div className="space-y-6">
+                                {(() => {
+                                    const groupedUnits = selectedProduct.units
+                                        .filter((unit) =>
+                                            unit.code
+                                                .toLowerCase()
+                                                .includes(
+                                                    unitSearchTerm.toLowerCase(),
+                                                ),
+                                        )
+                                        .reduce((acc, unit) => {
+                                            const status = unit.status;
+                                            if (!acc[status]) acc[status] = [];
+                                            acc[status].push(unit);
+                                            return acc;
+                                        }, {} as Record<StatutProduitStock, ProductUnit[]>);
 
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
-                                                    <div className="flex items-center">
-                                                        <Hash className="w-4 h-4 text-gray-400 mr-1" />
-                                                        <div>
-                                                            <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                                                Série:
-                                                            </span>
-                                                            <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
-                                                                {
-                                                                    unit.serialNumber
-                                                                }
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <Hash className="w-4 h-4 text-gray-400 mr-1" />
-                                                        <div>
-                                                            <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                                                Lot:
-                                                            </span>
-                                                            <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
-                                                                {unit.lot}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <MapPin className="w-4 h-4 text-gray-400 mr-1" />
-                                                        <div>
-                                                            <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                                                Localisation:
-                                                            </span>
-                                                            <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
-                                                                {unit.location}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <Calendar className="w-4 h-4 text-gray-400 mr-1" />
-                                                        <div>
-                                                            <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                                                Reçu le:
-                                                            </span>
-                                                            <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
-                                                                {
-                                                                    unit.receivedDate
-                                                                }
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    {unit.soldDate && (
-                                                        <div className="flex items-center">
-                                                            <User className="w-4 h-4 text-gray-400 mr-1" />
-                                                            <div>
-                                                                <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                                                    Vendu le:
-                                                                </span>
-                                                                <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
-                                                                    {
-                                                                        unit.soldDate
-                                                                    }
-                                                                </p>
-                                                                {unit.soldTo && (
-                                                                    <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
-                                                                        à{" "}
-                                                                        {
-                                                                            unit.soldTo
-                                                                        }
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                                    return Object.entries(groupedUnits).map(
+                                        ([status, units], groupIndex) => (
+                                            <div
+                                                key={status}
+                                                className="space-y-3"
+                                            >
+                                                <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                                    {getStatusDisplayName(
+                                                        status as StatutProduitStock,
+                                                    )}{" "}
+                                                    ({units.length})
+                                                </h3>
+                                                <div className="space-y-3">
+                                                    {units.map(
+                                                        (unit, index) => (
+                                                            <motion.div
+                                                                key={unit.id}
+                                                                initial={{
+                                                                    opacity: 0,
+                                                                    x: -20,
+                                                                }}
+                                                                animate={{
+                                                                    opacity: 1,
+                                                                    x: 0,
+                                                                }}
+                                                                transition={{
+                                                                    duration: 0.5,
+                                                                    delay:
+                                                                        (groupIndex *
+                                                                            units.length +
+                                                                            index) *
+                                                                        0.05,
+                                                                }}
+                                                                className="border border-nexsaas-light-gray dark:border-gray-700 rounded-lg p-3"
+                                                            >
+                                                                <div className="flex flex-col lg:flex-row lg:items-center justify-between">
+                                                                    <div className="flex-1">
+                                                                        <div className="flex items-center space-x-2 mb-2">
+                                                                            <span
+                                                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                                                                                    unit.status,
+                                                                                )}`}
+                                                                            >
+                                                                                {getStatusIcon(
+                                                                                    unit.status,
+                                                                                )}
+                                                                                <span className="ml-1 capitalize">
+                                                                                    {getStatusDisplayName(
+                                                                                        unit.status,
+                                                                                    )}
+                                                                                </span>
+                                                                            </span>
+                                                                            <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                                                                                {
+                                                                                    unit.id
+                                                                                }
+                                                                            </span>
+                                                                        </div>
+
+                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                                                                            <div className="flex items-center">
+                                                                                <Hash className="w-4 h-4 text-gray-400 mr-1" />
+                                                                                <div>
+                                                                                    <span className="text-gray-500 dark:text-gray-400 text-xs">
+                                                                                        Code:
+                                                                                    </span>
+                                                                                    <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
+                                                                                        {
+                                                                                            unit.code
+                                                                                        }
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex items-center">
+                                                                                <Hash className="w-4 h-4 text-gray-400 mr-1" />
+                                                                                <div>
+                                                                                    <span className="text-gray-500 dark:text-gray-400 text-xs">
+                                                                                        Série:
+                                                                                    </span>
+                                                                                    <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
+                                                                                        {
+                                                                                            unit.serialNumber
+                                                                                        }
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex items-center">
+                                                                                <Hash className="w-4 h-4 text-gray-400 mr-1" />
+                                                                                <div>
+                                                                                    <span className="text-gray-500 dark:text-gray-400 text-xs">
+                                                                                        Lot:
+                                                                                    </span>
+                                                                                    <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
+                                                                                        {
+                                                                                            unit.lot
+                                                                                        }
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex items-center">
+                                                                                <MapPin className="w-4 h-4 text-gray-400 mr-1" />
+                                                                                <div>
+                                                                                    <span className="text-gray-500 dark:text-gray-400 text-xs">
+                                                                                        Localisation:
+                                                                                    </span>
+                                                                                    <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
+                                                                                        {
+                                                                                            unit.location
+                                                                                        }
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex items-center">
+                                                                                <Calendar className="w-4 h-4 text-gray-400 mr-1" />
+                                                                                <div>
+                                                                                    <span className="text-gray-500 dark:text-gray-400 text-xs">
+                                                                                        Reçu
+                                                                                        le:
+                                                                                    </span>
+                                                                                    <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
+                                                                                        {
+                                                                                            unit.receivedDate
+                                                                                        }
+                                                                                    </p>
+                                                                                </div>
+                                                                            </div>
+                                                                            {unit.soldDate && (
+                                                                                <div className="flex items-center">
+                                                                                    <User className="w-4 h-4 text-gray-400 mr-1" />
+                                                                                    <div>
+                                                                                        <span className="text-gray-500 dark:text-gray-400 text-xs">
+                                                                                            Vendu
+                                                                                            le:
+                                                                                        </span>
+                                                                                        <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm font-medium">
+                                                                                            {
+                                                                                                unit.soldDate
+                                                                                            }
+                                                                                        </p>
+                                                                                        {unit.soldTo && (
+                                                                                            <p className="text-xs text-nexsaas-vanta-black dark:text-gray-300">
+                                                                                                à{" "}
+                                                                                                {
+                                                                                                    unit.soldTo
+                                                                                                }
+                                                                                            </p>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {unit.notes && (
+                                                                            <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300 mt-2 italic">
+                                                                                {
+                                                                                    unit.notes
+                                                                                }
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+
+                                                                    <div className="flex flex-col space-y-2 mt-3 lg:mt-0 lg:ml-4">
+                                                                        <select
+                                                                            value={
+                                                                                unit.status
+                                                                            }
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) =>
+                                                                                handleChangeUnitStatus(
+                                                                                    selectedProduct.id,
+                                                                                    unit.id,
+                                                                                    e
+                                                                                        .target
+                                                                                        .value as StatutProduitStock,
+                                                                                )
+                                                                            }
+                                                                            className="px-2 py-1 text-xs border border-nexsaas-light-gray dark:border-gray-600 rounded bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white"
+                                                                        >
+                                                                            {Object.values(
+                                                                                StatutProduitStock,
+                                                                            ).map(
+                                                                                (
+                                                                                    status,
+                                                                                ) => (
+                                                                                    <option
+                                                                                        key={
+                                                                                            status
+                                                                                        }
+                                                                                        value={
+                                                                                            status
+                                                                                        }
+                                                                                    >
+                                                                                        {getStatusDisplayName(
+                                                                                            status,
+                                                                                        )}
+                                                                                    </option>
+                                                                                ),
+                                                                            )}
+                                                                        </select>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            onClick={() =>
+                                                                                handleEditUnit(
+                                                                                    selectedProduct,
+                                                                                    unit,
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            <Edit className="w-3 h-3 mr-1" />
+                                                                            Modifier
+                                                                        </Button>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            onClick={() =>
+                                                                                handleDeleteUnit(
+                                                                                    selectedProduct.id,
+                                                                                    unit.id,
+                                                                                )
+                                                                            }
+                                                                            className="text-red-500 hover:text-red-600"
+                                                                        >
+                                                                            <Trash2 className="w-3 h-3 mr-1" />
+                                                                            Supprimer
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            </motion.div>
+                                                        ),
                                                     )}
                                                 </div>
-
-                                                {unit.notes && (
-                                                    <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300 mt-2 italic">
-                                                        {unit.notes}
-                                                    </p>
-                                                )}
                                             </div>
-
-                                            <div className="flex flex-col space-y-2 mt-3 lg:mt-0 lg:ml-4">
-                                                <select
-                                                    value={unit.status}
-                                                    onChange={(e) =>
-                                                        handleChangeUnitStatus(
-                                                            selectedProduct.id,
-                                                            unit.id,
-                                                            e.target
-                                                                .value as StatutProduitStock,
-                                                        )
-                                                    }
-                                                    className="px-2 py-1 text-xs border border-nexsaas-light-gray dark:border-gray-600 rounded bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white"
-                                                >
-                                                    {Object.values(
-                                                        StatutProduitStock,
-                                                    ).map((status) => (
-                                                        <option
-                                                            key={status}
-                                                            value={status}
-                                                        >
-                                                            {getStatusDisplayName(
-                                                                status,
-                                                            )}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        handleEditUnit(
-                                                            selectedProduct,
-                                                            unit,
-                                                        )
-                                                    }
-                                                >
-                                                    <Edit className="w-3 h-3 mr-1" />
-                                                    Modifier
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        handleDeleteUnit(
-                                                            selectedProduct.id,
-                                                            unit.id,
-                                                        )
-                                                    }
-                                                    className="text-red-500 hover:text-red-600"
-                                                >
-                                                    <Trash2 className="w-3 h-3 mr-1" />
-                                                    Supprimer
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ))}
+                                        ),
+                                    );
+                                })()}
                             </div>
                         </motion.div>
                     </motion.div>
@@ -1388,11 +1596,20 @@ const StockPage: React.FC = () => {
                             className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-2xl"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-4">
-                                {selectedUnit
-                                    ? "Modifier l'unité"
-                                    : "Ajouter des unités"}
-                            </h2>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    {selectedUnit
+                                        ? "Modifier l'unité"
+                                        : "Ajouter des unités"}
+                                </h2>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowUnitForm(false)}
+                                >
+                                    ✕
+                                </Button>
+                            </div>
 
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1504,6 +1721,64 @@ const StockPage: React.FC = () => {
                     </motion.div>
                 )}
 
+                {showPriceForm && selectedProduct && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+                        onClick={() => setShowPriceForm(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-nexsaas-pure-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                    Modifier le prix de vente -{" "}
+                                    {selectedProduct.name}
+                                </h2>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowPriceForm(false)}
+                                >
+                                    ✕
+                                </Button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <Input
+                                    label="Prix de vente (₣)"
+                                    type="number"
+                                    step="0.01"
+                                    value={priceForm.prixVente}
+                                    onChange={(value) =>
+                                        setPriceForm({ prixVente: value })
+                                    }
+                                    required
+                                />
+                                <div className="flex justify-end space-x-3">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setShowPriceForm(false)}
+                                        size="sm"
+                                    >
+                                        Annuler
+                                    </Button>
+                                    <Button onClick={handleSavePrice} size="sm">
+                                        Enregistrer
+                                    </Button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+
                 {showQRGenerator && selectedProduct && (
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -1533,78 +1808,94 @@ const StockPage: React.FC = () => {
                             </div>
 
                             <div className="mb-4 flex justify-between items-center">
-                                <p className="text-nexsaas-vanta-black dark:text-gray-300 text-sm">
-                                    {selectedProduct.units.length} QR codes
-                                    générés pour ce produit
-                                </p>
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        onClick={() =>
-                                            handlePrintQRCodes(selectedProduct)
+                                <div className="relative flex-1 max-w-xs">
+                                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Rechercher par code produit..."
+                                        value={qrSearchTerm}
+                                        onChange={(e) =>
+                                            setQRSearchTerm(e.target.value)
                                         }
-                                        size="sm"
-                                    >
-                                        <Printer className="w-3 h-3 mr-1" />
-                                        Imprimer tous
-                                    </Button>
+                                        className="w-full pl-8 pr-3 py-1.5 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                    />
                                 </div>
+                                <Button
+                                    variant="outline"
+                                    onClick={() =>
+                                        handlePrintQRCodes(selectedProduct)
+                                    }
+                                    size="sm"
+                                >
+                                    <Printer className="w-3 h-3 mr-1" />
+                                    Imprimer tous
+                                </Button>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {selectedProduct.units.map((unit) => (
-                                    <div
-                                        key={unit.id}
-                                        className="border border-nexsaas-light-gray dark:border-gray-700 rounded-lg p-3 text-center"
-                                    >
-                                        {unit.qrCode ? (
-                                            <img
-                                                src={`${URL_API}${unit.qrCode}`}
-                                                alt={`QR Code for ${unit.serialNumber}`}
-                                                className="w-28 h-28 mx-auto mb-3 rounded-lg object-contain"
-                                                onError={(e) => {
-                                                    e.currentTarget.style.display =
-                                                        "none";
-                                                    e.currentTarget.nextElementSibling!.style.display =
-                                                        "flex";
-                                                }}
-                                            />
-                                        ) : null}
+                                {selectedProduct.units
+                                    .filter((unit) =>
+                                        unit.code
+                                            .toLowerCase()
+                                            .includes(
+                                                qrSearchTerm.toLowerCase(),
+                                            ),
+                                    )
+                                    .map((unit) => (
                                         <div
-                                            className="w-28 h-28 bg-gray-200 dark:bg-gray-700 rounded-lg mx-auto mb-3 flex items-center justify-center"
-                                            style={{
-                                                display: unit.qrCode
-                                                    ? "none"
-                                                    : "flex",
-                                            }}
+                                            key={unit.id}
+                                            className="border border-nexsaas-light-gray dark:border-gray-700 rounded-lg p-3 text-center"
                                         >
-                                            <QrCode className="w-14 h-14 text-gray-400" />
-                                        </div>
-                                        <p className="text-xs font-mono text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
-                                            {unit.serialNumber}
-                                        </p>
-                                        <p className="text-xs font-mono text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
-                                            Lot: {unit.lot}
-                                        </p>
-                                        <span
-                                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                                unit.status,
-                                            )}`}
-                                        >
-                                            {getStatusDisplayName(unit.status)}
-                                        </span>
-                                        <div className="mt-2 flex gap-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="flex-1"
+                                            {unit.qrCode ? (
+                                                <img
+                                                    src={`${URL_API}${unit.qrCode}`}
+                                                    alt={`QR Code for ${unit.serialNumber}`}
+                                                    className="w-28 h-28 mx-auto mb-3 rounded-lg object-contain"
+                                                    onError={(e) => {
+                                                        e.currentTarget.style.display =
+                                                            "none";
+                                                        e.currentTarget.nextElementSibling!.style.display =
+                                                            "flex";
+                                                    }}
+                                                />
+                                            ) : null}
+                                            <div
+                                                className="w-28 h-28 bg-gray-200 dark:bg-gray-700 rounded-lg mx-auto mb-3 flex items-center justify-center"
+                                                style={{
+                                                    display: unit.qrCode
+                                                        ? "none"
+                                                        : "flex",
+                                                }}
                                             >
-                                                <Printer className="w-3 h-3 mr-1" />
-                                                Imprimer
-                                            </Button>
+                                                <QrCode className="w-14 h-14 text-gray-400" />
+                                            </div>
+                                            <p className="text-xs font-mono text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                {unit.serialNumber}
+                                            </p>
+                                            <p className="text-xs font-mono text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1">
+                                                Lot: {unit.lot}
+                                            </p>
+                                            <span
+                                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                                                    unit.status,
+                                                )}`}
+                                            >
+                                                {getStatusDisplayName(
+                                                    unit.status,
+                                                )}
+                                            </span>
+                                            <div className="mt-2 flex gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="flex-1"
+                                                >
+                                                    <Printer className="w-3 h-3 mr-1" />
+                                                    Imprimer
+                                                </Button>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
                             </div>
                         </motion.div>
                     </motion.div>
@@ -1613,11 +1904,21 @@ const StockPage: React.FC = () => {
                 <QRCodePrint
                     qrCodes={
                         selectedProduct
-                            ? getProductQRCodes(selectedProduct)
-                            : getAllQRCodes()
+                            ? getProductQRCodes(selectedProduct).filter((qr) =>
+                                  qr.code
+                                      .toLowerCase()
+                                      .includes(qrSearchTerm.toLowerCase()),
+                              )
+                            : getAllQRCodes().filter((qr) =>
+                                  qr.code
+                                      .toLowerCase()
+                                      .includes(qrSearchTerm.toLowerCase()),
+                              )
                     }
                     onClose={() => setShowQRPrint(false)}
                     isOpen={showQRPrint}
+                    searchTerm={qrSearchTerm}
+                    setSearchTerm={setQRSearchTerm}
                 />
             </div>
         </div>

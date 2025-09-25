@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Camera, X } from "lucide-react";
+import { Camera, X, SwitchCamera } from "lucide-react";
 import { BrowserQRCodeReader } from "@zxing/library";
 import Button from "../UI/Button";
 
@@ -14,19 +14,21 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
     const [hasPermission, setHasPermission] = useState<boolean | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [scanTip, setScanTip] = useState<string | null>(null);
+    const [facingMode, setFacingMode] = useState<"user" | "environment">(
+        "environment",
+    );
     const videoRef = useRef<HTMLVideoElement>(null);
     const codeReader = useRef<BrowserQRCodeReader | null>(null);
     const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isScanningRef = useRef<boolean>(false);
+    const lastScanTimeRef = useRef<number>(0);
 
     useEffect(() => {
-        console.log("QRScanner mounted, isOpen:", isOpen);
         if (isOpen && !codeReader.current) {
             codeReader.current = new BrowserQRCodeReader();
             checkBrowserCompatibility();
         }
         return () => {
-            console.log("QRScanner unmounting");
             stopScanner();
             if (scanTimeoutRef.current) {
                 clearTimeout(scanTimeoutRef.current);
@@ -36,7 +38,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
 
     const checkBrowserCompatibility = () => {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            console.error("getUserMedia is not supported in this browser");
             setErrorMessage(
                 "Ce navigateur ne prend pas en charge l'accès à la caméra. Essayez Chrome, Firefox, Edge ou Safari.",
             );
@@ -47,16 +48,14 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
     };
 
     const requestCameraPermission = async () => {
-        console.log("Requesting camera permission...");
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: "environment",
+                    facingMode,
                     width: { ideal: 1280 },
                     height: { ideal: 720 },
                 },
             });
-            console.log("Camera permission granted, stream obtained");
             setHasPermission(true);
             setErrorMessage(null);
             setScanTip(null);
@@ -65,7 +64,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                 videoRef.current.onloadedmetadata = () => {
                     if (videoRef.current) {
                         videoRef.current.play().catch((err) => {
-                            console.error("Video play error:", err);
                             setErrorMessage(
                                 "Erreur lors de la lecture de la vidéo.",
                             );
@@ -75,7 +73,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                 };
             }
         } catch (err: any) {
-            console.error("Camera permission error:", err.name, err.message);
             setHasPermission(false);
             if (err.name === "NotAllowedError") {
                 setErrorMessage(
@@ -95,49 +92,45 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
 
     const startScanning = async () => {
         if (!videoRef.current || !codeReader.current || isScanningRef.current) {
-            console.log("Scanning already in progress or components not ready");
             return;
         }
 
         isScanningRef.current = true;
         try {
-            console.log("Starting QR code scanning...");
             await codeReader.current.decodeFromVideoDevice(
-                null, // Auto-select camera
+                null,
                 videoRef.current,
                 (result, error) => {
                     if (result) {
-                        console.log("QR Code detected:", result.getText());
-                        onScan(result.getText());
-                        // Keep scanner open for multiple scans
+                        const now = Date.now();
+                        if (now - lastScanTimeRef.current > 1000) {
+                            // Debounce: 1 second
+                            lastScanTimeRef.current = now;
+                            onScan(result.getText());
+                            stopScanner();
+                            onClose(); // Close scanner after successful scan
+                        }
                     }
                     if (error) {
-                        // Safely handle errors
                         const errorMessage = error?.message || String(error);
                         if (
                             errorMessage.includes("No MultiFormat Readers") ||
                             errorMessage.includes("No QR code found")
                         ) {
-                            console.log("No valid QR code found in frame");
+                            // Silent for common non-errors
                         } else {
-                            console.error(
-                                "Scanning error:",
-                                errorMessage,
-                                error,
-                            );
+                            console.error("Scanning error:", errorMessage);
                         }
                     }
                 },
             );
 
-            // Set timeout for user feedback if no QR code is detected
             scanTimeoutRef.current = setTimeout(() => {
                 setScanTip(
                     "Aucun code QR détecté. Essayez de rapprocher la caméra, d'améliorer l'éclairage ou de tapoter l'écran pour ajuster la mise au point.",
                 );
                 isScanningRef.current = false;
                 stopScanner();
-                // Restart scanning after a brief pause
                 setTimeout(() => {
                     if (isOpen && videoRef.current) {
                         startScanning();
@@ -145,7 +138,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                 }, 5000);
             }, 20000);
         } catch (err: any) {
-            console.error("Scanning failed:", err.message || err);
             setErrorMessage(
                 `Erreur lors du scan du QR code: ${
                     err.message || "Erreur inconnue"
@@ -156,10 +148,8 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
     };
 
     const stopScanner = () => {
-        console.log("Stopping scanner...");
         if (codeReader.current) {
             codeReader.current.reset();
-            codeReader.current = null; // Ensure reader is recreated on next mount
         }
         if (videoRef.current && videoRef.current.srcObject) {
             const tracks = (
@@ -176,6 +166,14 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
         isScanningRef.current = false;
     };
 
+    const toggleCamera = () => {
+        stopScanner();
+        setFacingMode((prev) =>
+            prev === "environment" ? "user" : "environment",
+        );
+        requestCameraPermission();
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -185,7 +183,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black z-50 flex flex-col"
         >
-            {/* Header */}
             <div className="flex items-center justify-between p-4 bg-black/50">
                 <h2 className="text-white text-lg font-semibold">
                     Scanner QR Code
@@ -194,8 +191,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                     <X className="w-6 h-6 text-white" />
                 </Button>
             </div>
-
-            {/* Scanner Area */}
             <div className="flex-1 relative">
                 {hasPermission === true ? (
                     <>
@@ -206,8 +201,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                             muted
                             className="w-full h-full object-cover"
                         />
-
-                        {/* Scanning Overlay */}
                         <div className="absolute inset-0 flex items-center justify-center">
                             <motion.div
                                 animate={{ scale: [1, 1.1, 1] }}
@@ -218,7 +211,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                                 <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white"></div>
                                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white"></div>
                                 <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white"></div>
-
                                 <motion.div
                                     animate={{ y: [0, 240, 0] }}
                                     transition={{
@@ -229,8 +221,14 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, isOpen }) => {
                                 />
                             </motion.div>
                         </div>
-
-                        {/* Scan Tips */}
+                        <Button
+                            onClick={toggleCamera}
+                            variant="ghost"
+                            size="sm"
+                            className="absolute top-4 right-4 bg-white/50 text-black"
+                        >
+                            <SwitchCamera className="w-6 h-6" />
+                        </Button>
                         {scanTip && (
                             <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-black/70 text-white p-4 rounded-lg max-w-sm text-center">
                                 <p>{scanTip}</p>

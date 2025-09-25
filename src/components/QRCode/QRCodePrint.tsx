@@ -1,11 +1,20 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Download, Printer, Grid3X3, List, X, QrCode } from "lucide-react";
+import {
+    Download,
+    Printer,
+    Grid3X3,
+    List,
+    X,
+    QrCode,
+    Search,
+} from "lucide-react";
 import Button from "../UI/Button";
 
 interface QRCodePrintProps {
     qrCodes: Array<{
         id: string;
+        code: string;
         qrCode: string;
         serialNumber: string;
         productName: string;
@@ -13,12 +22,16 @@ interface QRCodePrintProps {
     }>;
     onClose: () => void;
     isOpen: boolean;
+    searchTerm: string;
+    setSearchTerm: (term: string) => void;
 }
 
 const QRCodePrint: React.FC<QRCodePrintProps> = ({
     qrCodes,
     onClose,
     isOpen,
+    searchTerm,
+    setSearchTerm,
 }) => {
     const [layout, setLayout] = React.useState<"grid" | "list">("grid");
     const [selectedCodes, setSelectedCodes] = React.useState<string[]>([]);
@@ -29,11 +42,19 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
 
     React.useEffect(() => {
         if (selectAll) {
-            setSelectedCodes(qrCodes.map((qr) => qr.id));
+            setSelectedCodes(
+                qrCodes
+                    .filter((qr) =>
+                        qr.code
+                            .toLowerCase()
+                            .includes(searchTerm.toLowerCase()),
+                    )
+                    .map((qr) => qr.id),
+            );
         } else {
             setSelectedCodes([]);
         }
-    }, [selectAll, qrCodes]);
+    }, [selectAll, qrCodes, searchTerm]);
 
     const toggleSelection = (id: string) => {
         setSelectedCodes((prev) =>
@@ -209,7 +230,7 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
                 </div>
                 <div class="qr-info">
                   <h3>${qr.productName}</h3>
-                  <p>${qr.id}</p>
+                  <p>${qr.code}</p>
                   ${qr.status === "ENDOMMAGE" ? `<p> ${qr.status}</p>` : ""}
                 </div>
               </div>
@@ -301,8 +322,15 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
                             Impression QR Codes
                         </h2>
                         <p className="text-nexsaas-vanta-black dark:text-gray-300">
-                            {qrCodes.length} code(s) disponible(s) •{" "}
-                            {selectedCodes.length} sélectionné(s)
+                            {
+                                qrCodes.filter((qr) =>
+                                    qr.code
+                                        .toLowerCase()
+                                        .includes(searchTerm.toLowerCase()),
+                                ).length
+                            }{" "}
+                            code(s) disponible(s) • {selectedCodes.length}{" "}
+                            sélectionné(s)
                         </p>
                     </div>
                     <Button variant="ghost" size="sm" onClick={onClose}>
@@ -313,49 +341,63 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
                 {/* Controls */}
                 <div className="p-6 border-b border-nexsaas-light-gray dark:border-gray-700">
                     <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                            <label className="flex items-center">
+                        <div className="flex flex-col md:flex-row items-center space-x-4 w-full">
+                            <div className="relative flex-1 max-w-xs w-full">
+                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                                 <input
-                                    type="checkbox"
-                                    checked={selectAll}
+                                    type="text"
+                                    placeholder="Rechercher par code produit..."
+                                    value={searchTerm}
                                     onChange={(e) =>
-                                        setSelectAll(e.target.checked)
+                                        setSearchTerm(e.target.value)
                                     }
-                                    className="mr-2 rounded border-nexsaas-light-gray focus:ring-nexsaas-saas-green"
+                                    className="w-full pl-8 pr-3 py-1.5 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white text-sm focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
                                 />
-                                <span className="text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                    Tout sélectionner
-                                </span>
-                            </label>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                                <label className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectAll}
+                                        onChange={(e) =>
+                                            setSelectAll(e.target.checked)
+                                        }
+                                        className="mr-2 rounded border-nexsaas-light-gray focus:ring-nexsaas-saas-green"
+                                    />
+                                    <span className="text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        Tout sélectionner
+                                    </span>
+                                </label>
 
-                            <div className="flex items-center space-x-2">
-                                <span className="text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                                    Disposition:
-                                </span>
-                                <Button
-                                    variant={
-                                        layout === "grid"
-                                            ? "primary"
-                                            : "outline"
-                                    }
-                                    size="sm"
-                                    onClick={() => setLayout("grid")}
-                                >
-                                    <Grid3X3 className="w-4 h-4 mr-1" />
-                                    Grille
-                                </Button>
-                                <Button
-                                    variant={
-                                        layout === "list"
-                                            ? "primary"
-                                            : "outline"
-                                    }
-                                    size="sm"
-                                    onClick={() => setLayout("list")}
-                                >
-                                    <List className="w-4 h-4 mr-1" />
-                                    Liste
-                                </Button>
+                                <div className="flex items-center space-x-2">
+                                    <span className="text-sm text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                        Disposition:
+                                    </span>
+                                    <Button
+                                        variant={
+                                            layout === "grid"
+                                                ? "primary"
+                                                : "outline"
+                                        }
+                                        size="sm"
+                                        onClick={() => setLayout("grid")}
+                                    >
+                                        <Grid3X3 className="w-4 h-4 mr-1" />
+                                        Grille
+                                    </Button>
+                                    <Button
+                                        variant={
+                                            layout === "list"
+                                                ? "primary"
+                                                : "outline"
+                                        }
+                                        size="sm"
+                                        onClick={() => setLayout("list")}
+                                    >
+                                        <List className="w-4 h-4 mr-1" />
+                                        Liste
+                                    </Button>
+                                </div>
                             </div>
                         </div>
 
@@ -377,106 +419,122 @@ const QRCodePrint: React.FC<QRCodePrintProps> = ({
                                 : "grid-cols-1"
                         }`}
                     >
-                        {qrCodes.map((qr, index) => (
-                            <motion.div
-                                key={qr.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{
-                                    duration: 0.3,
-                                    delay: index * 0.05,
-                                }}
-                                className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                                    selectedCodes.includes(qr.id)
-                                        ? "border-nexsaas-saas-green bg-green-50 dark:bg-green-900/20"
-                                        : "border-nexsaas-light-gray dark:border-gray-600 hover:border-nexsaas-saas-green"
-                                } ${
-                                    layout === "list"
-                                        ? "flex items-center"
-                                        : "text-center"
-                                }`}
-                                onClick={() => toggleSelection(qr.id)}
-                            >
-                                <div
-                                    className={`${
+                        {qrCodes
+                            .filter((qr) =>
+                                qr.code
+                                    .toLowerCase()
+                                    .includes(searchTerm.toLowerCase()),
+                            )
+                            .map((qr, index) => (
+                                <motion.div
+                                    key={qr.id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{
+                                        duration: 0.3,
+                                        delay: index * 0.05,
+                                    }}
+                                    className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                                        selectedCodes.includes(qr.id)
+                                            ? "border-nexsaas-saas-green bg-green-50 dark:bg-green-900/20"
+                                            : "border-nexsaas-light-gray dark:border-gray-600 hover:border-nexsaas-saas-green"
+                                    } ${
                                         layout === "list"
-                                            ? "mr-4 flex-shrink-0"
-                                            : "mb-3"
+                                            ? "flex items-center"
+                                            : "text-center"
                                     }`}
+                                    onClick={() => toggleSelection(qr.id)}
                                 >
-                                    <div className="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center mx-auto">
-                                        <img
-                                            src={`${qr.qrCode}`}
-                                            alt={`QR Code for ${qr.serialNumber}`}
-                                            className="w-20 h-20 object-contain"
-                                            onError={(e) => {
-                                                e.currentTarget.style.display =
-                                                    "none";
-                                                e.currentTarget.nextElementSibling!.style.display =
-                                                    "flex";
-                                            }}
-                                        />
-                                        <div
-                                            className="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center"
-                                            style={{ display: "none" }}
-                                        >
-                                            <QrCode className="w-12 h-12 text-gray-400" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div
-                                    className={
-                                        layout === "list" ? "flex-1" : ""
-                                    }
-                                >
-                                    <h3
-                                        className={`font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1 ${
-                                            layout === "list" ? "text-left" : ""
-                                        }`}
-                                    >
-                                        {qr.productName}
-                                    </h3>
-                                    <p
-                                        className={`text-sm text-nexsaas-vanta-black dark:text-gray-300 mb-1 ${
-                                            layout === "list" ? "text-left" : ""
-                                        }`}
-                                    >
-                                        <strong>Numero:</strong> {qr.id}
-                                    </p>
-                                    <p
-                                        className={`text-sm text-nexsaas-vanta-black dark:text-gray-300 mb-1 ${
-                                            layout === "list" ? "text-left" : ""
-                                        }`}
-                                    >
-                                        <strong>Série:</strong>{" "}
-                                        {qr.serialNumber}
-                                    </p>
-
-                                    <p
-                                        className={`text-sm text-nexsaas-vanta-black dark:text-gray-300 mb-2 ${
-                                            layout === "list" ? "text-left" : ""
-                                        }`}
-                                    >
-                                        <strong>Statut:</strong> {qr.status}
-                                    </p>
-                                </div>
-
-                                {selectedCodes.includes(qr.id) && (
                                     <div
                                         className={`${
-                                            layout === "list" ? "ml-4" : "mt-2"
+                                            layout === "list"
+                                                ? "mr-4 flex-shrink-0"
+                                                : "mb-3"
                                         }`}
                                     >
-                                        <div className="w-6 h-6 bg-nexsaas-saas-green rounded-full flex items-center justify-center">
-                                            <span className="text-white text-xs">
-                                                ✓
-                                            </span>
+                                        <div className="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center mx-auto">
+                                            <img
+                                                src={`${qr.qrCode}`}
+                                                alt={`QR Code for ${qr.serialNumber}`}
+                                                className="w-20 h-20 object-contain"
+                                                onError={(e) => {
+                                                    e.currentTarget.style.display =
+                                                        "none";
+                                                    e.currentTarget.nextElementSibling!.style.display =
+                                                        "flex";
+                                                }}
+                                            />
+                                            <div
+                                                className="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center"
+                                                style={{ display: "none" }}
+                                            >
+                                                <QrCode className="w-12 h-12 text-gray-400" />
+                                            </div>
                                         </div>
                                     </div>
-                                )}
-                            </motion.div>
-                        ))}
+
+                                    <div
+                                        className={
+                                            layout === "list" ? "flex-1" : ""
+                                        }
+                                    >
+                                        <h3
+                                            className={`font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-1 ${
+                                                layout === "list"
+                                                    ? "text-left"
+                                                    : ""
+                                            }`}
+                                        >
+                                            {qr.productName}
+                                        </h3>
+                                        <p
+                                            className={`text-sm text-nexsaas-vanta-black dark:text-gray-300 mb-1 ${
+                                                layout === "list"
+                                                    ? "text-left"
+                                                    : ""
+                                            }`}
+                                        >
+                                            <strong>Numero:</strong> {qr.code}
+                                        </p>
+                                        <p
+                                            className={`text-sm text-nexsaas-vanta-black dark:text-gray-300 mb-1 ${
+                                                layout === "list"
+                                                    ? "text-left"
+                                                    : ""
+                                            }`}
+                                        >
+                                            <strong>Série:</strong>{" "}
+                                            {qr.serialNumber}
+                                        </p>
+
+                                        <p
+                                            className={`text-sm text-nexsaas-vanta-black dark:text-gray-300 mb-2 ${
+                                                layout === "list"
+                                                    ? "text-left"
+                                                    : ""
+                                            }`}
+                                        >
+                                            <strong>Statut:</strong> {qr.status}
+                                        </p>
+                                    </div>
+
+                                    {selectedCodes.includes(qr.id) && (
+                                        <div
+                                            className={`${
+                                                layout === "list"
+                                                    ? "ml-4"
+                                                    : "mt-2"
+                                            }`}
+                                        >
+                                            <div className="w-6 h-6 bg-nexsaas-saas-green rounded-full flex items-center justify-center">
+                                                <span className="text-white text-xs">
+                                                    ✓
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </motion.div>
+                            ))}
                     </div>
                 </div>
 
