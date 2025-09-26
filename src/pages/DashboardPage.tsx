@@ -135,6 +135,14 @@ const DashboardPage: React.FC = () => {
       stats: '10 agents actifs',
       link: '/agents',
     },
+    {
+      icon: Package,
+      title: 'Enlèvements',
+      description: 'Gérer les enlèvements de produits',
+      color: 'bg-rose-500',
+      stats: '0 enlèvements en cours',
+      link: '/enlevements',
+    },
   ];
 
   const stats = [

@@ -29,15 +29,16 @@ import {
     UserRole,
     TypePiece,
     DocumentAgent,
+    extractOcr,
 } from "../../api/agentApi";
 
 interface FormData {
     nom: string;
     prenom: string;
-    email: string;
-    contact: string;
     documentType: TypePiece;
     documentNumber: string;
+    email: string;
+    contact: string;
     document: File | null;
     role: UserRole;
 }
@@ -51,10 +52,10 @@ const AgentsPage: React.FC = () => {
     const [formData, setFormData] = useState<FormData>({
         nom: "",
         prenom: "",
-        email: "",
-        contact: "",
         documentType: TypePiece.CNI,
         documentNumber: "",
+        email: "",
+        contact: "",
         document: null,
         role: UserRole.VENDEUR,
     });
@@ -82,6 +83,27 @@ const AgentsPage: React.FC = () => {
                 delete newErrors.prenom;
             }
         }
+        if (field === "documentType") {
+            if (!Object.values(TypePiece).includes(value as TypePiece)) {
+                newErrors.documentType = "Type de document invalide (CNI, Passeport, Permis de conduire)";
+            } else {
+                delete newErrors.documentType;
+            }
+        }
+        if (field === "documentNumber") {
+            const trimmedValue = typeof value === "string" ? value.trim() : "";
+            if (!trimmedValue) {
+                newErrors.documentNumber = "Numéro de document requis";
+            } else if (formData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(trimmedValue)) {
+                newErrors.documentNumber = "Le numéro CNI doit commencer par 'CI' suivi de 9 chiffres";
+            } else if (formData.documentType === TypePiece.PASSEPORT && !/^[A-Z]{2}\d{7}$/.test(trimmedValue)) {
+                newErrors.documentNumber = "Le numéro de passeport doit être 2 lettres suivies de 7 chiffres (ex: AB1234567)";
+            } else if (formData.documentType === TypePiece.PERMIS_DE_CONDUIRE && !/^CI[A-Z]{2}\d{10}$/.test(trimmedValue)) {
+                newErrors.documentNumber = "Le numéro de permis doit être 'CI' + 2 lettres + 10 chiffres (ex: CIPA1234567890)";
+            } else {
+                delete newErrors.documentNumber;
+            }
+        }
         if (field === "email") {
             if (!value || (typeof value === "string" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()))) {
                 newErrors.email = "Email invalide";
@@ -96,32 +118,13 @@ const AgentsPage: React.FC = () => {
                 delete newErrors.contact;
             }
         }
-        if (field === "documentType") {
-            if (!Object.values(TypePiece).includes(value as TypePiece)) {
-                newErrors.documentType = "Type de document invalide (CNI, RCCM, Autres)";
-            } else {
-                delete newErrors.documentType;
-            }
-        }
-        if (field === "documentNumber") {
-            const trimmedValue = typeof value === "string" ? value.trim() : "";
-            if (!trimmedValue) {
-                newErrors.documentNumber = "Numéro de document requis";
-            } else if (formData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(trimmedValue)) {
-                newErrors.documentNumber = "Le numéro CNI doit commencer par 'CI' suivi de 9 chiffres";
-            } else if (formData.documentType === TypePiece.RCCM && !/^RC\d{9}$/.test(trimmedValue)) {
-                newErrors.documentNumber = "Le numéro RCCM doit commencer par 'RC' suivi de 9 chiffres";
-            } else {
-                delete newErrors.documentNumber;
-            }
-        }
         if (field === "document") {
             if (!value) {
                 newErrors.document = "Un document est requis";
             } else if (value instanceof File) {
-                const validTypes = ["image/png", "image/jpeg"];
+                const validTypes = ["image/png", "image/jpeg", "application/pdf"];
                 if (!validTypes.includes(value.type)) {
-                    newErrors.document = "Fichier invalide: PNG ou JPEG requis";
+                    newErrors.document = "Fichier invalide: PDF, PNG ou JPEG requis";
                 } else if (value.size > 5 * 1024 * 1024) {
                     newErrors.document = "Fichier trop volumineux (max 5MB)";
                 } else {
@@ -158,28 +161,30 @@ const AgentsPage: React.FC = () => {
         if (!formData.prenom || formData.prenom.trim() === "") {
             newErrors.prenom = "Prénom requis";
         }
+        if (!Object.values(TypePiece).includes(formData.documentType)) {
+            newErrors.documentType = "Type de document invalide (CNI, Passeport, Permis de conduire)";
+        }
+        if (!formData.documentNumber || formData.documentNumber.trim() === "") {
+            newErrors.documentNumber = "Numéro de document requis";
+        } else if (formData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(formData.documentNumber.trim())) {
+            newErrors.documentNumber = "Le numéro CNI doit commencer par 'CI' suivi de 9 chiffres";
+        } else if (formData.documentType === TypePiece.PASSEPORT && !/^[A-Z]{2}\d{7}$/.test(formData.documentNumber.trim())) {
+            newErrors.documentNumber = "Le numéro de passeport doit être 2 lettres suivies de 7 chiffres (ex: AB1234567)";
+        } else if (formData.documentType === TypePiece.PERMIS_DE_CONDUIRE && !/^CI[A-Z]{2}\d{10}$/.test(formData.documentNumber.trim())) {
+            newErrors.documentNumber = "Le numéro de permis doit être 'CI' + 2 lettres + 10 chiffres (ex: CIPA1234567890)";
+        }
         if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
             newErrors.email = "Email invalide";
         }
         if (!formData.contact || !/^\+?[0-9\s-]{7,15}$/.test(formData.contact.trim())) {
             newErrors.contact = "Numéro de contact invalide (7-15 chiffres)";
         }
-        if (!Object.values(TypePiece).includes(formData.documentType)) {
-            newErrors.documentType = "Type de document invalide (CNI, RCCM, Autres)";
-        }
-        if (!formData.documentNumber || formData.documentNumber.trim() === "") {
-            newErrors.documentNumber = "Numéro de document requis";
-        } else if (formData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(formData.documentNumber.trim())) {
-            newErrors.documentNumber = "Le numéro CNI doit commencer par 'CI' suivi de 9 chiffres";
-        } else if (formData.documentType === TypePiece.RCCM && !/^RC\d{9}$/.test(formData.documentNumber.trim())) {
-            newErrors.documentNumber = "Le numéro RCCM doit commencer par 'RC' suivi de 9 chiffres";
-        }
         if (!formData.document) {
             newErrors.document = "Un document est requis";
         } else {
-            const validTypes = ["image/png", "image/jpeg"];
+            const validTypes = ["image/png", "image/jpeg", "application/pdf"];
             if (!validTypes.includes(formData.document.type)) {
-                newErrors.document = "Fichier invalide: PNG ou JPEG requis";
+                newErrors.document = "Fichier invalide: PDF, PNG ou JPEG requis";
             } else if (formData.document.size > 5 * 1024 * 1024) {
                 newErrors.document = "Fichier trop volumineux (max 5MB)";
             }
@@ -220,6 +225,38 @@ const AgentsPage: React.FC = () => {
         fetchAgents();
     }, [showToast]);
 
+    const handleOcrExtract = async () => {
+        if (!formData.document) return;
+
+        setLoading(true);
+        try {
+            const extracted = await extractOcr(formData.document);
+            setFormData((prev) => ({
+                ...prev,
+                nom: extracted.nom || prev.nom,
+                prenom: extracted.prenom || prev.prenom,
+                documentType: extracted.documentType || prev.documentType,
+                documentNumber: extracted.documentNumber || prev.documentNumber,
+            }));
+            showToast({
+                type: "success",
+                title: "Succès",
+                message: "Données extraites avec OCR",
+                duration: 3000,
+            });
+        } catch (err: any) {
+            console.error("Erreur lors de l'extraction OCR", err);
+            showToast({
+                type: "error",
+                title: "Erreur",
+                message: err.message || "Erreur lors de l'extraction des données avec OCR",
+                duration: 5000,
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -240,10 +277,11 @@ const AgentsPage: React.FC = () => {
                 nom: formData.nom.trim(),
                 prenom: formData.prenom.trim(),
                 email: formData.email.trim(),
+                contact: formData.contact.trim(), // Inclut maintenant contact
                 documentType: formData.documentType,
                 documentNumber: formData.documentNumber.trim(),
-                role: formData.role,
                 document: formData.document!,
+                role: formData.role,
             };
 
             console.log("Données envoyées à addAgent:", agentData);
@@ -260,7 +298,7 @@ const AgentsPage: React.FC = () => {
                         fichierUrl: formData.document ? URL.createObjectURL(formData.document) : "",
                     },
                 ],
-                documentNumber: formData.documentNumber.trim(), // Added
+                documentNumber: formData.documentNumber.trim(),
             };
             setAgents((prev) => [...prev, tempAgent]);
 
@@ -268,9 +306,9 @@ const AgentsPage: React.FC = () => {
             setAgents((prev) =>
                 prev.map((agent) =>
                     agent.id === tempAgent.id
-                        ? { ...newAgent, documentAgent: newAgent.documentAgent, documentNumber: newAgent.documentNumber } // Updated
-                        : agent,
-                ),
+                        ? { ...newAgent, documentAgent: newAgent.documentAgent, documentNumber: newAgent.documentNumber }
+                        : agent
+                )
             );
 
             logActivity({
@@ -296,10 +334,10 @@ const AgentsPage: React.FC = () => {
             setFormData({
                 nom: "",
                 prenom: "",
-                email: "",
-                contact: "",
                 documentType: TypePiece.CNI,
                 documentNumber: "",
+                email: "",
+                contact: "", // Réinitialisation de contact
                 document: null,
                 role: UserRole.VENDEUR,
             });
@@ -310,11 +348,11 @@ const AgentsPage: React.FC = () => {
             await fetchAgents();
             let errorMessage = err.message || "Une erreur est survenue lors de l'ajout de l'agent";
             if (errorMessage.includes("documentType")) {
-                errorMessage = "Le type de document doit être CNI, RCCM ou Autres.";
+                errorMessage = "Le type de document doit être CNI, Passeport ou Permis de conduire.";
             } else if (errorMessage.includes("documentNumber")) {
                 errorMessage = "Le numéro de document est invalide.";
             } else if (errorMessage.includes("document")) {
-                errorMessage = "Un document valide est requis (PNG ou JPEG, max 5MB).";
+                errorMessage = "Un document valide est requis (PDF, PNG ou JPEG, max 5MB).";
             }
             showToast({
                 type: "error",
@@ -328,8 +366,7 @@ const AgentsPage: React.FC = () => {
     };
 
     const handleToggleStatus = async (id: string, name: string, actif: boolean) => {
-        if (!window.confirm(`Voulez-vous vraiment ${actif ? "désactiver" : "activer"} l'agent ${name} ?`))
-            return;
+        if (!window.confirm(`Voulez-vous vraiment ${actif ? "désactiver" : "activer"} l’agent ${name} ?`)) return;
 
         setLoading(true);
         const previousAgents = agents;
@@ -342,7 +379,7 @@ const AgentsPage: React.FC = () => {
             logActivity({
                 type: "update",
                 module: "Agents",
-                description: `Changement de statut de l'agent: ${name} (${actif ? "désactivé" : "activé"})`,
+                description: `Changement de statut de l’agent: ${name} (${actif ? "désactivé" : "activé"})`,
                 userId: user?.id ?? "unknown",
                 metadata: { id, actif: !actif },
             });
@@ -433,6 +470,49 @@ const AgentsPage: React.FC = () => {
                             Ajouter un nouvel agent
                         </h2>
                         <form onSubmit={handleSubmit} className="space-y-6">
+                            {/* OCR Document Upload Section at Top */}
+                            <div className="sm:col-span-2 mb-6">
+                                <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                    Pièce d'identité <span className="text-red-600">*</span>
+                                </label>
+                                <input
+                                    type="file"
+                                    accept="application/pdf,image/png,image/jpeg"
+                                    onChange={(e) => handleInputChange("document", e.target.files ? e.target.files[0] : null)}
+                                    className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
+                                    required
+                                />
+                                <p className="mt-1 text-sm text-gray-500">Formats acceptés: PDF, JPG, PNG (max 5MB)</p>
+                                {errors.document && <p className="mt-1 text-sm text-red-600">{errors.document}</p>}
+                                {formData.document && (
+                                    <>
+                                        {formData.document.type.startsWith("image/") ? (
+                                            <img
+                                                src={URL.createObjectURL(formData.document)}
+                                                alt="Preview du document"
+                                                className="mt-2 w-24 h-24 object-cover rounded"
+                                                onError={() => setImageError(true)}
+                                            />
+                                        ) : (
+                                            <p className="mt-2 text-sm text-gray-500">PDF chargé: {formData.document.name}</p>
+                                        )}
+                                        {imageError && formData.document.type.startsWith("image/") && (
+                                            <p className="mt-1 text-sm text-red-600">Erreur de prévisualisation du document</p>
+                                        )}
+                                    </>
+                                )}
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={handleOcrExtract}
+                                    disabled={!formData.document || loading}
+                                    className="mt-4"
+                                >
+                                    Extraire les données avec OCR
+                                </Button>
+                            </div>
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <Input
                                     label="Nom"
@@ -452,6 +532,40 @@ const AgentsPage: React.FC = () => {
                                     required
                                     placeholder="Jean"
                                 />
+                                <div>
+                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
+                                        Type de document <span className="text-red-600">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={formData.documentType}
+                                            onChange={(e) => handleInputChange("documentType", e.target.value as TypePiece)}
+                                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none appearance-none"
+                                            required
+                                        >
+                                            <option value={TypePiece.CNI}>CNI</option>
+                                            <option value={TypePiece.PASSEPORT}>Passeport</option>
+                                            <option value={TypePiece.PERMIS_DE_CONDUIRE}>Permis de conduire</option>
+                                        </select>
+                                        <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                        {errors.documentType && <p className="mt-1 text-sm text-red-600">{errors.documentType}</p>}
+                                    </div>
+                                </div>
+                                <Input
+                                    label="Numéro de document"
+                                    value={formData.documentNumber}
+                                    onChange={(value) => handleInputChange("documentNumber", value)}
+                                    icon={FileText}
+                                    error={errors.documentNumber}
+                                    required
+                                    placeholder={
+                                        formData.documentType === TypePiece.CNI
+                                            ? "CI123456789"
+                                            : formData.documentType === TypePiece.PASSEPORT
+                                                ? "AB1234567"
+                                                : "CIPA1234567890"
+                                    }
+                                />
                                 <Input
                                     label="Email"
                                     value={formData.email}
@@ -468,74 +582,8 @@ const AgentsPage: React.FC = () => {
                                     icon={Phone}
                                     error={errors.contact}
                                     required
-                                    placeholder="+1234567890"
+                                    placeholder="+237612345678"
                                 />
-                                <div>
-                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                        Type de document <span className="text-red-600">*</span>
-                                    </label>
-                                    <div className="relative">
-                                        <select
-                                            value={formData.documentType}
-                                            onChange={(e) => handleInputChange("documentType", e.target.value as TypePiece)}
-                                            className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none appearance-none"
-                                            required
-                                        >
-                                            <option value={TypePiece.CNI}>CNI</option>
-                                            <option value={TypePiece.RCCM}>RCCM</option>
-                                            <option value={TypePiece.Autres}>Autres</option>
-                                        </select>
-                                        <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                        {errors.documentType && (
-                                            <p className="mt-1 text-sm text-red-600">{errors.documentType}</p>
-                                        )}
-                                    </div>
-                                </div>
-                                <Input
-                                    label="Numéro de document"
-                                    value={formData.documentNumber}
-                                    onChange={(value) => handleInputChange("documentNumber", value)}
-                                    icon={FileText}
-                                    error={errors.documentNumber}
-                                    required
-                                    placeholder={
-                                        formData.documentType === TypePiece.CNI
-                                            ? "CI123456789"
-                                            : formData.documentType === TypePiece.RCCM
-                                                ? "RC123456789"
-                                                : "Numéro de document"
-                                    }
-                                />
-                                <div>
-                                    <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
-                                        Document <span className="text-red-600">*</span>
-                                    </label>
-                                    <input
-                                        type="file"
-                                        accept="image/png,image/jpeg"
-                                        onChange={(e) =>
-                                            handleInputChange("document", e.target.files ? e.target.files[0] : null)
-                                        }
-                                        className="w-full pl-10 pr-4 py-3 rounded-lg border border-nexsaas-light-gray dark:border-gray-600 bg-nexsaas-pure-white dark:bg-gray-800 text-nexsaas-deep-blue dark:text-nexsaas-pure-white focus:ring-2 focus:ring-nexsaas-saas-green focus:outline-none"
-                                        required
-                                    />
-                                    {errors.document && (
-                                        <p className="mt-1 text-sm text-red-600">{errors.document}</p>
-                                    )}
-                                    {formData.document && (
-                                        <img
-                                            src={URL.createObjectURL(formData.document)}
-                                            alt="Preview"
-                                            className="mt-2 w-24 h-24 object-cover rounded"
-                                            onError={() => setImageError(true)}
-                                        />
-                                    )}
-                                    {imageError && formData.document && (
-                                        <p className="mt-1 text-sm text-red-600">
-                                            Erreur de prévisualisation de l'image
-                                        </p>
-                                    )}
-                                </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-2">
                                         Rôle <span className="text-red-600">*</span>
@@ -551,9 +599,7 @@ const AgentsPage: React.FC = () => {
                                             <option value={UserRole.GESTIONNAIRE}>Gestionnaire</option>
                                         </select>
                                         <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                        {errors.role && (
-                                            <p className="mt-1 text-sm text-red-600">{errors.role}</p>
-                                        )}
+                                        {errors.role && <p className="mt-1 text-sm text-red-600">{errors.role}</p>}
                                     </div>
                                 </div>
                             </div>
@@ -563,10 +609,19 @@ const AgentsPage: React.FC = () => {
                                     variant="primary"
                                     size="sm"
                                     loading={loading}
-                                    disabled={loading || Object.keys(errors).length > 0 || !formData.nom || !formData.prenom || !formData.email || !formData.contact || !formData.documentNumber || !formData.document}
+                                    disabled={
+                                        loading ||
+                                        Object.keys(errors).length > 0 ||
+                                        !formData.nom ||
+                                        !formData.prenom ||
+                                        !formData.documentNumber ||
+                                        !formData.email ||
+                                        !formData.contact ||
+                                        !formData.document
+                                    }
                                 >
                                     <Save className="w-4 h-4 mr-2" />
-                                    Ajouter l'agent
+                                    Ajouter l’agent
                                 </Button>
                             </div>
                         </form>
@@ -699,7 +754,7 @@ const AgentsPage: React.FC = () => {
                                                                 handleToggleStatus(
                                                                     agent.id,
                                                                     `${agent.nom} ${agent.prenom}`,
-                                                                    agent.actif,
+                                                                    agent.actif
                                                                 )
                                                             }
                                                             className={
@@ -752,7 +807,7 @@ const AgentsPage: React.FC = () => {
                             onClick={(e) => e.stopPropagation()}
                         >
                             <h3 className="text-lg font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mb-6">
-                                Détails de l'agent
+                                Détails de l’agent
                             </h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
@@ -762,6 +817,7 @@ const AgentsPage: React.FC = () => {
                                     <p className="text-nexsaas-deep-blue dark:text-nexsaas-pure-white mt-1">
                                         {selectedAgent.nom || "Non spécifié"}
                                     </p>
+
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-nexsaas-deep-blue dark:text-gray-300">

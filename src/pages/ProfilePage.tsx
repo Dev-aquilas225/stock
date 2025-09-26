@@ -253,6 +253,10 @@ const ProfilePage: React.FC = () => {
         { id: 'security', label: 'Sécurité', icon: Shield }
     ];
 
+    const handleViewDocuments = () => {
+        navigate('/documents-requis');
+    };
+
     return (
         <div className="min-h-screen pt-16 bg-gradient-to-br from-nexsaas-pure-white to-nexsaas-light-gray dark:from-nexsaas-vanta-black dark:to-gray-900">
             <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -629,6 +633,20 @@ const ProfilePage: React.FC = () => {
                                             </p>
                                         </div>
                                         <Button variant="outline">Configurer</Button>
+                                    </div>
+
+                                    <div className="flex items-center justify-between p-4 border border-nexsaas-light-gray dark:border-gray-600 rounded-lg">
+                                        <div>
+                                            <h3 className="font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
+                                                Documents requis
+                                            </h3>
+                                            <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
+                                                Consultez et gérez vos documents nécessaires
+                                            </p>
+                                        </div>
+                                        <Button variant="primary" onClick={handleViewDocuments}>
+                                            Voir documents
+                                        </Button>
                                     </div>
                                 </div>
                             </Card>

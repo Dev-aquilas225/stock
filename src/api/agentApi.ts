@@ -7,8 +7,8 @@ export enum UserRole {
 
 export enum TypePiece {
     CNI = "CNI",
-    RCCM = "RCCM",
-    Autres = "Autres",
+    PASSEPORT = "PASSEPORT",
+    PERMIS_DE_CONDUIRE = "PERMIS_DE_CONDUIRE",
 }
 
 export interface DocumentAgent {
@@ -24,6 +24,7 @@ export interface CreateAgentDto {
     documentNumber: string;
     document: File;
     role: UserRole;
+    contact?: string; // Ajout de contact comme propriété optionnelle
 }
 
 export interface Agent {
@@ -36,7 +37,15 @@ export interface Agent {
     actif: boolean;
     creeLe: string;
     documentAgent: DocumentAgent[];
-    documentNumber: string; // Added
+    documentNumber: string;
+}
+
+export interface OcrExtractResult {
+    nom?: string;
+    prenom?: string;
+    documentType?: TypePiece;
+    documentNumber?: string;
+    contact?: string;
 }
 
 // -----------------------------
@@ -110,7 +119,7 @@ export const addAgent = async (agentData: CreateAgentDto): Promise<Agent> => {
     }
     if (!Object.values(TypePiece).includes(agentData.documentType)) {
         console.error("Erreur de validation: documentType invalide", agentData.documentType);
-        throw new Error("DocumentType doit être CNI, RCCM ou Autres");
+        throw new Error("DocumentType doit être CNI, Passeport ou Permis de conduire");
     }
     if (!agentData.documentNumber || agentData.documentNumber.trim() === "") {
         console.error("Erreur de validation: documentNumber requis", agentData.documentNumber);
@@ -119,6 +128,14 @@ export const addAgent = async (agentData: CreateAgentDto): Promise<Agent> => {
     if (agentData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(agentData.documentNumber.trim())) {
         console.error("Erreur de validation: numéro CNI invalide", agentData.documentNumber);
         throw new Error("Le numéro CNI doit commencer par 'CI' suivi de 9 chiffres");
+    }
+    if (agentData.documentType === TypePiece.PASSEPORT && !/^[A-Z]{2}\d{7}$/.test(agentData.documentNumber.trim())) {
+        console.error("Erreur de validation: numéro de passeport invalide", agentData.documentNumber);
+        throw new Error("Le numéro de passeport doit être 2 lettres suivies de 7 chiffres (ex: AB1234567)");
+    }
+    if (agentData.documentType === TypePiece.PERMIS_DE_CONDUIRE && !/^CI[A-Z]{2}\d{10}$/.test(agentData.documentNumber.trim())) {
+        console.error("Erreur de validation: numéro de permis invalide", agentData.documentNumber);
+        throw new Error("Le numéro de permis doit être 'CI' + 2 lettres + 10 chiffres (ex: CIPA1234567890)");
     }
     if (!Object.values(UserRole).includes(agentData.role)) {
         console.error("Erreur de validation: rôle invalide", agentData.role);
@@ -137,6 +154,10 @@ export const addAgent = async (agentData: CreateAgentDto): Promise<Agent> => {
         console.error("Erreur de validation: fichier document trop volumineux", agentData.document.size);
         throw new Error("Fichier document trop volumineux (max 5MB)");
     }
+    if (agentData.contact && !/^\+?[0-9\s-]{7,15}$/.test(agentData.contact.trim())) {
+        console.error("Erreur de validation: contact invalide", agentData.contact);
+        throw new Error("Numéro de contact invalide (7-15 chiffres)");
+    }
 
     const formData = new FormData();
     formData.append("nom", agentData.nom.trim());
@@ -146,6 +167,9 @@ export const addAgent = async (agentData: CreateAgentDto): Promise<Agent> => {
     formData.append("documentNumber", agentData.documentNumber.trim());
     formData.append("role", mapRoleToBackend(agentData.role));
     formData.append("document", agentData.document);
+    if (agentData.contact) {
+        formData.append("contact", agentData.contact.trim());
+    }
 
     // Log détaillé pour débogage
     const formDataEntries = Object.fromEntries(formData);
@@ -169,8 +193,8 @@ export const addAgent = async (agentData: CreateAgentDto): Promise<Agent> => {
                 },
             ],
             contact: response.data.data.contact || "",
-            documentNumber: response.data.data.documentNumber || "", // Added
-            creeLe: response.data.data.createdAt || new Date().toISOString(),
+            documentNumber: response.data.data.documentNumber || "",
+            creeLe: response.data.data.createdAt || new Date("2025-08-27T18:00:00Z").toISOString(), // 06:00 PM GMT, August 27, 2025
         };
     } catch (err: any) {
         console.error("Erreur API addAgent:", err.response?.data || err);
@@ -180,7 +204,7 @@ export const addAgent = async (agentData: CreateAgentDto): Promise<Agent> => {
                 ? errors.map((e: any) => e.message).join(", ")
                 : err.response?.data?.message || err.message || "Erreur lors de la création de l’agent";
         if (message.includes("documentType")) {
-            message = "Le type de document doit être CNI, RCCM ou Autres.";
+            message = "Le type de document doit être CNI, Passeport ou Permis de conduire.";
         }
         throw new Error(message);
     }
@@ -219,8 +243,8 @@ export const getAgents = async (): Promise<Agent[]> => {
                     },
                 ],
                 contact: agent.contact || "",
-                documentNumber: agent.documentNumber || "", // Added
-                creeLe: agent.createdAt || new Date().toISOString(),
+                documentNumber: agent.documentNumber || "",
+                creeLe: agent.createdAt || new Date("2025-08-27T18:00:00Z").toISOString(), // 06:00 PM GMT, August 27, 2025
             };
         }).filter((agent): agent is Agent => agent !== null);
     } catch (err: any) {
@@ -259,8 +283,8 @@ export const toggleAgentActif = async (id: string): Promise<Agent> => {
                 },
             ],
             contact: response.data.data.contact || "",
-            documentNumber: response.data.data.documentNumber || "", // Added
-            creeLe: response.data.data.createdAt || new Date().toISOString(),
+            documentNumber: response.data.data.documentNumber || "",
+            creeLe: response.data.data.createdAt || new Date("2025-08-27T18:00:00Z").toISOString(), // 06:00 PM GMT, August 27, 2025
         };
     } catch (err: any) {
         console.error("Erreur API toggleAgentActif:", err.response?.data || err);
@@ -271,6 +295,62 @@ export const toggleAgentActif = async (id: string): Promise<Agent> => {
             "Erreur lors du changement de statut";
         if (status === 404) message = `Agent avec ID ${id} non trouvé`;
         else if (status === 403) message = "Accès non autorisé pour modifier le statut de l'agent";
+        throw new Error(message);
+    }
+};
+
+// -----------------------------
+// 📷 OCR Extraction
+// -----------------------------
+
+export const extractOcr = async (file: File): Promise<OcrExtractResult> => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+        console.error("Erreur: Token manquant pour extractOcr");
+        throw new Error("Token manquant");
+    }
+
+    if (!file) {
+        console.error("Erreur: Aucun fichier fourni pour l'extraction OCR");
+        throw new Error("Aucun fichier fourni");
+    }
+
+    const validTypes = ["image/png", "image/jpeg"];
+    if (!validTypes.includes(file.type)) {
+        console.error("Erreur: Type de fichier invalide pour OCR", file.type);
+        throw new Error("Type de fichier invalide: PNG ou JPEG requis");
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+        console.error("Erreur: Fichier trop volumineux pour OCR", file.size);
+        throw new Error("Fichier trop volumineux (max 5MB)");
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const response = await axiosClient.post("/ocr/extract", formData, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "multipart/form-data",
+            },
+        });
+        console.log("Réponse API extractOcr:", response.data);
+
+        const { nom, prenom, documentType, documentNumber, contact } = response.data.data || {};
+
+        return {
+            nom: typeof nom === "string" ? nom.trim() : undefined,
+            prenom: typeof prenom === "string" ? prenom.trim() : undefined,
+            documentType: typeof documentType === "string" ? mapTypePieceFromBackend(documentType) : undefined,
+            documentNumber: typeof documentNumber === "string" ? documentNumber.trim() : undefined,
+            contact: typeof contact === "string" ? contact.trim() : undefined,
+        };
+    } catch (err: any) {
+        console.error("Erreur API extractOcr:", err.response?.data || err);
+        const message =
+            err.response?.data?.message || err.message || "Erreur lors de l'extraction OCR";
         throw new Error(message);
     }
 };

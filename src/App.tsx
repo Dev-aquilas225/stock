@@ -9,6 +9,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Layout/Header';
 import PageLoader from './components/Layout/PageLoader';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
+
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -32,6 +33,7 @@ import DocumentsRequiredPage from './pages/DocumentsRequiredPage';
 import AccountPendingPage from './pages/AccountPendingPage';
 import SubscriptionInactivePage from './pages/SubscriptionInactivePage';
 import AgentsPage from './pages/modules/AgentsPage';
+import { EnlevementsPage, EnlevementDetailsPage } from './pages/modules/EnlevementPage';
 import ReturnsPage from './pages/modules/ReturnsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -49,171 +51,40 @@ function AnimatedRoutes() {
       >
         <Suspense fallback={<PageLoader />}>
           <Routes location={location}>
+            {/* Pages publiques */}
             <Route path="/" element={<HomePage />} />
             <Route path="/login-client" element={<LoginPage />} />
             <Route path="/mot-de-passe-oublie" element={<ForgotPasswordPage />} />
             <Route path="/reinitialiser-mot-de-passe" element={<ResetPasswordPage />} />
             <Route path="/inscription" element={<RegisterPage />} />
-            <Route
-              path="/profil"
-              element={
-                <ProtectedRoute>
-                  <ProfilePage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/approvisionnements"
-              element={
-                <ProtectedRoute>
-                  <SupplyPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/returns"
-              element={
-                <ProtectedRoute>
-                  <ReturnsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/returns/new"
-              element={
-                <ProtectedRoute>
-                  <ReturnsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/fournisseurs"
-              element={
-                <ProtectedRoute>
-                  <SuppliersPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/stocks"
-              element={
-                <ProtectedRoute>
-                  <StockPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/ventes"
-              element={
-                <ProtectedRoute>
-                  <SalesPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/commissions"
-              element={
-                <ProtectedRoute>
-                  <CommissionsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/facturation"
-              element={
-                <ProtectedRoute>
-                  <InvoicingPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/analytics"
-              element={
-                <ProtectedRoute>
-                  <AnalyticsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/paiements"
-              element={
-                <ProtectedRoute>
-                  <PaymentsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/support"
-              element={
-                <ProtectedRoute>
-                  <SupportPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/pos"
-              element={
-                <ProtectedRoute>
-                  <POSPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/activites"
-              element={
-                <ProtectedRoute>
-                  <ActivityPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/notifications"
-              element={
-                <ProtectedRoute>
-                  <NotificationsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/documents-requis"
-              element={
-                <ProtectedRoute>
-                  <DocumentsRequiredPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/compte-en-attente"
-              element={
-                <ProtectedRoute>
-                  <AccountPendingPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/abonnement-inactif"
-              element={
-                <ProtectedRoute>
-                  <SubscriptionInactivePage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/agents"
-              element={
-                <ProtectedRoute>
-                  <AgentsPage />
-                </ProtectedRoute>
-              }
-            />
+
+            {/* Pages protégées */}
+            <Route path="/profil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+
+            {/* Modules ERP */}
+            <Route path="/approvisionnements" element={<ProtectedRoute><SupplyPage /></ProtectedRoute>} />
+            <Route path="/returns" element={<ProtectedRoute><ReturnsPage /></ProtectedRoute>} />
+            <Route path="/returns/new" element={<ProtectedRoute><ReturnsPage /></ProtectedRoute>} />
+            <Route path="/fournisseurs" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
+            <Route path="/stocks" element={<ProtectedRoute><StockPage /></ProtectedRoute>} />
+            <Route path="/ventes" element={<ProtectedRoute><SalesPage /></ProtectedRoute>} />
+            <Route path="/commissions" element={<ProtectedRoute><CommissionsPage /></ProtectedRoute>} />
+            <Route path="/facturation" element={<ProtectedRoute><InvoicingPage /></ProtectedRoute>} />
+            <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+            <Route path="/paiements" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
+            <Route path="/support" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
+            <Route path="/pos" element={<ProtectedRoute><POSPage /></ProtectedRoute>} />
+            <Route path="/activites" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>} />
+            <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+            <Route path="/documents-requis" element={<ProtectedRoute><DocumentsRequiredPage /></ProtectedRoute>} />
+            <Route path="/compte-en-attente" element={<ProtectedRoute><AccountPendingPage /></ProtectedRoute>} />
+            <Route path="/abonnement-inactif" element={<ProtectedRoute><SubscriptionInactivePage /></ProtectedRoute>} />
+            <Route path="/agents" element={<ProtectedRoute><AgentsPage /></ProtectedRoute>} />
+            <Route path="/enlevements" element={<ProtectedRoute><EnlevementsPage /></ProtectedRoute>} />
+            <Route path="/enlevements/:id" element={<ProtectedRoute><EnlevementDetailsPage /></ProtectedRoute>} />
+
+            {/* Fallback */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>
