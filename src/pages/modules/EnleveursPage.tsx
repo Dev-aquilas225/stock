@@ -24,7 +24,7 @@ import {
     Enleveur,
     CreateEnleveurDto,
     TypePiece,
-} from "../../api/enleveurApi";
+} from "../../api/enleveurapi";
 
 interface FormData {
     nom: string;
@@ -93,7 +93,18 @@ const EnleveursPage: React.FC = () => {
             newErrors.email = "Email invalide";
         }
         if (!formData.documentType) newErrors.documentType = "Type de document requis";
-        if (!formData.documentNumber.trim()) newErrors.documentNumber = "Numéro de document requis";
+        if (!formData.documentNumber.trim()) {
+            newErrors.documentNumber = "Numéro de document requis";
+        } else {
+            // Validate document number based on document type (Côte d'Ivoire formats)
+            if (formData.documentType === TypePiece.CNI && !/^CI\d{9}$/.test(formData.documentNumber)) {
+                newErrors.documentNumber = "Numéro de CNI invalide (format: CI123456789)";
+            } else if (formData.documentType === TypePiece.Passeport && !/^[A-Z]{2}\d{7}$/.test(formData.documentNumber)) {
+                newErrors.documentNumber = "Numéro de passeport invalide (format: AB1234567)";
+            } else if (formData.documentType === TypePiece.PermisConduire && !/^\d{10}$/.test(formData.documentNumber)) {
+                newErrors.documentNumber = "Numéro de permis de conduire invalide (format: 1234567890)";
+            }
+        }
         if (!formData.document) newErrors.document = "Document requis";
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -392,7 +403,13 @@ const EnleveursPage: React.FC = () => {
                                         type="text"
                                         value={formData.documentNumber}
                                         onChange={(value) => setFormData({ ...formData, documentNumber: value })}
-                                        placeholder="Numéro de document"
+                                        placeholder={
+                                            formData.documentType === TypePiece.CNI
+                                                ? "CI123456789"
+                                                : formData.documentType === TypePiece.Passeport
+                                                    ? "AB1234567"
+                                                    : "1234567890"
+                                        }
                                         icon={FileText}
                                         error={errors.documentNumber}
                                     />

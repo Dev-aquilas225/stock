@@ -1,253 +1,230 @@
+// enlevementApi.ts
 import axiosClient from "./axiosClient";
-import { ProduitStock, StatutProduitStock, ProduitStockGroup } from "./produitApi";
+import { Enleveur } from "./enleveurapi";
+import { StatutProduitStock } from "./produitApi";
 
-// 🔹 Types et interfaces
-export enum EnlevementStatus {
-    EN_COURS = "EN_COURS",
-    ANNULE = "ANNULE",
-}
+// -----------------------------
+// 📌 Types & Interfaces
+// -----------------------------
 
-export interface EnlevementProduit {
-    produitStockId: number;
-    nom: string;
+export interface ProduitEnleve {
+    id: number;
+    produit: {
+        id: number;
+        qrCode: string;
+        sku: string;
+        statut: StatutProduitStock;
+    };
     quantite: number;
+    statut: string;
 }
 
 export interface Enlevement {
     id: number;
-    enleveurId: string;
-    enleveurNom: string;
-    produits: EnlevementProduit[];
-    statut: EnlevementStatus;
-    date: string;
-    userId: string;
+    enleveur: Enleveur;
+    actif: boolean;
+    createdAt: string;
+    produitsEnleves: ProduitEnleve[];
 }
 
 export interface CreateEnlevementDto {
-    enleveurId: string;
-    produits: { produitStockId: number; quantite: number }[];
-    userId: string;
+    enleveurId: number;
+    produits: { produitId: number; quantite: number }[];
 }
 
-export interface Enleveur {
-    id: string; // Compatible avec MongoDB ObjectId
-    nom: string;
-    prenom: string;
-    actif: boolean;
-}
+// -----------------------------
+// 🚀 API Enlèvements
+// -----------------------------
 
-export const getEnleveurs = async (): Promise<Enleveur[]> => {
+// ✅ Ajouter un enlèvement
+export const addEnlevement = async (data: CreateEnlevementDto): Promise<Enlevement> => {
     const token = localStorage.getItem("token");
-    if (!token) {
-        console.error("getEnleveurs: Token manquant dans localStorage");
-        throw new Error("Token manquant");
+    if (!token) throw new Error("Token manquant");
+
+    if (!data.produits || data.produits.length === 0) {
+        throw new Error("Au moins un produit est requis");
     }
 
     try {
-        const response = await axiosClient.get("/enleveurs", {
-            headers: { Authorization: `Bearer ${token}` },
+        const response = await axiosClient.post("/enlevements", data, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
         });
-        const data = response.data.data || response.data || [];
-        if (!Array.isArray(data)) {
-            console.error("getEnleveurs: Réponse inattendue, data n'est pas un tableau", { data });
-            throw new Error("Format de réponse invalide pour les enleveurs");
-        }
-        return data.map((e: any) => ({
-            id: e._id || e.id || "",
-            nom: e.nom || "",
-            prenom: e.prenom || "",
-            actif: e.actif !== false,
-        }));
-    } catch (err: any) {
-        console.error("Erreur API getEnleveurs:", {
-            message: err.message,
-            status: err.response?.status,
-            data: err.response?.data,
-            url: axiosClient.defaults.baseURL + "/enleveurs",
-        });
-        throw new Error(err.response?.data?.message || "Erreur lors de la récupération des enleveurs");
-    }
-};
 
-// 🔹 API Enlèvements
-export const addEnlevement = async (enlevementData: CreateEnlevementDto): Promise<Enlevement> => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-        console.error("addEnlevement: Token manquant dans localStorage");
-        throw new Error("Token manquant");
-    }
-
-    // Validation stricte
-    if (!enlevementData.enleveurId?.trim()) throw new Error("Enleveur requis");
-    if (!enlevementData.userId?.trim()) throw new Error("Utilisateur requis");
-    if (!enlevementData.produits || enlevementData.produits.length === 0) {
-        throw new Error("Au moins un produit requis");
-    }
-    for (const item of enlevementData.produits) {
-        if (!item.produitStockId) throw new Error("ID de produit stock requis");
-        if (!item.quantite || item.quantite <= 0) throw new Error("Quantité invalide");
-    }
-
-    try {
-        const response = await axiosClient.post("/enlevements", enlevementData, {
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        });
-        const data = response.data.data || response.data || {};
+        const enlevement = response.data;
         return {
-            id: Number(data.id || data._id || 0),
-            enleveurId: data.enleveurId || "",
-            enleveurNom: data.enleveurNom || "",
-            produits: Array.isArray(data.produits) ? data.produits : [],
-            statut: data.statut || EnlevementStatus.EN_COURS,
-            date: data.date || new Date().toISOString(),
-            userId: data.userId || "",
+            id: enlevement.id,
+            enleveur: {
+                id: enlevement.enleveur.id,
+                nom: enlevement.enleveur.nom,
+                prenom: enlevement.enleveur.prenom,
+                email: enlevement.enleveur.email,
+                actif: enlevement.enleveur.actif,
+                documents: enlevement.enleveur.documents || [],
+            },
+            actif: enlevement.actif,
+            createdAt: enlevement.createdAt,
+            produitsEnleves: (enlevement.produitsEnleves || []).map((pe: any) => ({
+                id: pe.id,
+                produit: {
+                    id: pe.produit.id,
+                    qrCode: pe.produit.qrCode,
+                    sku: pe.produit.sku,
+                    statut: pe.produit.statut,
+                },
+                quantite: pe.quantite,
+                statut: pe.statut,
+            })),
         };
     } catch (err: any) {
-        console.error("Erreur API addEnlevement:", {
-            message: err.message,
-            status: err.response?.status,
-            data: err.response?.data,
-            url: axiosClient.defaults.baseURL + "/enlevements",
-        });
-        throw new Error(err.response?.data?.message || "Erreur lors de la création de l'enlèvement");
+        console.error("Erreur API addEnlevement:", err.response?.data || err);
+        throw new Error(err.response?.data?.message || "Erreur lors de la création de l’enlèvement");
     }
 };
 
+// ✅ Récupérer tous les enlèvements
 export const getEnlevements = async (): Promise<Enlevement[]> => {
     const token = localStorage.getItem("token");
-    if (!token) {
-        console.error("getEnlevements: Token manquant dans localStorage");
-        throw new Error("Token manquant");
-    }
+    if (!token) throw new Error("Token manquant");
 
     try {
         const response = await axiosClient.get("/enlevements", {
             headers: { Authorization: `Bearer ${token}` },
         });
-        const data = response.data.data || response.data || [];
-        if (!Array.isArray(data)) {
-            console.error("getEnlevements: Réponse inattendue, data n'est pas un tableau", { data });
-            throw new Error("Format de réponse invalide pour les enlèvements");
+
+        if (!Array.isArray(response.data)) {
+            throw new Error("Réponse invalide: liste d'enlèvements attendue");
         }
-        return data.map((e: any) => ({
-            id: Number(e.id || e._id || 0),
-            enleveurId: e.enleveurId || "",
-            enleveurNom: e.enleveurNom || "",
-            produits: Array.isArray(e.produits) ? e.produits : [],
-            statut: e.statut || EnlevementStatus.EN_COURS,
-            date: e.date || new Date().toISOString(),
-            userId: e.userId || "",
+
+        return response.data.map((e: any) => ({
+            id: e.id,
+            enleveur: {
+                id: e.enleveur.id,
+                nom: e.enleveur.nom,
+                prenom: e.enleveur.prenom,
+                email: e.enleveur.email,
+                actif: e.enleveur.actif,
+                documents: e.enleveur.documents || [],
+            },
+            actif: e.actif,
+            createdAt: e.createdAt,
+            produitsEnleves: (e.produitsEnleves || []).map((pe: any) => ({
+                id: pe.id,
+                produit: {
+                    id: pe.produit.id,
+                    qrCode: pe.produit.qrCode,
+                    sku: pe.produit.sku,
+                    statut: pe.produit.statut,
+                },
+                quantite: pe.quantite,
+                statut: pe.statut,
+            })),
         }));
     } catch (err: any) {
-        console.error("Erreur API getEnlevements:", {
-            message: err.message,
-            status: err.response?.status,
-            data: err.response?.data,
-            url: axiosClient.defaults.baseURL + "/enlevements",
-        });
+        console.error("Erreur API getEnlevements:", err.response?.data || err);
         throw new Error(err.response?.data?.message || "Erreur lors de la récupération des enlèvements");
     }
 };
 
+// ✅ Récupérer un enlèvement par ID
 export const getEnlevementById = async (id: number): Promise<Enlevement> => {
     const token = localStorage.getItem("token");
-    if (!token) {
-        console.error("getEnlevementById: Token manquant dans localStorage");
-        throw new Error("Token manquant");
-    }
+    if (!token) throw new Error("Token manquant");
 
     try {
         const response = await axiosClient.get(`/enlevements/${id}`, {
             headers: { Authorization: `Bearer ${token}` },
         });
-        const e = response.data.data || response.data || {};
+
+        const e = response.data;
         return {
-            id: Number(e.id || e._id || 0),
-            enleveurId: e.enleveurId || "",
-            enleveurNom: e.enleveurNom || "",
-            produits: Array.isArray(e.produits) ? e.produits : [],
-            statut: e.statut || EnlevementStatus.EN_COURS,
-            date: e.date || new Date().toISOString(),
-            userId: e.userId || "",
+            id: e.id,
+            enleveur: {
+                id: e.enleveur.id,
+                nom: e.enleveur.nom,
+                prenom: e.enleveur.prenom,
+                email: e.enleveur.email,
+                actif: e.enleveur.actif,
+                documents: e.enleveur.documents || [],
+            },
+            actif: e.actif,
+            createdAt: e.createdAt,
+            produitsEnleves: (e.produitsEnleves || []).map((pe: any) => ({
+                id: pe.id,
+                produit: {
+                    id: pe.produit.id,
+                    qrCode: pe.produit.qrCode,
+                    sku: pe.produit.sku,
+                    statut: pe.produit.statut,
+                },
+                quantite: pe.quantite,
+                statut: pe.statut,
+            })),
         };
     } catch (err: any) {
-        console.error("Erreur API getEnlevementById:", {
-            message: err.message,
-            status: err.response?.status,
-            data: err.response?.data,
-            url: axiosClient.defaults.baseURL + `/enlevements/${id}`,
-        });
-        throw new Error(err.response?.data?.message || `Erreur lors de la récupération de l'enlèvement ${id}`);
+        console.error("Erreur API getEnlevementById:", err.response?.data || err);
+        throw new Error(err.response?.data?.message || `Erreur lors de la récupération de l’enlèvement ${id}`);
     }
 };
 
-export const cancelEnlevement = async (id: number): Promise<Enlevement> => {
+// ✅ Récupérer les enlèvements par enleveur
+export const getEnlevementsByEnleveur = async (enleveurId: number): Promise<Enlevement[]> => {
     const token = localStorage.getItem("token");
-    if (!token) {
-        console.error("cancelEnlevement: Token manquant dans localStorage");
-        throw new Error("Token manquant");
-    }
+    if (!token) throw new Error("Token manquant");
 
     try {
-        const response = await axiosClient.patch(`/enlevements/${id}/cancel`, {}, {
+        const response = await axiosClient.get(`/enlevements/enleveur/${enleveurId}`, {
             headers: { Authorization: `Bearer ${token}` },
         });
-        const e = response.data.data || response.data || {};
-        return {
-            id: Number(e.id || e._id || 0),
-            enleveurId: e.enleveurId || "",
-            enleveurNom: e.enleveurNom || "",
-            produits: Array.isArray(e.produits) ? e.produits : [],
-            statut: e.statut || EnlevementStatus.ANNULE,
-            date: e.date || new Date().toISOString(),
-            userId: e.userId || "",
-        };
-    } catch (err: any) {
-        console.error("Erreur API cancelEnlevement:", {
-            message: err.message,
-            status: err.response?.status,
-            data: err.response?.data,
-            url: axiosClient.defaults.baseURL + `/enlevements/${id}/cancel`,
-        });
-        throw new Error(err.response?.data?.message || `Erreur lors de l'annulation de l'enlèvement ${id}`);
-    }
-};
 
-export const getProduitsStock = async (): Promise<ProduitStock[]> => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-        console.error("getProduitsStock: Token manquant dans localStorage");
-        throw new Error("Token manquant");
-    }
-
-    try {
-        const response = await axiosClient.get("/produits-stock", {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        const groups = response.data.data || response.data || [];
-        if (!Array.isArray(groups)) {
-            console.error("getProduitsStock: Réponse inattendue, data n'est pas un tableau", { groups });
-            throw new Error("Format de réponse invalide pour les produits en stock");
+        if (!Array.isArray(response.data)) {
+            throw new Error("Réponse invalide: liste d'enlèvements attendue");
         }
-        return groups.flatMap((group: ProduitStockGroup) => {
-            if (!group || !Array.isArray(group.stocks)) {
-                console.warn("getProduitsStock: Groupe de produits invalide", { group });
-                return [];
-            }
-            return group.stocks
-                .filter((stock: ProduitStock) => stock.statut === StatutProduitStock.DISPONIBLE && stock.estActif)
-                .map((stock: ProduitStock) => ({
-                    ...stock,
-                    nom: group.produitFournisseur?.nom || `Produit ID: ${stock.id || 'inconnu'}`,
-                }));
-        });
+
+        return response.data.map((e: any) => ({
+            id: e.id,
+            enleveur: {
+                id: e.enleveur.id,
+                nom: e.enleveur.nom,
+                prenom: e.enleveur.prenom,
+                email: e.enleveur.email,
+                actif: e.enleveur.actif,
+                documents: e.enleveur.documents || [],
+            },
+            actif: e.actif,
+            createdAt: e.createdAt,
+            produitsEnleves: (e.produitsEnleves || []).map((pe: any) => ({
+                id: pe.id,
+                produit: {
+                    id: pe.produit.id,
+                    qrCode: pe.produit.qrCode,
+                    sku: pe.produit.sku,
+                    statut: pe.produit.statut,
+                },
+                quantite: pe.quantite,
+                statut: pe.statut,
+            })),
+        }));
     } catch (err: any) {
-        console.error("Erreur API getProduitsStock:", {
-            message: err.message,
-            status: err.response?.status,
-            data: err.response?.data,
-            url: axiosClient.defaults.baseURL + "/produits-stock",
+        console.error("Erreur API getEnlevementsByEnleveur:", err.response?.data || err);
+        throw new Error(err.response?.data?.message || `Erreur lors de la récupération des enlèvements pour l’enleveur ${enleveurId}`);
+    }
+};
+
+// ✅ Supprimer un enlèvement
+export const deleteEnlevement = async (id: number): Promise<{ success: boolean; message: string }> => {
+    const token = localStorage.getItem("token");
+    if (!token) throw new Error("Token manquant");
+
+    try {
+        const response = await axiosClient.delete(`/enlevements/${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
         });
-        throw new Error(err.response?.data?.message || "Erreur lors de la récupération des produits en stock");
+        return response.data;
+    } catch (err: any) {
+        console.error("Erreur API deleteEnlevement:", err.response?.data || err);
+        throw new Error(err.response?.data?.message || `Erreur lors de la suppression de l’enlèvement ${id}`);
     }
 };

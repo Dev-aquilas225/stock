@@ -33,8 +33,8 @@ import DocumentsRequiredPage from './pages/DocumentsRequiredPage';
 import AccountPendingPage from './pages/AccountPendingPage';
 import SubscriptionInactivePage from './pages/SubscriptionInactivePage';
 import AgentsPage from './pages/modules/AgentsPage';
-import { EnlevementsPage, EnlevementDetailsPage } from './pages/modules/EnlevementPage';
-import EnleveursPage from './pages/modules/EnleveursPage'; // Import the EnleveursPage
+import EnlevementsPage from './pages/modules/EnlevementsPage';
+import EnleveursPage from './pages/modules/EnleveursPage';
 import ReturnsPage from './pages/modules/ReturnsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -83,7 +83,6 @@ function AnimatedRoutes() {
             <Route path="/abonnement-inactif" element={<ProtectedRoute><SubscriptionInactivePage /></ProtectedRoute>} />
             <Route path="/agents" element={<ProtectedRoute><AgentsPage /></ProtectedRoute>} />
             <Route path="/enlevements" element={<ProtectedRoute><EnlevementsPage /></ProtectedRoute>} />
-            <Route path="/enlevements/:id" element={<ProtectedRoute><EnlevementDetailsPage /></ProtectedRoute>} />
             <Route path="/enleveurs" element={<ProtectedRoute><EnleveursPage /></ProtectedRoute>} /> {/* New route for EnleveursPage */}
 
             {/* Fallback */}
