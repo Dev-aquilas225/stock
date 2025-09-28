@@ -17,7 +17,8 @@ import {
   Scan,
   Activity,
   Building2,
-  RotateCcw
+  RotateCcw,
+  User, // Added for Enleveurs module icon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -142,6 +143,14 @@ const DashboardPage: React.FC = () => {
       color: 'bg-rose-500',
       stats: '0 enlèvements en cours',
       link: '/enlevements',
+    },
+    {
+      icon: User, // Using User icon for Enleveurs
+      title: 'Enleveurs',
+      description: 'Gérer les enleveurs enregistrés',
+      color: 'bg-violet-500', // Unique color for Enleveurs
+      stats: '5 enleveurs actifs', // Placeholder stat, update as needed
+      link: '/enleveurs',
     },
   ];
 
@@ -349,6 +358,11 @@ const DashboardPage: React.FC = () => {
                 <Link to="/agents">
                   <Button variant="outline" size="sm">
                     Ajouter un agent
+                  </Button>
+                </Link>
+                <Link to="/enleveurs">
+                  <Button variant="outline" size="sm">
+                    Ajouter un enleveur
                   </Button>
                 </Link>
               </div>

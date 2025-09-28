@@ -18,7 +18,6 @@ export interface DocumentEnleveur {
 }
 
 export interface CreateEnleveurDto {
-    clientId: string;
     nom: string;
     prenom: string;
     email: string;
@@ -68,7 +67,6 @@ export const addEnleveur = async (data: CreateEnleveurDto): Promise<Enleveur> =>
     if (!data.document) throw new Error("Un document est requis");
 
     const formData = new FormData();
-    formData.append("clientId", data.clientId);
     formData.append("nom", data.nom.trim());
     formData.append("prenom", data.prenom.trim());
     formData.append("email", data.email.trim());

@@ -34,6 +34,7 @@ import AccountPendingPage from './pages/AccountPendingPage';
 import SubscriptionInactivePage from './pages/SubscriptionInactivePage';
 import AgentsPage from './pages/modules/AgentsPage';
 import { EnlevementsPage, EnlevementDetailsPage } from './pages/modules/EnlevementPage';
+import EnleveursPage from './pages/modules/EnleveursPage'; // Import the EnleveursPage
 import ReturnsPage from './pages/modules/ReturnsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -51,18 +52,18 @@ function AnimatedRoutes() {
       >
         <Suspense fallback={<PageLoader />}>
           <Routes location={location}>
-            {/* Pages publiques */}
+            {/* Public routes */}
             <Route path="/" element={<HomePage />} />
             <Route path="/login-client" element={<LoginPage />} />
             <Route path="/mot-de-passe-oublie" element={<ForgotPasswordPage />} />
             <Route path="/reinitialiser-mot-de-passe" element={<ResetPasswordPage />} />
             <Route path="/inscription" element={<RegisterPage />} />
 
-            {/* Pages protégées */}
+            {/* Protected routes */}
             <Route path="/profil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
 
-            {/* Modules ERP */}
+            {/* ERP Modules */}
             <Route path="/approvisionnements" element={<ProtectedRoute><SupplyPage /></ProtectedRoute>} />
             <Route path="/returns" element={<ProtectedRoute><ReturnsPage /></ProtectedRoute>} />
             <Route path="/returns/new" element={<ProtectedRoute><ReturnsPage /></ProtectedRoute>} />
@@ -83,6 +84,7 @@ function AnimatedRoutes() {
             <Route path="/agents" element={<ProtectedRoute><AgentsPage /></ProtectedRoute>} />
             <Route path="/enlevements" element={<ProtectedRoute><EnlevementsPage /></ProtectedRoute>} />
             <Route path="/enlevements/:id" element={<ProtectedRoute><EnlevementDetailsPage /></ProtectedRoute>} />
+            <Route path="/enleveurs" element={<ProtectedRoute><EnleveursPage /></ProtectedRoute>} /> {/* New route for EnleveursPage */}
 
             {/* Fallback */}
             <Route path="*" element={<NotFoundPage />} />
