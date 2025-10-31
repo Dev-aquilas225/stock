@@ -53,6 +53,7 @@ const SalesPage = () => {
                 ? `${vente.prenomClient} ${vente.nomClient}`
                 : vente.contactClient || "Client non enregistré",
         amount: parseFloat(vente.total),
+        paid: parseFloat(vente.totalPaye) || 0,
         status: vente.total === vente.totalPaye ? "completed" : "pending",
         date: new Date(vente.dateVente).toLocaleDateString("fr-FR"),
         paymentMethod:
@@ -128,44 +129,42 @@ const SalesPage = () => {
     };
 
     const handlePrintReceipt = (sale) => {
+        const due = sale.amount - sale.paid;
         const printWindow = window.open("", "_blank");
         printWindow.document.write(`
             <html>
                 <head>
-                    <title>Reçu de vente ${sale.id}</title>
+                    <title>Facture ${sale.id}</title>
                     <style>
-                        body { font-family: Arial, sans-serif; padding: 20px; }
-                        .receipt { max-width: 400px; margin: 0 auto; }
-                        .header { text-align: center; margin-bottom: 20px; }
-                        .details { margin-bottom: 20px; }
-                        .items { width: 100%; border-collapse: collapse; }
-                        .items th, .items td { border: 1px solid #ddd; padding: 8px; }
-                        .items th { background-color: #f5f5f5; }
-                        .total { font-weight: bold; margin-top: 20px; }
+                        body { font-family: Arial, sans-serif; padding: 20px; color: black; }
+                        .receipt { max-width: 600px; margin: 0 auto; }
+                        .header { text-align: left; margin-bottom: 20px; }
+                        .title { background-color: #0000ff; color: white; padding: 5px 10px; display: inline-block; font-size: 1.5em; }
+                        .company { font-weight: bold; font-size: 1.5em; margin-top: 10px; }
+                        .table { width: 100%; border-top: 2px solid #0000ff; border-bottom: 2px solid #0000ff; border-collapse: collapse; margin-bottom: 100px; }
+                        .table th, .table td { border: none; padding: 8px; text-align: left; }
+                        .table th { font-weight: bold; }
+                        .invoice-info { font-size: 0.9em; margin-bottom: 20px; }
+                        .invoice-info p { margin: 2px 0; }
+                        .total-section { border-top: 2px solid #0000ff; text-align: right; padding-top: 10px; }
+                        .total-section p { margin: 5px 0; font-weight: bold; }
+                        .merci { font-style: italic; font-size: 1.2em; margin-top: 20px; }
                         @media print { .no-print { display: none; } }
                     </style>
                 </head>
                 <body>
                     <div class="receipt">
                         <div class="header">
-                            <h2>Reçu de Vente</h2>
-                            <p>Vente ${sale.id}</p>
-                            <p>Date: ${sale.date}</p>
+                            <div class="title">FACTURE</div>
+                            <div class="company">FOREVER SAAS</div>
                         </div>
-                        <div class="details">
-                            <p><strong>Client:</strong> ${sale.customer}</p>
-                            <p><strong>Moyen de paiement:</strong> ${
-                                sale.paymentMethod
-                            }</p>
-                            <p><strong>Statut:</strong> ${sale.status}</p>
-                        </div>
-                        <table class="items">
+                        <table class="table">
                             <thead>
                                 <tr>
-                                    <th>Article</th>
-                                    <th>Quantité</th>
-                                    <th>Prix unitaire</th>
-                                    <th>Total</th>
+                                    <th>PRODUIT</th>
+                                    <th>QTE</th>
+                                    <th>PRIX</th>
+                                    <th>TOTAL</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -175,26 +174,50 @@ const SalesPage = () => {
                                     <tr>
                                         <td>${item.name || "Article"}</td>
                                         <td>${item.quantity || 1}</td>
-                                        <td>FCFA ${(item.price || 0).toLocaleString(
+                                        <td>${(item.price || 0).toLocaleString(
                                             "fr-FR",
-                                        )}</td>
-                                        <td>FCFA ${(
+                                        )} FCFA</td>
+                                        <td>${(
                                             (item.price || 0) *
                                             (item.quantity || 1)
-                                        ).toLocaleString("fr-FR")}</td>
+                                        ).toLocaleString("fr-FR")} FCFA</td>
                                     </tr>
                                 `,
                                     )
                                     .join("")}
                             </tbody>
                         </table>
-                        <div class="total">
-                            <p>Total: FCFA ${sale.amount.toLocaleString(
-                                "fr-FR",
-                            )}</p>
+                        <div class="invoice-info">
+                            <p>FACTURE N° ${sale.id}</p>
+                            <p>Faite le ${sale.date}</p>
+                            <p><strong>Client:</strong> ${sale.customer}</p>
+                            <p><strong>Moyen de paiement:</strong> ${
+                                sale.paymentMethod
+                            }</p>
+                            <p>PAYABLE À L'ORDRE DE</p>
+                            <p>Henri Chaumond,</p>
+                            <p>13, avenue du parc,</p>
+                            <p>75002 Paris</p>
+                            <p>COORDONNÉES</p>
+                            <p>01 23 45 67 89</p>
+                            <p>bonjour@sitevraimentsuper.fr</p>
+                            <p>www.sitevraimentsuper.fr</p>
+                            <p>INFORMATIONS BANCAIRES</p>
+                            <p>Henri Chaumond,</p>
+                            <p>Banque Populis</p>
+                            <p>N° de compte : 4929 3100 057 5422</p>
                         </div>
-                        <button class="no-print" onclick="window.print()">Imprimer</button>
+                        <div class="total-section">
+                            <p>Montant Total : ${sale.amount.toLocaleString(
+                                "fr-FR",
+                            )} FCFA</p>
+                            <p>Montant DÛ : ${due.toLocaleString(
+                                "fr-FR",
+                            )} FCFA</p>
+                        </div>
+                        <div class="merci">Merci</div>
                     </div>
+                    <button class="no-print" onclick="window.print()">Imprimer</button>
                 </body>
             </html>
         `);
@@ -420,7 +443,7 @@ const SalesPage = () => {
 
                                                 <div className="mt-3">
                                                     <span className="text-lg font-bold text-nexsaas-saas-green">
-                                                        FCFA 
+                                                        FCFA
                                                         {sale.amount.toLocaleString(
                                                             "fr-FR",
                                                         )}
@@ -539,7 +562,7 @@ const SalesPage = () => {
                                                             {item.quantity || 1}
                                                         </td>
                                                         <td className="p-2 text-right">
-                                                            FCFA 
+                                                            FCFA
                                                             {(
                                                                 item.price || 0
                                                             ).toLocaleString(
@@ -547,7 +570,7 @@ const SalesPage = () => {
                                                             )}
                                                         </td>
                                                         <td className="p-2 text-right">
-                                                            FCFA 
+                                                            FCFA
                                                             {(
                                                                 (item.price ||
                                                                     0) *
@@ -565,7 +588,7 @@ const SalesPage = () => {
                                 </div>
                                 <div className="text-right">
                                     <p className="text-lg font-bold text-nexsaas-saas-green">
-                                        Total: FCFA 
+                                        Total: FCFA
                                         {selectedSale.amount.toLocaleString(
                                             "fr-FR",
                                         )}
