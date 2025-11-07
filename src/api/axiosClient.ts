@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const axiosClient = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || "/api", // Utilise la variable d'environnement
+    baseURL:  "https://api.aquidev.com", // Utilise la variable d'environnement
     withCredentials: true,
     headers: {
         "Content-Type": "application/json",

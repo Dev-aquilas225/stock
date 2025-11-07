@@ -64,12 +64,12 @@ export const useNotification = (options: UseNotificationsOptions = {}): UseNotif
     } catch (err: any) {
       setError(err.message || 'Erreur lors du chargement des notifications');
       console.error('Error fetching notifications:', err);
-      showToast({
-        type: 'error',
-        title: 'Erreur',
-        message: 'Impossible de charger les notifications',
-        duration: 5000,
-      });
+      // showToast({
+      //   type: 'error',
+      //   title: 'Erreur',
+      //   message: 'Impossible de charger les notifications',
+      //   duration: 5000,
+      // });
     } finally {
       setLoading(false);
     }
