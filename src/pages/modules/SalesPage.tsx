@@ -26,6 +26,7 @@ import { useVentes } from "../../hooks/useVentes";
 import { useToast } from "../../contexts/ToastContext";
 import { Vente, getVentes } from "../../api/venteApi";
 import axiosClient from "../../api/axiosClient";
+import { promotionsApi, Promotion } from "../../api/promotionsApi";
 
 const SalesPage = () => {
     const [showPromoForm, setShowPromoForm] = useState(false);
@@ -44,6 +45,20 @@ const SalesPage = () => {
 
     const { ventes, loading, stats, error } = useVentes();
     const { showToast } = useToast();
+    const [promotions, setPromotions] = useState<Promotion[]>([]);
+    const [promoLoading, setPromoLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchPromos = async () => {
+            try {
+                const res = await promotionsApi.getAll();
+                setPromotions(Array.isArray(res.data) ? res.data : (res as any) || []);
+            } catch {
+                // silently fail
+            }
+        };
+        fetchPromos();
+    }, []);
 
     // Format sales data from API
     const formattedSales = ventes.map((vente) => ({
@@ -69,29 +84,6 @@ const SalesPage = () => {
             sale.customer.toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
-    // Hardcoded promotions
-    const promotions = [
-        {
-            id: "PROMO-001",
-            name: "Soldes d'hiver",
-            type: "percentage",
-            value: 20,
-            startDate: "2024-01-15",
-            endDate: "2024-02-15",
-            status: "active",
-            used: 45,
-        },
-        {
-            id: "PROMO-002",
-            name: "Livraison gratuite",
-            type: "shipping",
-            value: 0,
-            startDate: "2024-01-10",
-            endDate: "2024-01-31",
-            status: "active",
-            used: 123,
-        },
-    ];
 
     const getStatusColor = (status) => {
         switch (status) {
@@ -108,19 +100,34 @@ const SalesPage = () => {
         }
     };
 
-    const handlePromoSubmit = (e) => {
+    const handlePromoSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log("Nouvelle promotion:", promoData);
-        setShowPromoForm(false);
-        setPromoData({
-            name: "",
-            type: "percentage",
-            value: "",
-            startDate: "",
-            endDate: "",
-            minAmount: "",
-            description: "",
-        });
+        setPromoLoading(true);
+        try {
+            const typeMap: Record<string, string> = {
+                percentage: 'POURCENTAGE',
+                fixed: 'MONTANT_FIXE',
+                shipping: 'LIVRAISON_GRATUITE',
+            };
+            const created = await promotionsApi.create({
+                nom: promoData.name,
+                type: typeMap[promoData.type] || 'POURCENTAGE',
+                valeur: parseFloat(promoData.value) || 0,
+                minAchat: parseFloat(promoData.minAmount) || 0,
+                dateDebut: promoData.startDate,
+                dateFin: promoData.endDate,
+                description: promoData.description,
+                code: promoData.name.toUpperCase().replace(/\s+/g, '_').slice(0, 20),
+            });
+            setPromotions((prev) => [created, ...prev]);
+            showToast({ type: 'success', title: 'Promotion créée', message: `${promoData.name} créée avec succès`, duration: 3000 });
+            setShowPromoForm(false);
+            setPromoData({ name: '', type: 'percentage', value: '', startDate: '', endDate: '', minAmount: '', description: '' });
+        } catch {
+            showToast({ type: 'error', title: 'Erreur', message: 'Impossible de créer la promotion', duration: 4000 });
+        } finally {
+            setPromoLoading(false);
+        }
     };
 
     const handleViewDetails = (sale) => {
@@ -314,7 +321,7 @@ const SalesPage = () => {
                             <Gift className="w-6 h-6 text-orange-500" />
                         </div>
                         <h3 className="text-2xl font-bold text-nexsaas-deep-blue dark:text-nexsaas-pure-white">
-                            {promotions.length}
+                            {promotions.filter(p => p.statut === 'ACTIVE').length}
                         </h3>
                         <p className="text-sm text-nexsaas-vanta-black dark:text-gray-300">
                             Promotions actives
@@ -634,6 +641,11 @@ const SalesPage = () => {
                             </Button>
                         </div>
 
+                        {promotions.length === 0 && !promoLoading && (
+                            <div className="text-center py-8 text-gray-400">
+                                Aucune promotion — cliquez sur «Nouvelle promotion» pour en créer une
+                            </div>
+                        )}
                         <div className="space-y-4">
                             {promotions.map((promo, index) => (
                                 <motion.div
@@ -650,35 +662,47 @@ const SalesPage = () => {
                                         <div>
                                             <div className="flex items-center mb-2">
                                                 <h3 className="text-lg font-semibold text-nexsaas-deep-blue dark:text-nexsaas-pure-white mr-3">
-                                                    {promo.name}
+                                                    {promo.nom}
                                                 </h3>
+                                                <span className="text-xs font-mono text-gray-400 mr-2">{promo.code}</span>
                                                 <span
-                                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                                                        promo.status,
-                                                    )}`}
+                                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                        promo.statut === 'ACTIVE' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' :
+                                                        promo.statut === 'EXPIREE' ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400' :
+                                                        'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'
+                                                    }`}
                                                 >
-                                                    {promo.status}
+                                                    {promo.statut}
                                                 </span>
                                             </div>
                                             <div className="flex items-center space-x-4 text-sm text-nexsaas-vanta-black dark:text-gray-300">
                                                 <span>
-                                                    {promo.type === "percentage"
-                                                        ? `${promo.value}% de réduction`
-                                                        : "Livraison gratuite"}
+                                                    {promo.type === 'POURCENTAGE' ? `${promo.valeur}% de réduction` :
+                                                     promo.type === 'MONTANT_FIXE' ? `${promo.valeur.toLocaleString('fr-FR')} FCFA` :
+                                                     'Livraison gratuite'}
                                                 </span>
                                                 <span>•</span>
                                                 <span>
-                                                    {promo.startDate} -{" "}
-                                                    {promo.endDate}
+                                                    {new Date(promo.dateDebut).toLocaleDateString('fr-FR')} — {new Date(promo.dateFin).toLocaleDateString('fr-FR')}
                                                 </span>
                                                 <span>•</span>
                                                 <span>
-                                                    {promo.used} utilisations
+                                                    {promo.usagesActuels} utilisation{promo.usagesActuels !== 1 ? 's' : ''}
+                                                    {promo.maxUsages ? ` / ${promo.maxUsages}` : ''}
                                                 </span>
                                             </div>
                                         </div>
                                         <div className="flex items-center space-x-2">
-                                            <Button variant="ghost" size="sm">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={async () => {
+                                                    try {
+                                                        const updated = await promotionsApi.toggle(promo.id);
+                                                        setPromotions((prev) => prev.map((p) => p.id === promo.id ? updated : p));
+                                                    } catch { /* ignore */ }
+                                                }}
+                                            >
                                                 <Edit className="w-4 h-4" />
                                             </Button>
                                         </div>

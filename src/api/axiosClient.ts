@@ -2,11 +2,11 @@
 import axios from "axios";
 
 const axiosClient = axios.create({
-    baseURL:  "https://api.aquidev.com", // Utilise la variable d'environnement
-    withCredentials: true,
-    headers: {
-        "Content-Type": "application/json",
-    },
+  baseURL: "http://localhost:8000", // Utilise la variable d'environnement
+  withCredentials: true,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
 // Intercepteur pour ajouter automatiquement le token d'authentification
